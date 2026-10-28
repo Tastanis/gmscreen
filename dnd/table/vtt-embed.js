@@ -143,6 +143,19 @@
   // ---------------------------------------------------------------- the top bar: height, the fight, the tokens
   const top = doc.createElement('div'); top.id = 'te-top';
   top.innerHTML = `<span class="te-scene" data-scene></span><div class="te-height" data-h><button data-l="down" title="Lower viewing height">▼</button><span data-l="name">Height 0</span><button data-l="up" title="Raise viewing height">▲</button>${gm ? '<button class="te-show" data-l="show" title="Show this floor to the players">Show players</button>' : ''}</div><div class="te-fight" data-fight hidden></div><div class="te-tokens"></div>`;
+  // The fight's buttons (Director: start/end, end round, malice; everyone: undo). Each presses the board's own button.
+  const fightBar = doc.createElement('div'); fightBar.className = 'te-combat';
+  fightBar.innerHTML = (gm ? '<button data-c="start" title="Start or end the fight">Start combat</button><button data-c="round" title="End the current round early" hidden>End round</button><button data-c="malice" title="Malice" hidden>Malice</button>' : '')
+    + '<button data-c="undo" title="Undo the last action (Ctrl+Z). Shift-click: undo the whole turn (Ctrl+Shift+Z)">↶ Undo</button>';
+  top.querySelector('.te-tokens')?.before(fightBar);
+  fightBar.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', (e) => {
+    const c = b.dataset.c;
+    if (c === 'start') press('[data-action="start-combat"]');
+    else if (c === 'round') press('[data-action="end-round"]');
+    else if (c === 'malice') press('[data-malice-button]');
+    else if (c === 'undo') key('z', e.shiftKey);
+    setTimeout(paintTop, 120);
+  }));
   top.querySelectorAll('[data-l]').forEach((b) => b.addEventListener('click', () => {
     const l = b.dataset.l; if (l === 'name') return;
     press(l === 'show' ? '[data-action="activate-map-level"]' : `[data-action="view-map-level-${l}"]`); setTimeout(paintTop, 80);
@@ -154,6 +167,10 @@
     const st = status(), fight = top.querySelector('[data-fight]');
     const sn = top.querySelector('[data-scene]'); if (sn && sn.textContent !== st.scene) sn.textContent = st.scene;
     fight.hidden = !st.combat; if (st.combat) fight.textContent = `Round ${st.round} · ${st.turn || ''}`;
+    const startBtn = fightBar.querySelector('[data-c="start"]');
+    if (startBtn) { const t = st.combat ? 'End combat' : 'Start combat'; if (startBtn.textContent !== t) startBtn.textContent = t; startBtn.classList.toggle('on', st.combat); }
+    const roundBtn = fightBar.querySelector('[data-c="round"]'); if (roundBtn) roundBtn.hidden = !st.combat;
+    const maliceBtn = fightBar.querySelector('[data-c="malice"]'); if (maliceBtn) { maliceBtn.hidden = !st.combat; const t = `Malice ${st.malice || 0}`; if (maliceBtn.textContent !== t) maliceBtn.textContent = t; }
     // The token bar starts right after whatever is on the left of the top bar.
     const r = top.querySelector('.te-tokens').getBoundingClientRect();
     doc.documentElement.style.setProperty('--te-tracker-left', Math.round(r.left) + 'px');

@@ -34,6 +34,13 @@ html.vtt-embed.te-docked #te-top { left: 0; }
 #te-top .te-fight { flex: none; padding: 3px 8px; border-radius: 6px; background: #3a1d18; color: #f0c0b0; font-weight: 600; white-space: nowrap; }
 #te-top .te-fight[hidden] { display: none; }
 #te-top .te-tokens { flex: 1; min-width: 0; height: 100%; }
+#te-top .te-combat { display: flex; align-items: center; gap: 4px; flex: none; }
+#te-top .te-combat button { height: 28px; padding: 0 9px; border-radius: 6px; border: 1px solid #5a4628; background: linear-gradient(#2a2015, #1d1510); color: #f0d898;
+  font: 600 11px Cinzel, Georgia, serif; letter-spacing: .02em; cursor: pointer; white-space: nowrap; }
+#te-top .te-combat button:hover { border-color: #c8a95e; }
+#te-top .te-combat button[hidden] { display: none; }
+#te-top .te-combat [data-c="start"].on { border-color: #8a3a30; background: linear-gradient(#3a1d18, #2a1411); color: #f0c0b0; }
+#te-top .te-combat [data-c="malice"] { border-color: #5b3a7a; color: #d8c0f0; }
 html.vtt-embed .vtt-board__tracker { display: block !important; position: fixed !important; top: 2px; right: 6px; left: var(--te-tracker-left, 260px); z-index: 2147481100;
   height: 46px; overflow: hidden; zoom: 1; }
 html.vtt-embed .vtt-board__tracker .vtt-combat-tracker { height: 46px; border-radius: 8px; }
