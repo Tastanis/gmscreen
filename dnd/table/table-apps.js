@@ -109,7 +109,7 @@
     if (!SERVED) return false;
     let w = T.windows.get('map');
     if (!w && !open) return false;
-    if (open) { w = apps.map(); if (w.state.dock && !w.state.open) T.setOpen(w, true); }   // opening it again restores and focuses it
+    if (open) { w = apps.map(); if (!w) return false; if (w.state.dock && !w.state.open) T.setOpen(w, true); }   // opening it again restores and focuses it (none here: it is in its own window)
     const go = (n = 0) => { const f = vttFrame(); if (f) { fn(f.contentWindow.vttEmbed, f); return; } if (n < 300) setTimeout(() => go(n + 1), 100); };
     go(); return true;
   }
@@ -796,7 +796,7 @@
     const m = T.windows.get('map'), f = m?.node.querySelector('iframe');
     T.toast(`Map quality: ${k === 'auto' ? 'Auto (' + MQ.LEVELS[MQ.autoLevel()].label + ')' : MQ.LEVELS[k].label}. Pictures change when the map reloads.`, f ? { label: 'Reload map now', run: () => { f.style.opacity = 0; f.src = '/dnd/vtt/index.php'; } } : null);
   }
-  function place(w, x, y, wd, ht) { if (w.state.dock) T.undock(w); if (w.state.max) T.maximize(w, false); Object.assign(w.state, { x, y, w: wd, h: ht }); Object.assign(w.node.style, { left: x + 'px', top: y + 'px', width: wd + 'px', height: ht + 'px' }); T.refreshWork(); T.saveLayout?.(); }   // a layout (Prep, Combat) is kept for the next reload
+  function place(w, x, y, wd, ht) { if (!w) return; if (w.state.dock) T.undock(w); if (w.state.max) T.maximize(w, false); Object.assign(w.state, { x, y, w: wd, h: ht }); Object.assign(w.node.style, { left: x + 'px', top: y + 'px', width: wd + 'px', height: ht + 'px' }); T.refreshWork(); T.saveLayout?.(); }   // a layout (Prep, Combat) is kept for the next reload
   function togglePlayerView() { playerView = !playerView; T.closeFlyout(); buildRail(); T.toast(playerView ? 'Player view: only what a player has' : 'Director view'); }
 
   // Drawers slide out OVER the table (Brandon: chat opens on top of the map without changing it). Kept off on purpose.

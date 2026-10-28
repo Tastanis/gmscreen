@@ -79,9 +79,11 @@
     openMenu(anchor, `<h5>View</h5>
       ${'' /* height and Show players live in the top bar, always in sight: not repeated here */}
       ${gm && $('[data-action="terrain-zones"]') ? `<div class="te-row" style="cursor:default">${svg('zones')}Zones${pressed('[data-action="terrain-zones"]') || pressed('[data-action="terrain-zones-players"]') ? '' : ' <span class="te-off">off</span>'}<span class="te-switch"><button class="${pressed('[data-action="terrain-zones"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones"]' title="Zones on your screen">Me</button>${gm && $('[data-action="terrain-zones-players"]') ? `<button class="${pressed('[data-action="terrain-zones-players"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones-players"]' title="Zones on the players' screens">Players</button>` : ''}</span></div>` : ''}
-      ${rows.map(([icon, label, sel, sub]) => { const b = $(sel); if (!b || (sub && !$('[data-action="sight-test"][aria-pressed="true"]'))) return ''; const on = pressed(sel); return `<button class="te-row${on ? ' on' : ''}" data-sel='${sel}'>${svg(icon)}${typeof label === 'function' ? label() : label}${on ? '<span class="k">on</span>' : ''}</button>`; }).join('')}`,
+      ${rows.map(([icon, label, sel, sub]) => { const b = $(sel); if (!b || (sub && !$('[data-action="sight-test"][aria-pressed="true"]'))) return ''; const on = pressed(sel); return `<button class="te-row${on ? ' on' : ''}" data-sel='${sel}'>${svg(icon)}${typeof label === 'function' ? label() : label}${on ? '<span class="k">on</span>' : ''}</button>`; }).join('')}
+      ${gm && window.vttVisionForget && /Explored/.test($('[data-action="sight-look"]')?.textContent || '') && $('[data-action="sight-test"][aria-pressed="true"]') ? `<button class="te-row" data-forget>${svg('clear')}Forget what the party explored<span class="k">this scene</span></button>` : ''}`,
     (m) => {
       m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel); setTimeout(() => { viewMenu(anchor); menuTool = 'view'; }, 60); });
+      m.querySelector('[data-forget]')?.addEventListener('click', () => { if (!window.confirm('Forget every square the party has explored on this scene? It goes black again for them.')) return; window.vttVisionForget(); closeMenu(); });
       m.querySelectorAll('[data-l]').forEach((b) => b.onclick = () => { press(`[data-action="view-map-level-${b.dataset.l}"]`); setTimeout(() => { const n = m.querySelector('[data-l="name"]'); if (n) n.textContent = levelName(); refresh(); }, 80); });
     });
   }

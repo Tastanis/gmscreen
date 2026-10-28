@@ -88,7 +88,9 @@ test("a zone's time is up: askBeforeEnd false goes at once, the rest are marked 
 });
 
 test('invisible: gone for other players, faded for the Director; strikes against it take a named bane', () => {
-  assert.match(board, /if \(isInvisibleToViewer\(placement\) \|\| isOutOfSightForViewer\(placement\)\) \{\s*return;/);
+  assert.match(board, /if \(isInvisibleToViewer\(placement\)\) \{\s*return;/);
+  // Out of sight (vision): not drawn; still on the Director's turn tracker (October 27, 2026), not on a player's.
+  assert.match(board, /if \(isOutOfSightForViewer\(placement\)\) \{\s*if \(gmViewing\) \{[\s\S]{0,200}trackerEntries\.push\(normalized\);\s*\}\s*return;/);
   assert.match(board, /function isInvisibleToViewer\(placement\) \{\s*return !isGmUser\(\) && hasInvisibleCondition\(placement\) && !canCurrentUserMovePlacement\(placement\);/);
   const target = { id: 't', name: 'Imp', conditions: [{ name: 'invisible', sourceAbility: 'Vanish' }] };
   const strike = getPowerRollSuggestions({ actor: { id: 'a' }, targets: [target], context: { keywords: ['Melee', 'Strike'] } });

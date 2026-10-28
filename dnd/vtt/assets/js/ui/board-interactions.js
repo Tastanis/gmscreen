@@ -1968,9 +1968,10 @@ export function mountBoardInteractions(store, routes = {}) {
       isCustomConditionDialogOpen(),
   });
 
-  // The vision test switched on or off, or its heroes changed: draw the tokens again.
+  // Vision switched on or off, or its heroes changed: draw the tokens again, and the turn tracker with them (it kept
+  // whatever it last had, so a player's could go stale).
   document.addEventListener('vtt:sight-test-changed', () => {
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     notifyCoordinateView();
   });
 
@@ -10448,7 +10449,16 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!gmViewing && normalized.hidden) {
         return;
       }
-      if (isInvisibleToViewer(placement) || isOutOfSightForViewer(placement)) {
+      if (isInvisibleToViewer(placement)) {
+        return;
+      }
+      // Out of the viewing heroes' sight (vision): not drawn. The Director's turn tracker still lists it (Brandon,
+      // October 27, 2026: the tracker had lost most tokens while vision was on); a player's leaves it out.
+      if (isOutOfSightForViewer(placement)) {
+        if (gmViewing) {
+          const unseenObject = objectRulesFor(getPlacementFromStore(normalized.id) || placement);
+          if (!unseenObject || unseenObject.inTracker) trackerEntries.push(normalized);
+        }
         return;
       }
 

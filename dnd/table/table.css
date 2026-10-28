@@ -228,6 +228,8 @@ body.map-docked #rail .rail-sep { margin: 3px 0; }
 #rail .rail-btn, #rail .logo { flex: none; }
 
 /* ---------- Drawers: windows tucked into a side, with a tab ---------- */
+/* Pinned to a side: no × (drag it off the side and it is a window with its × again). */
+.win.docked .bar [data-b="close"] { display: none; }
 .win.docked { z-index: 700 !important; border-radius: 9px; transition: left .22s ease, top .22s ease, box-shadow .2s; }
 .win.docked .grip { display: none; }
 .win.docked .grip.dockgrip { display: block; }

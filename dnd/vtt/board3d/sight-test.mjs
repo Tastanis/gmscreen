@@ -26,7 +26,10 @@ const LOOKS = [
   { name: 'Grey', dim: DIM, grey: GREY },
   { name: 'Dark', dim: .07, grey: .4 },
   { name: 'Black', dim: 0, grey: 1 },
+  // Black where nobody has been; where the party has already seen, Grey's look (Brandon, October 28, 2026).
+  { name: 'Explored', dim: 0, grey: 1, memory: { dim: DIM, grey: GREY } },
 ];
+const MEMORY_SIZE = 512;    // squares each way the party's memory covers (a map bigger than this keeps the rest black)
 const MAX_VIEWERS = 4;
 // Rooms (Brandon: "small things just not block vision"): the board's drawn sight walls split the map into rooms. On
 // the hero's own floor, anything with no drawn wall between it and the hero is seen, whatever props, grass or carts
@@ -68,6 +71,7 @@ function compositeMaterial() {
     tColor: { value: null }, tDepth: { value: null },
     invProj: { value: new THREE.Matrix4() }, invView: { value: new THREE.Matrix4() },
     count: { value: 0 }, dim: { value: DIM }, grey: { value: GREY },
+    memory: { value: null }, memoryOn: { value: 0 }, memoryDim: { value: DIM }, memoryGrey: { value: GREY },
   };
   for (let i = 0; i < MAX_VIEWERS; i += 1) {
     uniforms[`sight${i}`] = { value: null }; uniforms[`eye${i}`] = { value: new THREE.Vector3() };
@@ -84,6 +88,7 @@ function compositeMaterial() {
       uniform sampler2D tColor; uniform sampler2D tDepth;
       uniform mat4 invProj; uniform mat4 invView;
       uniform int count; uniform float dim; uniform float grey;
+      uniform sampler2D memory; uniform float memoryOn; uniform float memoryDim; uniform float memoryGrey;
       ${Array.from({ length: MAX_VIEWERS }, (_, i) => `uniform samplerCube sight${i}; uniform vec3 eye${i}; uniform sampler2D room${i}; uniform vec4 roomBox${i};`).join('\n')}
       // Same room: box = (left, top, span in squares, hero's ground). The map holds, per spot: r = open at the hero's
       // eye height (the hero's own floor), g = open down to the ground there (slopes, hills), b = that ground's height,
@@ -136,7 +141,11 @@ function compositeMaterial() {
           ${Array.from({ length: MAX_VIEWERS }, (_, i) => sees(i)).join('\n          ')}
           if (!seen) {
             float g = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-            color.rgb = mix(color.rgb, vec3(g), grey) * dim;
+            // Explored: a square the party has seen before shows in the grey look; one never seen stays black.
+            vec2 cell = floor(world.xz) + 0.5;
+            bool remembered = memoryOn > 0.5 && cell.x > 0.0 && cell.y > 0.0 && cell.x < ${MEMORY_SIZE}.0 && cell.y < ${MEMORY_SIZE}.0
+              && texture2D(memory, cell / ${MEMORY_SIZE}.0).r > 0.5;
+            color.rgb = remembered ? mix(color.rgb, vec3(g), memoryGrey) * memoryDim : mix(color.rgb, vec3(g), grey) * dim;
           }
         }
         gl_FragColor = color;
@@ -181,6 +190,51 @@ async function start() {
     api.requestRender?.();
     send();
   });
+
+  // The party's memory for the Explored look: squares seen, kept on the server per scene and shared by the party.
+  const memoryData = new Uint8Array(MEMORY_SIZE * MEMORY_SIZE * 4);
+  const memoryTexture = new THREE.DataTexture(memoryData, MEMORY_SIZE, MEMORY_SIZE, THREE.RGBAFormat, THREE.UnsignedByteType);
+  memoryTexture.magFilter = THREE.NearestFilter; memoryTexture.minFilter = THREE.NearestFilter;
+  let memoryScene = '', unsent = new Set();
+  const markCell = (c, r) => { if (c < 0 || r < 0 || c >= MEMORY_SIZE || r >= MEMORY_SIZE) return false; const k = (r * MEMORY_SIZE + c) * 4; if (memoryData[k]) return false; memoryData[k] = 255; return true; };
+  function remember(left, top, size, data) {
+    let fresh = false;
+    for (let r = 0; r < size; r += ROOM_STEPS) for (let c = 0; c < size; c += ROOM_STEPS) {
+      let open = false;
+      for (let dr = 0; dr < ROOM_STEPS && !open; dr += 1) for (let dc = 0; dc < ROOM_STEPS && !open; dc += 1) { const k = ((r + dr) * size + c + dc) * 4; open = data[k] > .5 || data[k + 1] > .5; }
+      if (!open) continue;
+      const col = left + c / ROOM_STEPS, row = top + r / ROOM_STEPS;
+      if (markCell(col, row)) { fresh = true; if (!director) unsent.add(col + ',' + row); }
+    }
+    if (fresh) memoryTexture.needsUpdate = true;
+  }
+  // The party's memory as the server has it, plus what this page saw and has not sent yet. Another scene starts empty.
+  function loadMemory(scene) {
+    if (scene !== memoryScene) { memoryData.fill(0); memoryTexture.needsUpdate = true; unsent = new Set(); memoryScene = scene; }
+    if (!scene) return;
+    fetch(VISION_URL + '?explored=' + encodeURIComponent(scene), { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((j) => {
+      if (!j?.success || memoryScene !== scene) return;
+      memoryData.fill(0);   // a scene the Director made the party forget goes black again here too
+      for (const cell of j.cells || []) { const [c, r] = String(cell).split(',').map(Number); if (Number.isInteger(c) && Number.isInteger(r)) markCell(c, r); }
+      for (const cell of unsent) { const [c, r] = cell.split(',').map(Number); markCell(c, r); }
+      memoryTexture.needsUpdate = true;
+    }).catch(() => { /* next time */ });
+  }
+  setInterval(() => { if (LOOKS[look].memory && on && memoryScene) loadMemory(memoryScene); }, 10000);   // what the rest of the party saw
+  setInterval(() => {
+    if (!LOOKS[look].memory || !on) return;
+    const scene = String(bridge.getContext().sceneId || '');
+    if (scene !== memoryScene) { loadMemory(scene); return; }
+    if (unsent.size) {
+      const cells = [...unsent].slice(0, 5000); cells.forEach((c) => unsent.delete(c));
+      fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ explore: scene, cells }) }).catch(() => cells.forEach((c) => unsent.add(c)));
+    }
+  }, 3000);
+  window.vttVisionMemory = { count: () => { let n = 0; for (let k = 0; k < memoryData.length; k += 4) if (memoryData[k]) n += 1; return n; }, scene: () => memoryScene, reload: () => loadMemory(memoryScene) };   // for checking from the console
+  window.vttVisionForget = () => {   // the Director: wipe this scene's memory (a fresh visit, a reset)
+    const scene = String(bridge.getContext().sceneId || '');
+    return fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forget: scene }) }).then(() => loadMemory(scene));
+  };
 
   // The setting everyone shares (api/v2/vision.php): the Director writes it, every page reads it every few seconds.
   const VISION_URL = '/dnd/vtt/api/v2/vision.php';
@@ -280,6 +334,9 @@ async function start() {
       u.tDepth.value = target.depthTexture;
       u.dim.value = LOOKS[look].dim;
       u.grey.value = LOOKS[look].grey;
+      u.memory.value = memoryTexture;
+      u.memoryOn.value = LOOKS[look].memory ? 1 : 0;
+      if (LOOKS[look].memory) { u.memoryDim.value = LOOKS[look].memory.dim; u.memoryGrey.value = LOOKS[look].memory.grey; }
       u.invProj.value.copy(camera.projectionMatrixInverse);
       u.invView.value.copy(camera.matrixWorld);
       original(screen, screenCamera);
@@ -364,6 +421,7 @@ async function start() {
     }
     state.roomMs = Math.round(performance.now() - started);
     (state.roomInfo ||= [])[i] = see ? { left, top, size, data } : null;
+    if (see && LOOKS[look].memory) remember(left, top, size, data);
     window.vttSightVersion = (window.vttSightVersion || 0) + 1;
     room.needsUpdate = true;
     state.composite.uniforms[`room${i}`].value = room;

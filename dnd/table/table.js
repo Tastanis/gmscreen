@@ -58,6 +58,12 @@
   function bounds() { return table.getBoundingClientRect(); }
   function focusWin(w) {
     windows.forEach((o) => o.node.classList.remove('focus'));
+    // Each click raises a window one layer. Before the count nears the pinned drawers (layer 700) the windows are
+    // numbered again from the bottom, in the same order, so no window ever climbs over a pinned chat.
+    if (topZ > 600) {
+      const order = [...windows.values()].filter((o) => !o.state.dock).sort((p, q) => (Number(p.node.style.zIndex) || 0) - (Number(q.node.style.zIndex) || 0));
+      topZ = 20; order.forEach((o) => { o.node.style.zIndex = ++topZ; });
+    }
     w.node.classList.add('focus'); w.node.style.zIndex = ++topZ;
     refreshWork();
   }
@@ -72,6 +78,9 @@
   function openWindow(spec) {
     // One of a kind (the map, chat, dice...): bring it forward instead of a second copy.
     const id = spec.id;
+    const away = popped.get(id);
+    if (away && !away.closed) { try { away.focus(); } catch (_) { /* the browser may refuse */ } toast(`${spec.title} is open in its own window`); return null; }
+    popped.delete(id);
     if (windows.has(id)) { const w = windows.get(id); if (w.state.min) restore(w); focusWin(w); spec.onReopen?.(w); return w; }
     const node = el('div', 'win' + (spec.app ? ' app-' + spec.app : ''));
     node.innerHTML = `<div class="bar"><svg class="ico" viewBox="0 0 24 24">${spec.icon || ''}</svg><div class="title">${spec.title}<em>${spec.sub || ''}</em></div>
@@ -281,6 +290,7 @@
     });
   }
   function dock(w, edge, open = true, size, span) {
+    if (!w) return;
     if (w.state.max) maximize(w, false);
     if (w.state.min) restore(w);
     w.state.dock = edge; w.state.dockSize = size || w.state.dockSize || DOCK_DEFAULT[edge];
@@ -294,6 +304,7 @@
     setOpen(w, open);
   }
   function setOpen(w, open) {
+    if (!w) return;
     if (open) windows.forEach((o) => { if (o !== w && o.state.dock === w.state.dock && o.state.open) { o.state.open = false; layoutDock(o); } }); // one drawer out per side
     w.state.open = open; layoutDock(w);
     if (open) focusWin(w);
@@ -312,6 +323,7 @@
   }
 
   function maximize(w, on) {
+    if (!w) return;
     if (on && w.state.dock) undock(w);
     if (on && !w.state.max) { w.state.before = { ...w.state }; const b = bounds(); Object.assign(w.node.style, { left: 0, top: 0, width: b.width + 'px', height: b.height + 'px' }); }
     if (!on && w.state.max) { const p = w.state.before; place(w, p.x, p.y, p.w, p.h); }
@@ -342,6 +354,7 @@
   // Pop-out: the window's own page opens in a browser window of its own (drag it to a second screen). The page is
   // the full site page (the map is the whole board with its own tools), and it leaves the table so it is not
   // running twice. Windows that are part of the table itself (the creature gallery...) stay on the table.
+  const popped = new Map();   // window id → its own browser window, while open
   function popOut(w) {
     const f = w.node.querySelector('iframe');
     let url = w.spec.popUrl ? new URL(w.spec.popUrl, location.href).href : '';   // a window may name its own pop-out page
@@ -352,6 +365,7 @@
     const left = Math.round((window.screenX || 0) + 40), top = Math.round((window.screenY || 0) + 40);
     const win = window.open(url, 'table-' + w.id, `popup=yes,width=${wd},height=${ht},left=${left},top=${top}`);
     if (!win) { toast('The browser blocked the pop-out: allow pop-ups for this site, then try again'); return; }
+    popped.set(w.id, win);   // its button now brings this window forward (openWindow)
     try { win.focus(); } catch (_) { /* some browsers refuse focus */ }
     closeWindow(w);
     toast(`${w.spec.title} is in its own window now (drag it to another screen). Close it there when done.`);
@@ -521,7 +535,7 @@
     try { localStorage.removeItem(LAYOUT_KEY); } catch (_) { /* no storage */ }
     if (before) toast('Table cleared', { label: 'Undo', run: () => { try { localStorage.setItem(LAYOUT_KEY, before); } catch (_) { /* no storage */ } location.reload(); } });
   }
-  table.addEventListener('pointerdown', (e) => { if (e.target === table || e.target.id === 'surface' || e.target.closest?.('#surface')) windows.forEach((w) => { if (w.state.dock && w.state.open) setOpen(w, false); }); });
+  // A drawer slid out stays out (Brandon, October 28, 2026: a pinned chat kept going away); its tab or its › puts it back.
   window.addEventListener('resize', () => { windows.forEach((w) => { if (w.state.dock) layoutDock(w); else if (w.state.max) { const b = bounds(); Object.assign(w.node.style, { width: b.width + 'px', height: b.height + 'px' }); } }); refreshWork(); });
 
   window.Table = { $, el, toast, bounds, saveLayout, layoutDock, showTip, hideTip, openFlyout, closeFlyout, openWindow, closeWindow, maximize, dock, undock, setOpen, windows, addCard, cards, dragOut, setBackground, useBackgroundFile, saveBg, loadLayout, clearLayout, refreshWork };
