@@ -551,12 +551,14 @@ async function mount(){
   if(view&&!document.hidden){
    // Page controls pinned to the board (door and window buttons, zone buttons):
    // data-vtt3d-anchor="x,y,height" in squares; data-vtt3d-level hides them with their floor.
-   const anchored=overlayHost.querySelectorAll('[data-vtt3d-anchor]');let anchorKey=lastPlaceKey+'|'+anchored.length;for(const el of anchored)anchorKey+='|'+el.dataset.vtt3dAnchor+(el.dataset.vtt3dLevel||'');
+   // Players: a button in the parts vision leaves black is not shown (Brandon, October 27, 2026), so the key follows vision too.
+   const sightHides=!context.isGM&&typeof window.vttSightSees==='function';
+   const anchored=overlayHost.querySelectorAll('[data-vtt3d-anchor]');let anchorKey=lastPlaceKey+'|'+anchored.length+'|'+(sightHides?(window.vttSightVersion||0)+':'+JSON.stringify(window.vttSightTest||null):'');for(const el of anchored)anchorKey+='|'+el.dataset.vtt3dAnchor+(el.dataset.vtt3dLevel||'');
    let freshAnchor=false;for(const el of anchored)if(!placedElements.has(el)){freshAnchor=true;break;}
    if(anchorKey!==lastAnchorKey||freshAnchor){lastAnchorKey=anchorKey;
    const rect=canvasRect;
    for(const el of anchored){placedElements.add(el);const [x,y,z]=el.dataset.vtt3dAnchor.split(',').map(Number);if(![x,y,z].every(Number.isFinite)){el.style.visibility='hidden';continue;}
-    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(shownLevel===null||shownLevel<0||level<=shownLevel);
+    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(shownLevel===null||shownLevel<0||level<=shownLevel)&&!(sightHides&&window.vttSightSees(x,y)===false);
     el.style.left=`${rect.left-hostRect.left+q.x}px`;el.style.top=`${rect.top-hostRect.top+q.y}px`;el.style.visibility=shown?'':'hidden';}
    }
    const portalKey=[window.wallPrototype?.revision,document.querySelector('#wall-panel')?.hidden,context.isGM,window.terrainPrototype?.revision,context.sceneId].join('|');if(portalKey!==portalsAt){portalsAt=portalKey;window.wallPrototype?.refreshPortals?.();}

@@ -363,6 +363,8 @@ async function start() {
       }
     }
     state.roomMs = Math.round(performance.now() - started);
+    (state.roomInfo ||= [])[i] = see ? { left, top, size, data } : null;
+    window.vttSightVersion = (window.vttSightVersion || 0) + 1;
     room.needsUpdate = true;
     state.composite.uniforms[`room${i}`].value = room;
     state.composite.uniforms[`roomBox${i}`].value.set(left, top, ROOM_REACH * 2, see ? ground : -1000);
@@ -410,6 +412,25 @@ async function start() {
     }
     state.composite.uniforms.count.value = eyes.length;
   }
+
+  // Is this spot (squares) seen by any of the viewing heroes, on their floor? true / false, or null when vision is off
+  // or has no heroes (then nothing is hidden). A door or window sits on a wall line, so a little each side counts.
+  window.vttSightSees = (x, y) => {
+    if (!on || !bound?.eyes?.length || !Array.isArray(bound.roomInfo)) return null;
+    const near = [[0, 0], [.35, 0], [-.35, 0], [0, .35], [0, -.35]];
+    let known = false;
+    for (const info of bound.roomInfo.slice(0, bound.eyes.length)) {
+      if (!info) continue;
+      known = true;
+      for (const [dx, dy] of near) {
+        const c = Math.floor((x + dx - info.left) * ROOM_STEPS), r = Math.floor((y + dy - info.top) * ROOM_STEPS);
+        if (c < 0 || r < 0 || c >= info.size || r >= info.size) continue;
+        const k = (r * info.size + c) * 4;
+        if (info.data[k] > .5 || info.data[k + 1] > .5) return true;
+      }
+    }
+    return known ? false : null;
+  };
 
   function publish(ids) {
     const before = JSON.stringify(window.vttSightTest || null);
