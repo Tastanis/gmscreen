@@ -389,7 +389,7 @@
     });
     paintDockState();
   }
-  function paintDockState() { const f = vttFrame(); if (!f) return; document.querySelectorAll('[data-rtool]').forEach((b) => b.classList.toggle('open', f.contentWindow.vttEmbed.isActive(b.dataset.rtool))); }
+  function paintDockState() { const f = vttFrame(); if (!f) return; document.querySelectorAll('[data-rtool]').forEach((b) => b.classList.toggle('open', Boolean(f.contentWindow.vttEmbed.isActive(b.dataset.rtool)))); }
 
   // Creatures: the Monster Creator's own list as pictures. Drag one onto the map: it is placed there.
   let monsters = null;

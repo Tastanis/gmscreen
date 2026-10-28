@@ -244,7 +244,7 @@
 
   function dock(on) { doc.documentElement.classList.toggle('te-docked', !!on); setTimeout(() => dispatchEvent(new Event('resize')), 30); }
 
-  window.vttEmbed = { tools: () => TOOLS.map(({ sel, on, ...t }) => t), run, status, dock, refresh, isActive: (id) => { const t = TOOLS.find((x) => x.id === id); return !!t && (t.on ? t.on() : !!t.sel && t.toggle && pressed(t.sel)); } };
+  window.vttEmbed = { tools: () => TOOLS.map(({ sel, on, ...t }) => t), run, status, dock, refresh, isActive: (id) => { const t = TOOLS.find((x) => x.id === id); return Boolean(t && (t.on ? t.on() : t.sel && t.toggle && pressed(t.sel))); } };   // always true or false: an undefined made the rail flip a tool on and off every second
   build();
   setInterval(() => { try { paintTop(); } catch (_) { /* not ready */ } }, 1000);
   setTimeout(() => dispatchEvent(new Event('resize')), 50);
