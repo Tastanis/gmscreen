@@ -546,8 +546,39 @@
   apps.combat = () => T.openWindow({ id: 'combat', app: 'combat', title: 'Combat', sub: 'Round 3', icon: I.combat, size: [300, 300],
     build(c) { c.innerHTML = '<p class="pad muted">On the site, combat runs on the map: start and end it from the Combat button; the turn bar shows on the board.</p>'; } });
   // Ask for a test: a window of its own (Brandon, October 27, 2026: it opened the map). The map's own form (test.php).
-  apps.test = () => T.openWindow({ id: 'test', app: 'test', title: 'Ask for a test', icon: I.test || I.dice, size: [420, 560],
+  apps.test = () => T.openWindow({ id: 'test', app: 'test', title: me.gm ? 'Ask for a test' : 'Test', icon: I.test || I.dice, size: [420, 560],
     build(c) { if (SERVED) { framePage(c, vers('/dnd/table/test.php')); return; } c.innerHTML = '<p class="pad muted">Pick heroes; they roll from their sheets.</p>'; } });
+
+  // A player asked for a test (Brandon, October 27, 2026): the Test window comes to the front with the request in it,
+  // once per test; a test the Director cancels closes it again. Looked for every few seconds (one word while nothing changed).
+  let testStamp = '', testWatched = '';
+  const testsPopped = new Set((() => { try { return JSON.parse(sessionStorage.getItem('table-tests-popped') || '[]'); } catch (_) { return []; } })());
+  async function watchTests() {
+    if (!SERVED || me.gm || !me.user || document.hidden) return;
+    try {
+      const body = 'action=chat_test_state' + (testStamp ? '&stamp=' + encodeURIComponent(testStamp) : '');
+      const j = await (await fetch('/dnd/chat_handler.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })).json();
+      if (!j?.success || j.unchanged) return;
+      testStamp = String(j.stamp || '');
+      const mine = String(me.user).toLowerCase(), tests = j.tests || [];
+      const fresh = tests.find((t) => t.rows?.[mine]?.status === 'waiting' && (t.age || 0) <= 1800 && !testsPopped.has(t.id));
+      if (fresh) {
+        testsPopped.add(fresh.id); testWatched = fresh.id;
+        try { sessionStorage.setItem('table-tests-popped', JSON.stringify([...testsPopped].slice(-40))); } catch (_) { /* no storage */ }
+        const w = apps.test();
+        const focusIt = (n = 0) => { const f = w.node.querySelector('iframe'); try { if (f?.contentDocument?.readyState === 'complete') { f.focus(); f.contentWindow.focus(); return; } } catch (_) { /* not yet */ } if (n < 50) setTimeout(() => focusIt(n + 1), 200); };
+        focusIt();
+        return;
+      }
+      const watched = testWatched && tests.find((t) => t.id === testWatched);
+      if (watched && watched.rows?.[mine]?.status === 'cancelled') {
+        testWatched = '';
+        const w = T.windows.get('test'); if (w) T.closeWindow(w);
+        T.toast('The Director cancelled the test');
+      }
+    } catch (_) { /* next time */ }
+  }
+  if (SERVED) setInterval(watchTests, 3000);
 
   // Dice is a window of its own (Brandon, October 27, 2026: it opened the map): the sheet's roller, rolls to chat (dice.php).
   apps.dice = () => T.openWindow({ id: 'dice', app: 'dice', title: 'Dice', icon: I.dice, size: [400, 470],

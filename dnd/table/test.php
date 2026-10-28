@@ -1,13 +1,13 @@
 <?php
 /**
- * The Table's "Ask for a test" window (Brandon, October 27, 2026: it opened the map). The same form the map's
- * Test button opens (js/ask-test.js); the request rides on the table chat as before. Director only.
+ * The Table's test window (Brandon, October 27, 2026). The Director: "Ask for a test", the same form the map's Test
+ * button opens (js/ask-test.js). A player: the Table opens it in front when the Director asks them for a test, and the
+ * request (the roll from their sheet) shows here; one cancelled is taken away. The request rides on the table chat.
  */
 require __DIR__ . '/config.php';
 $config = tableSiteConfig();
 session_write_close();
 if ($config === null) { header('Location: /dnd/index.php'); exit; }
-if (!$config['isGM']) { http_response_code(403); echo 'Only the Director asks for tests.'; exit; }
 $v = static fn ($file) => (int) @filemtime(__DIR__ . '/../' . $file);
 $json = static fn ($value) => json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
 header('Cache-Control: no-store');
@@ -16,7 +16,7 @@ header('Cache-Control: no-store');
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ask for a test</title>
+  <title><?php echo $config['isGM'] ? 'Ask for a test' : 'Test'; ?></title>
   <script>try { if (localStorage.getItem('sheet-theme') !== 'parchment') document.documentElement.classList.add('diablo'); } catch (e) { document.documentElement.classList.add('diablo'); }</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
@@ -33,7 +33,11 @@ header('Cache-Control: no-store');
 </head>
 <body>
   <!-- When the form is closed or sent, the window offers another; closing the window is closing it. -->
+<?php if ($config['isGM']): ?>
   <div class="again"><p>Test asked. The heroes roll from their sheets; results come to chat.</p><button type="button" data-ask-test-open>Ask another test</button></div>
+<?php else: ?>
+  <div class="again" data-player-idle><p>No test is waiting for you.</p></div>
+<?php endif; ?>
 
   <!-- Hidden chat (js/chat-panel.js, headless): the test request rides on the table chat. -->
   <div class="hidden-chat" aria-hidden="true">
@@ -60,14 +64,17 @@ header('Cache-Control: no-store');
   <script src="/dnd/js/chat-panel.js?v=<?php echo $v('js/chat-panel.js'); ?>"></script>
   <script src="/dnd/js/ask-test.js?v=<?php echo $v('js/ask-test.js'); ?>"></script>
   <script>
-    window.initChatPanel(true, <?php echo $json($config['currentUser']); ?>, { headless: true });
-    window.AskTest.start({ isGM: true, currentUser: <?php echo $json($config['currentUser']); ?>, endpoint: window.chatHandlerUrl, participants: window.chatParticipants });
-    window.AskTest.openForm({ from: <?php echo $json((string) ($_GET['from'] ?? '')); ?> });
-    // Once the form is gone (sent or closed), offer another.
+    var director = <?php echo $config['isGM'] ? 'true' : 'false'; ?>;
+    window.initChatPanel(director, <?php echo $json($config['currentUser']); ?>, { headless: true });
+    window.AskTest.start({ isGM: director, currentUser: <?php echo $json($config['isGM'] ? $config['currentUser'] : strtolower($config['currentUser'])); ?>, endpoint: window.chatHandlerUrl, participants: window.chatParticipants });
+    if (director) window.AskTest.openForm({ from: <?php echo $json((string) ($_GET['from'] ?? '')); ?> });
+    // The Director: once the form is gone (sent or closed), offer another. A player: a line while no request shows.
     new MutationObserver(function () {
-      var formOpen = !!document.querySelector('.ask-test__panel--form');
-      document.querySelector('.again').classList.toggle('on', !formOpen);
+      var shown = !!document.querySelector(director ? '.ask-test__panel--form' : '.ask-test__panel--request, .ask-test__panel--results');
+      document.querySelector('.again').classList.toggle('on', !shown);
     }).observe(document.body, { childList: true, subtree: true });
+    // A request opens only in the window in use: this one is, the moment it is opened.
+    window.focus();
   </script>
 </body>
 </html>

@@ -47,6 +47,7 @@ if (PHP_SAPI !== 'cli') {
         case 'test_state':
         case 'test_sheet':
         case 'test_roll':
+        case 'test_cancel':
             handleAskTest($chatAction, $chatDataFile, $maxMessages, $chatParticipantsMap);
             break;
 
@@ -1033,6 +1034,7 @@ function appendChatLine($dataFile, $maxMessages, array $line): array
  *   chat_test_state  anyone signed in: the tests they may see (a hero sees only their own row)
  *   chat_test_sheet  a hero: their own characteristics and skills, and the five skill groups
  *   chat_test_roll   a hero who was asked: test, characteristic, skill, edge (-1, 0, 1), extra
+ *   chat_test_cancel the Director: test. Every hero still waiting on it is let off ("cancelled"); rolls stay.
  */
 function handleAskTest($action, $dataFile, $maxMessages, array $participants)
 {
@@ -1101,6 +1103,28 @@ function handleAskTest($action, $dataFile, $maxMessages, array $participants)
             });
             broadcastChatUpdate('test');
             $answer(['success' => true, 'id' => $test['id'], 'stamp' => AskTest::stamp($file), 'tests' => AskTest::visibleTo(AskTest::read($file), $user, true, $now)]);
+        }
+
+        if ($action === 'test_cancel') {
+            if (!$isGm) {
+                $refuse('Only the Director cancels a test.');
+            }
+            $id = is_string($_POST['test'] ?? null) ? $_POST['test'] : '';
+            $result = AskTest::change($file, static function (array $tests) use ($id, $now) {
+                foreach ($tests as $index => $test) {
+                    if (($test['id'] ?? '') !== $id) continue;
+                    foreach ($test['rows'] as $hero => $row) {
+                        if (($row['status'] ?? '') === 'waiting') $tests[$index]['rows'][$hero] = ['status' => 'cancelled', 'cancelledAt' => $now];
+                    }
+                    return ['tests' => $tests];
+                }
+                return ['error' => 'That test is not here any more.'];
+            });
+            if (is_array($result) && isset($result['error'])) {
+                $refuse($result['error']);
+            }
+            broadcastChatUpdate('test');
+            $answer(['success' => true, 'stamp' => AskTest::stamp($file), 'tests' => AskTest::visibleTo(AskTest::read($file), $user, true, $now)]);
         }
 
         if ($action === 'test_roll') {

@@ -371,11 +371,24 @@
         cell.appendChild(score);
       } else {
         cell.className = 'ask-test__dim';
-        cell.textContent = 'waiting';
+        cell.textContent = row.status === 'cancelled' ? 'cancelled' : 'waiting';
       }
       line.appendChild(cell);
       view.table.appendChild(line);
     });
+    // Cancel (Brandon, October 27, 2026): the heroes still waiting are let off, and the request leaves their screens.
+    view.cancel?.remove(); view.cancel = null;
+    if (Object.values(test.rows).some((row) => row.status === 'waiting')) {
+      const cancel = slab('Cancel test', 'ask-test__slab--wide');
+      cancel.addEventListener('click', async () => {
+        cancel.disabled = true;
+        const answer = await send('chat_test_cancel', { test: id });
+        if (!answer.success) { cancel.disabled = false; cancel.textContent = answer.error || 'Not cancelled; try again'; return; }
+        take(answer);
+      });
+      view.node.appendChild(cancel);
+      view.cancel = cancel;
+    }
   }
 
   // ---- the player answers -------------------------------------------------------------------------------
