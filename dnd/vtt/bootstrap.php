@@ -388,6 +388,11 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
+    if ($isGm) {
+        require_once __DIR__ . '/lib/MonsterTokens.php';
+        $storedTokens = loadVttJson('tokens.json');
+        $tokens = MonsterTokens::merge($tokens, is_array($storedTokens['monsterTokens'] ?? null) ? $storedTokens['monsterTokens'] : []);
+    }
     $boardState = overlaySyncV2Placements([], $context);
 
     // Normalize fogOfWar revealedCells to ensure they're always JSON objects, not arrays.

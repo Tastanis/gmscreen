@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/monster_helpers.php';
+require_once __DIR__ . '/../lib/MonsterTokens.php';
 
 header('Content-Type: application/json');
 
@@ -20,8 +21,11 @@ try {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     if ($method === 'GET') {
-        $payload = loadTokensPayload();
-        if (!$isGm) {
+        $stored = loadTokensPayload();
+        $payload = ['folders' => $stored['folders'], 'items' => $stored['items']];
+        if ($isGm) {
+            $payload = MonsterTokens::merge($payload, $stored['monsterTokens']);
+        } else {
             $payload = filterTokensForPlayerView($payload);
         }
         respondJson(200, [
@@ -119,6 +123,7 @@ function loadTokensPayload(): array
     return [
         'folders' => normalizeCollection($data['folders'] ?? []),
         'items' => normalizeCollection($data['tokens'] ?? $data['items'] ?? []),
+        'monsterTokens' => is_array($data['monsterTokens'] ?? null) ? $data['monsterTokens'] : [],
     ];
 }
 
@@ -290,6 +295,45 @@ function updateToken(array $payload): array
     $storage = loadTokensPayload();
     $updated = null;
 
+    // A new picture (the picture tool in the token's edit box): saved as a file like a new token's.
+    $newImageUrl = null;
+    if (isset($payload['imageData']) && trim((string) $payload['imageData']) !== '') {
+        $newImageUrl = saveTokenImageFile(trim((string) $payload['imageData']), $tokenId);
+    }
+
+    if (MonsterTokens::isMonsterToken($tokenId)) {
+        $monsterId = MonsterTokens::monsterIdOf($tokenId);
+        $monster = findMonsterById($monsterId);
+        if ($monster === null) {
+            respondJson(404, ['success' => false, 'error' => 'That monster is no longer in the Monster Creator.']);
+        }
+        $override = is_array($storage['monsterTokens'][$monsterId] ?? null) ? $storage['monsterTokens'][$monsterId] : [];
+        if (array_key_exists('size', $payload)) {
+            $size = normalizeTokenSize($payload['size']);
+            if ($size === null) unset($override['size']); else $override['size'] = $size;
+        }
+        if (array_key_exists('hp', $payload)) {
+            $hitPoints = normalizeTokenHitPoints($payload['hp']);
+            if ($hitPoints === null) unset($override['hp']); else $override['hp'] = $hitPoints;
+        }
+        if (array_key_exists('team', $payload) || array_key_exists('combatTeam', $payload)) {
+            $override['team'] = normalizeTokenCombatTeam($payload['team'] ?? $payload['combatTeam'] ?? null);
+        }
+        if ($newImageUrl !== null) {
+            $override['imageUrl'] = $newImageUrl;
+        } elseif (!empty($payload['resetImage'])) {
+            unset($override['imageUrl']);
+        }
+        $override['updatedAt'] = date(DATE_ATOM);
+        $storage['monsterTokens'][$monsterId] = $override;
+        persistTokens($storage);
+        $catalogEntry = loadMonsterCatalog()[$monsterId] ?? $monster;
+        $token = MonsterTokens::tokenFor($catalogEntry, $override);
+        $token['folder'] = ['id' => $token['folderId'], 'name' => $token['folderName']];
+        unset($token['folderName']);
+        return $token;
+    }
+
     foreach ($storage['items'] as &$token) {
         if (($token['id'] ?? null) !== $tokenId) {
             continue;
@@ -313,6 +357,10 @@ function updateToken(array $payload): array
             $team = normalizeTokenCombatTeam($payload['team'] ?? $payload['combatTeam'] ?? null);
             $token['combatTeam'] = $team;
             $token['team'] = $team;
+        }
+
+        if ($newImageUrl !== null) {
+            $token['imageUrl'] = $newImageUrl;
         }
 
         $token['updatedAt'] = date(DATE_ATOM);
@@ -349,6 +397,13 @@ function deleteToken(array $payload): array
         respondJson(422, [
             'success' => false,
             'error' => 'Token id is required.',
+        ]);
+    }
+
+    if (MonsterTokens::isMonsterToken($tokenId)) {
+        respondJson(422, [
+            'success' => false,
+            'error' => 'This token comes from the Monster Creator: delete the monster there and its token goes too.',
         ]);
     }
 
@@ -396,6 +451,25 @@ function deleteToken(array $payload): array
     ];
 }
 
+/** A token's new picture (a data URL) saved next to the others; its address. Answers with an error when it cannot be. */
+function saveTokenImageFile(string $dataUrl, string $tokenId): string
+{
+    $decoded = decodeTokenImage($dataUrl);
+    if ($decoded === null || strlen($decoded['data']) > 5 * 1024 * 1024 || @getimagesizefromstring($decoded['data']) === false) {
+        respondJson(422, ['success' => false, 'error' => 'The new picture could not be read (PNG, JPG or WebP under 5 MB).']);
+    }
+    $destinationDir = __DIR__ . '/../storage/tokens';
+    if (!is_dir($destinationDir) && !mkdir($destinationDir, 0775, true) && !is_dir($destinationDir)) {
+        respondJson(500, ['success' => false, 'error' => 'Unable to prepare storage for token images.']);
+    }
+    $stem = preg_replace('/[^a-zA-Z0-9_-]/', '_', $tokenId) ?: 'token';
+    $filename = $stem . '-' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $decoded['extension'];
+    if (file_put_contents($destinationDir . '/' . $filename, $decoded['data']) === false) {
+        respondJson(500, ['success' => false, 'error' => 'Failed to save the new picture.']);
+    }
+    return '/dnd/vtt/storage/tokens/' . $filename;
+}
+
 function decodeTokenImage(string $dataUrl): ?array
 {
     if (!preg_match('/^data:image\/(png|jpg|jpeg|webp);base64,/i', $dataUrl, $matches)) {
@@ -423,6 +497,10 @@ function persistTokens(array $storage): void
         'folders' => normalizeCollection($storage['folders'] ?? []),
         'tokens' => normalizeCollection($storage['items'] ?? []),
     ];
+    // The Director's changes to the Monster Creator's tokens (MonsterTokens.php), kept per monster.
+    if (!empty($storage['monsterTokens']) && is_array($storage['monsterTokens'])) {
+        $payload['monsterTokens'] = $storage['monsterTokens'];
+    }
 
     if (!saveVttJson('tokens.json', $payload)) {
         respondJson(500, [

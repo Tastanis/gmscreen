@@ -84,7 +84,9 @@ header('Cache-Control: no-store');
       <textarea id="chat-input" class="chat-panel__textarea" rows="2" placeholder="Type a message…"></textarea>
       <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
     </form>
-    <div id="chat-drop-target" class="chat-drop-target" data-drop-scope="panel" hidden aria-hidden="true">Drop images or image links to share</div>
+    <!-- No drop scope: the whole page is the chat, so a picture dropped anywhere on it goes in (the panel-only scope
+         wanted the panel opened by its toggle, which never happens here, so every drop was refused). -->
+    <div id="chat-drop-target" class="chat-drop-target" hidden aria-hidden="true">Drop images or image links to share</div>
   </aside>
   <button id="chat-panel-toggle" class="chat-panel-toggle" type="button" aria-expanded="false" aria-controls="chat-panel" data-action="toggle-chat">Open Chat</button>
   <div id="chat-whisper-popouts" class="chat-whisper-popouts" aria-live="polite" aria-atomic="false"></div>

@@ -101,9 +101,9 @@ test('flyout search hides rows (the rows\' display does not win over [hidden]); 
   assert.match(read('table-apps.js'), /\$\{\(h\.pic \|\| h\.picUrl\) && SERVED \? '' : initials\(h\.name\)\}<\/div><div class="txt">/);
 });
 
-test('the map strip: menus open under the 72px top bar, a second press closes them, the damage box opens beside the strip', () => {
+test('the map strip: menus open under the two-row top bar (106px), a second press closes them, the damage box opens beside the strip', () => {
   const js = read('vtt-embed.js');
-  assert.match(js, /const TOP_BAR = 72;/);
+  assert.match(js, /const TOP_BAR = 106;/);
   assert.match(js, /menu\.style\.top = Math\.max\(topBarBottom\(\) \+ 6,/);
   assert.match(js, /if \(t\?\.menu && menu && menuTool === id\) \{ closeMenu\(\); return true; \}/);
   assert.match(js, /classList\.contains\('vtt-damage-heal'\)/);

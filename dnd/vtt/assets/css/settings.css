@@ -1552,3 +1552,15 @@ body.vtt-body {
     border-radius: 0 10px 10px 0;
   }
 }
+
+/* The picture in a token's edit box (token-picture.mjs, October 2026): a round preview to drag, a zoom slider, another file. */
+.token-picture { display: flex; gap: 10px; align-items: center; }
+.token-picture__view { width: 132px; height: 132px; border-radius: 50%; background: #120d0a; border: 2px solid #5a4628; cursor: grab; flex: none; touch-action: none; }
+.token-picture__view:active { cursor: grabbing; }
+.token-picture__tools { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.token-picture__zoom { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; }
+.token-picture__zoom input { width: 100%; }
+.token-picture__buttons { display: flex; flex-direction: column; gap: 4px; }
+.token-picture__buttons .btn { font-size: 0.75rem; padding: 3px 8px; }
+.token-picture__buttons .btn[hidden] { display: none; }
+

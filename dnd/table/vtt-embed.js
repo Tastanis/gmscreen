@@ -11,6 +11,7 @@
   const gm = !!$('[data-viewer-role="gm"]');
 
   const I = {
+    tokens: '<circle cx="8" cy="8" r="4.5"/><circle cx="16" cy="16" r="4.5"/><path d="M15 4.5h5M17.5 2v5"/>',
     measure: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
     mark: '<path d="M4 20l4-1 9-9-3-3-9 9z"/><circle cx="17" cy="17" r="4" stroke-dasharray="2 2"/>',
     templates: '<circle cx="8" cy="8" r="5"/><rect x="11" y="11" width="10" height="10" rx="1"/>',
@@ -37,6 +38,7 @@
   const TOOLS = [
     { id: 'measure', t: 'Measure', d: 'Ruler. Click again to stop.', sel: '[data-action="measure-distance"]', toggle: true },
     { id: 'mark', t: 'Mark the board', d: 'Templates (circle, rectangle, wall) and the pen.', menu: 'mark', on: () => pressed('[data-action="toggle-draw"]') },
+    { id: 'tokens', t: 'Tokens', d: 'The token library: every Monster Creator monster, the heroes and your own pictures. Drag one onto the map; right-click one to change its size, side or picture.', sel: '[data-settings-launch="tokens"]', gm: true },
     { id: 'damage', t: 'Damage / heal', d: 'Set the amount, press Damage or Heal, then click a token.', sel: '#vtt-damage-heal-btn' },
     { sep: true },
     { id: 'view', t: 'View', d: 'Vision, find token, 1st person, zones.', menu: 'view', on: () => pressed('[data-action="sight-test"]') || pressed('[data-action="first-person"]') },
@@ -53,7 +55,7 @@
   }
   const hideTip = () => tip.classList.remove('show');
   let menu = null;
-  const TOP_BAR = 72;   // #te-top's height (fallback): menus open below it
+  const TOP_BAR = 106;   // #te-top's height (fallback, two rows): menus open below it
   const topBarBottom = () => { const t = doc.getElementById('te-top'); const b = t && getComputedStyle(t).display !== 'none' ? t.getBoundingClientRect().bottom : 0; return b > 0 ? b : TOP_BAR; };
   let menuTool = '';   // the strip/rail tool whose menu is open: pressing it again closes the menu
   function closeMenu() { menu?.remove(); menu = null; menuTool = ''; }
@@ -69,14 +71,14 @@
   const levelName = () => ($('[data-map-level-nav-name]')?.textContent || '').trim();
   function viewMenu(anchor) {
     const rows = [
-      ['vision', gm ? 'Vision (heroes\u2019 sight)' : 'Vision (what you see)', '[data-action="sight-test"]'],
+      ['vision', 'Vision for everyone', '[data-action="sight-test"]'],
       ['vision', () => ($('[data-action="sight-look"]')?.textContent || 'Unseen: Grey').trim() + ' — click to change', '[data-action="sight-look"]', true],
       ['find', gm ? 'Find token' : 'My token', '[data-action="return-token-floor"]'],
       ['first', '1st person', '[data-action="first-person"]'],
-    ];
+    ].filter(([icon]) => gm || icon === 'find' || icon === 'first');   // players: their token and 1st person only, no say over vision (Brandon, October 27, 2026)
     openMenu(anchor, `<h5>View</h5>
       ${'' /* height and Show players live in the top bar, always in sight: not repeated here */}
-      ${$('[data-action="terrain-zones"]') ? `<div class="te-row" style="cursor:default">${svg('zones')}Zones${pressed('[data-action="terrain-zones"]') || pressed('[data-action="terrain-zones-players"]') ? '' : ' <span class="te-off">off</span>'}<span class="te-switch"><button class="${pressed('[data-action="terrain-zones"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones"]' title="Zones on your screen">Me</button>${gm && $('[data-action="terrain-zones-players"]') ? `<button class="${pressed('[data-action="terrain-zones-players"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones-players"]' title="Zones on the players' screens">Players</button>` : ''}</span></div>` : ''}
+      ${gm && $('[data-action="terrain-zones"]') ? `<div class="te-row" style="cursor:default">${svg('zones')}Zones${pressed('[data-action="terrain-zones"]') || pressed('[data-action="terrain-zones-players"]') ? '' : ' <span class="te-off">off</span>'}<span class="te-switch"><button class="${pressed('[data-action="terrain-zones"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones"]' title="Zones on your screen">Me</button>${gm && $('[data-action="terrain-zones-players"]') ? `<button class="${pressed('[data-action="terrain-zones-players"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones-players"]' title="Zones on the players' screens">Players</button>` : ''}</span></div>` : ''}
       ${rows.map(([icon, label, sel, sub]) => { const b = $(sel); if (!b || (sub && !$('[data-action="sight-test"][aria-pressed="true"]'))) return ''; const on = pressed(sel); return `<button class="te-row${on ? ' on' : ''}" data-sel='${sel}'>${svg(icon)}${typeof label === 'function' ? label() : label}${on ? '<span class="k">on</span>' : ''}</button>`; }).join('')}`,
     (m) => {
       m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel); setTimeout(() => { viewMenu(anchor); menuTool = 'view'; }, 60); });
@@ -172,8 +174,9 @@
     const roundBtn = fightBar.querySelector('[data-c="round"]'); if (roundBtn) roundBtn.hidden = !st.combat;
     const maliceBtn = fightBar.querySelector('[data-c="malice"]'); if (maliceBtn) { maliceBtn.hidden = !st.combat; const t = `Malice ${st.malice || 0}`; if (maliceBtn.textContent !== t) maliceBtn.textContent = t; }
     // The token bar starts right after whatever is on the left of the top bar.
-    const r = top.querySelector('.te-tokens').getBoundingClientRect();
-    doc.documentElement.style.setProperty('--te-tracker-left', Math.round(r.left) + 'px');
+    // Two rows: the token bar takes the whole second row, from the bar's own left edge.
+    const r = top.getBoundingClientRect();
+    doc.documentElement.style.setProperty('--te-tracker-left', Math.round(r.left + 6) + 'px');
   }
 
   // ---------------------------------------------------------------- the strip

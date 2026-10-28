@@ -8180,6 +8180,20 @@ export function mountBoardInteractions(store, routes = {}) {
       fetchAndApplyCharacterStamina(placement.id, activeSceneId, dropSavePromise, { seedConditions: true });
     }
 
+    // A Monster Creator token (MonsterTokens.php) comes without its stat block: the monster's record is fetched and put
+    // on the placed token once it is saved, with its stamina when the token has none (Brandon, October 27, 2026).
+    if (template.monsterId && !placement.monster) {
+      Promise.all([lookUpMonsterRecord(template.monsterId), dropSavePromise]).then(([record]) => {
+        if (!record) return;
+        updatePlacementById(placement.id, (target) => {
+          const snapshot = cloneMonsterSnapshot(record);
+          if (snapshot) { target.monster = snapshot; target.metadata = { ...(target.metadata || {}), monsterId: template.monsterId, monster: cloneMonsterSnapshot(record) }; }
+          const stamina = Number(record.stamina ?? record.hp);
+          if (!target.hp?.max && stamina > 0) target.hp = normalizePlacementHitPoints(stamina);   // none set: left blank
+        }, { sceneId: activeSceneId });
+      }).catch((error) => console.warn('[VTT] Monster record for a dropped token', error));
+    }
+
     if (status) {
       const label = template.name ? `"${template.name}"` : 'Token';
       status.textContent = `Placed ${label} on the scene.`;

@@ -139,3 +139,16 @@ html.vtt-embed [data-combat-tracker][data-combat-active="false"]:hover { opacity
 /* Condition banners (e.g. "New fight: cleared Prone (Cal)" with its Undo) sit above the hero panel: in a table window
    the board is narrow and the centred banner runs under the open panel, hiding its Undo. */
 html.vtt-embed .vtt-board__condition-banner-region { z-index: 1290; }
+
+/* Two rows (Brandon, October 27, 2026): height, the fight and its buttons on top; the turn tracker across the whole
+   width underneath, so neither squeezes the other. Later than the one-row sizes above, so these win. */
+html.vtt-embed .vtt-board__canvas-wrapper { margin-top: 106px !important; }
+#te-top { height: 106px; align-items: flex-start; box-sizing: border-box; padding-top: 4px; }
+#te-top > .te-scene, #te-top > .te-height, #te-top > .te-fight, #te-top > .te-combat { margin-top: 1px; }
+#te-top .te-fight { line-height: 22px; }
+#te-top .te-tokens { display: none; }
+html.vtt-embed .vtt-board__tracker { top: 38px !important; left: var(--te-tracker-left, 50px) !important; right: 6px !important; height: 66px !important; }
+html.vtt-embed .vtt-board__tracker .vtt-combat-tracker { height: 66px !important; }
+html.vtt-embed.te-docked .vtt-board__tracker { right: 6px !important; }
+html.vtt-embed .vtt-character-summary { top: 107px !important; }   /* just under the two rows */
+

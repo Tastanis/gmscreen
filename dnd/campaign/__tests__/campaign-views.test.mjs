@@ -21,9 +21,10 @@ test('a player sees the title, the bar and the roll button only', () => {
   assert.doesNotMatch(html, /Last rolls|Set back|data-setback|data-pts|data-pedit|Source:|\d+ \/ \d+/);
 });
 
-test('a player never gets history, numbers or tools even if the data has them', () => {
+test('a player sees the points (x / y) but never history, notes or tools even if the data has them', () => {
   const html = V.projectsView({ ...base, isGM: false, heroes: [hero([gmProject])] });
-  assert.doesNotMatch(html, /Last rolls|data-setback|secret notes|Book of Clay|40 \/ 100|data-pts|data-pedit/);
+  assert.match(html, /40 \/ 100/, 'players see their points (October 27, 2026)');
+  assert.doesNotMatch(html, /Last rolls|data-setback|secret notes|Book of Clay|data-pts|data-pedit/);
   assert.match(html, /data-roll="cal:0"/);
 });
 

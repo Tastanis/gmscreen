@@ -34,6 +34,7 @@
     layouts: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M10 10v10"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/>',
     logout: '<path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/>',
+    tokens: '<circle cx="8" cy="8" r="4.5"/><circle cx="16" cy="16" r="4.5"/><path d="M15 4.5h5M17.5 2v5"/>',
     arcane: '<path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z"/>',
     player: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
     picture: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
@@ -134,7 +135,25 @@
   const shortScene = (n) => String(n || '').replace(/^the\s+/i, '').replace(/\s+v\d+$/i, '');   // "The Gravity Orchard v4" -> "Gravity Orchard"
   const findHero = (list, n) => list.find((h) => String(h.name).toLowerCase() === n) || list.find((h) => String(h.name).toLowerCase().split(/\s+/)[0] === n);
   const liveHero = (name) => { const n = name.toLowerCase(); const here = findHero(live?.heroes || [], n); if (here) return here; const there = findHero(live?.partyHeroes || [], n); return there ? { ...there, elsewhere: live?.playerSceneName || 'the players\u2019 map' } : null; };
-  const heroHp = (h) => { const r = liveHero(h.name); if (r && Number.isFinite(r.hp) && r.max) return [r.hp, r.max, true, r.temp || 0, r.elsewhere || '']; return SERVED ? [null, null, !!r, 0, ''] : h.hp; };
+  // The heroes' Stamina comes from their character sheets, the truth (Brandon, October 27, 2026: the cards showed the
+  // tokens on the players' map, which can be behind the sheets). Read every few seconds; one word while no sheet changed.
+  let sheetVitals = {}, vitalsStamp = '';
+  async function readSheetVitals() {
+    if (!SERVED || document.hidden) return;
+    try {
+      const j = await (await fetch('/dnd/character_sheet/handler.php?action=party-vitals' + (vitalsStamp ? '&since=' + encodeURIComponent(vitalsStamp) : ''), { credentials: 'same-origin', cache: 'no-store' })).json();
+      if (!j?.success || j.unchanged) return;
+      vitalsStamp = String(j.stamp || ''); sheetVitals = j.party || {}; paintLive();
+    } catch (_) { /* next time */ }
+  }
+  if (SERVED) { setTimeout(readSheetVitals, 0); setInterval(readSheetVitals, 4000); }
+  // [stamina, max, on a map, temp, the other map it is on]: the sheet's numbers; where the token is, from the board.
+  const heroHp = (h) => {
+    const r = liveHero(h.name), v = sheetVitals[h.id];
+    if (v?.hasStamina) return [v.currentStamina, v.staminaMax, !!r, v.tempStamina || 0, r?.elsewhere || ''];
+    if (r && Number.isFinite(r.hp) && r.max) return [r.hp, r.max, true, r.temp || 0, r.elsewhere || ''];
+    return SERVED ? [null, null, !!r, 0, ''] : h.hp;
+  };
   const hpText = (a, m, on, t) => (m ? `${a} / ${m}${t ? ` +${t}` : ''}` : on ? 'on the map' : 'not on the map');
 
   // Live marks on rail buttons: a small word under the icon, and at most one number badge.

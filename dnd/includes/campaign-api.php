@@ -5,7 +5,7 @@
  *
  * Who may do what:
  *   Director (user "GM"): everything, for every hero.
- *   A player: reads their own hero only; projects come without numbers, history or notes (a percent only);
+ *   A player: reads their own hero only; projects come with their points (x / y) but no history, source or notes;
  *             may add a project to their own hero with a title only (it waits for the Director to set the total).
  *
  * Projects and relationships are addressed by their stored index plus the name they had when shown ("name");
@@ -115,14 +115,15 @@ function campaign_project_view(array $project, int $index, bool $isGm): array
         'waiting' => $waiting,
         'complete' => !$waiting && $progress >= 1,
         'percent' => $waiting ? 0 : (int) min(100, max(0, intdiv(max(0, (int) $earned) * 100, (int) $total))),   // integer maths, the same as the page's percentOf (29/100 is 29)
+        // Everyone sees the points (Brandon, October 27, 2026: players see x / y on their projects).
+        'points_earned' => $earned,
+        'total_points' => $waiting ? null : $total,
     );
     if ($isGm) {
         $history = isset($project['points_history']) && is_array($project['points_history'])
             ? array_values(array_map('intval', $project['points_history'])) : array();
         $view += array(
             'source' => (string) ($project['source'] ?? ''),
-            'points_earned' => $earned,
-            'total_points' => $waiting ? null : $total,
             'extra' => (string) ($project['extra'] ?? ''),
             'points_history' => $history,
         );

@@ -4,7 +4,7 @@
    state = { isGM, view: 'projects'|'relationships', who: 'all'|heroId, filter: 'active'|'done'|'all', query,
              heroes: [{ id, name, info: { portrait, ... }, projects: [...], relationships: [...] }],
              pending: { 'hero:index': total }, base: '../' (the dnd/ folder, for pictures), theme }
-   Projects come from api/campaign.php already cut down for players (a percent; no numbers, history or notes);
+   Projects come from api/campaign.php already cut down for players (their points, no history or notes);
    the views also check isGM, so a player never gets the Director's tools even if more data arrived. */
 (function (root, factory) {
   const api = factory();
@@ -114,7 +114,7 @@
       <div class="body">
         ${gm && p.source ? `<div class="src">Source: ${esc(p.source)}</div>` : ''}
         ${waiting ? `<div class="await">Waiting for the Director to set the total${gm ? ' — click ✎ to set it' : ''}</div>`
-        : `<div class="pbar"><div class="fill" style="width:${Math.min(100, Math.max(0, pct))}%"></div><span>${gm ? `${num(p.points_earned)} / ${num(p.total_points)} ` : ''}<small>${pct}%</small></span></div>`}
+        : `<div class="pbar"><div class="fill" style="width:${Math.min(100, Math.max(0, pct))}%"></div><span>${num(p.total_points) > 0 ? `${num(p.points_earned)} / ${num(p.total_points)} ` : ''}<small>${pct}%</small></span></div>`}
         ${hist}
         ${gm && cleanNote(p.extra) ? `<p class="notes">${esc(cleanNote(p.extra))}</p>` : ''}
         ${pending}

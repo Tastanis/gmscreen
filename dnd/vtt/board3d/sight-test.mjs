@@ -156,11 +156,14 @@ async function start() {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = anchor.className.replace('vtt3d-first-person-button', '').trim() + ' vtt3d-sight-button';
-  button.textContent = 'Vision (test)';
+  button.textContent = 'Vision';
   button.setAttribute('aria-pressed', 'false');
   button.dataset.action = 'sight-test';
-  button.title = 'Test: what your heroes cannot see is dimmed (the Director: as the selected tokens see). Only this page changes.';
+  button.title = 'Vision for everyone: what the heroes cannot see is dimmed on every player\'s map (you see as the selected tokens see).';
   anchor.after(button);
+  // Players have no say over vision (Brandon, October 27, 2026): the Director's switch and look are everyone's.
+  const director = !!bridge.getContext().isGM;
+  if (!director) button.style.display = 'none';
   let on = false;
   const lookButton = document.createElement('button');
   lookButton.type = 'button';
@@ -168,16 +171,44 @@ async function start() {
   lookButton.dataset.action = 'sight-look';
   lookButton.title = 'How the parts nobody sees look: Grey, Dark or Black. Click to switch.';
   let look = 0;
-  try { look = Math.max(0, LOOKS.findIndex((l) => l.name === localStorage.getItem('vtt-sight-look'))); } catch (_) { /* no storage */ }
-  const showLook = () => { lookButton.textContent = `Unseen: ${LOOKS[look].name}`; lookButton.style.display = on ? '' : 'none'; };
+  const showLook = () => { lookButton.textContent = `Unseen: ${LOOKS[look].name}`; lookButton.style.display = director && on ? '' : 'none'; };
   button.after(lookButton);
   showLook();
   lookButton.addEventListener('click', () => {
+    if (!director) return;
     look = (look + 1) % LOOKS.length;
-    try { localStorage.setItem('vtt-sight-look', LOOKS[look].name); } catch (_) { /* no storage */ }
     showLook();
     api.requestRender?.();
+    send();
   });
+
+  // The setting everyone shares (api/v2/vision.php): the Director writes it, every page reads it every few seconds.
+  const VISION_URL = '/dnd/vtt/api/v2/vision.php';
+  let heard = 0;
+  function apply(vision) {
+    if (!vision || typeof vision !== 'object') return;
+    const index = Math.max(0, LOOKS.findIndex((l) => l.name === vision.look));
+    const changed = on !== (vision.on === true) || look !== index;
+    on = vision.on === true; look = index;
+    button.setAttribute('aria-pressed', String(on));
+    showLook();
+    if (changed) { api.requestRender?.(); tick(); }
+  }
+  function send() {
+    fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on, look: LOOKS[look].name }) })
+      .then((r) => r.json()).then((j) => { if (j?.success) heard = j.vision.updatedAt; else window.UIKit?.toast?.(j?.error || 'Vision was not saved.', 'warning'); })
+      .catch(() => window.UIKit?.toast?.('Vision was not saved.', 'warning'));
+  }
+  function listen() {
+    if (document.hidden) return;
+    fetch(VISION_URL, { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((j) => {
+      if (!j?.success || j.vision.updatedAt === heard) return;
+      heard = j.vision.updatedAt; apply(j.vision);
+    }).catch(() => { /* next time */ });
+  }
+  listen();
+  setInterval(listen, 3000);
+  document.addEventListener('visibilitychange', listen);
 
   let bound = null;   // everything made for one board view
   let key = '';
@@ -404,21 +435,20 @@ async function start() {
       state.eyes = eyes;
       window.vttSightDebug = state;   // for checking the test from the console
     } catch (error) {
-      console.error('[VTT 3D] vision test', error);
+      console.error('[VTT 3D] vision', error);
     }
   }
   setInterval(tick, 150);
 
   button.addEventListener('click', () => {
+    if (!director) return;
     on = !on;
     button.setAttribute('aria-pressed', String(on));
     showLook();
-    const words = on
-      ? (bridge.getContext().isGM ? 'Vision test on: select the tokens to see as.' : 'Vision test on: you see what your heroes see.')
-      : 'Vision test off.';
-    window.UIKit?.toast?.(words, 'info');
+    window.UIKit?.toast?.(on ? 'Vision on for everyone. You see as the tokens you select.' : 'Vision off for everyone.', 'info');
     tick();
+    send();
   });
 }
 
-start().catch((error) => console.error('[VTT 3D] vision test failed to start', error));
+start().catch((error) => console.error('[VTT 3D] vision failed to start', error));

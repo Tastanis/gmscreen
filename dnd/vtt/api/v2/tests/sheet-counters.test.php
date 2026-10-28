@@ -151,7 +151,8 @@ try {
     counterCheck($ask('GM', 'GET', ['action'=>'sync-stamina', 'character'=>'zepha'])['hasStamina'] === false && $ask('GM', 'GET', ['action'=>'sync-stamina', 'character'=>'cal'])['hasStamina'] === true, 'and a single read says so too');
     $same = $ask('GM', 'GET', ['action'=>'party-vitals', 'since'=>$party['stamp']]);
     counterCheck($same === ['success'=>true, 'unchanged'=>true, 'stamp'=>$party['stamp']], 'While no sheet has been written the answer is "unchanged": ' . json_encode($same));
-    counterCheck(($ask('cal', 'GET', ['action'=>'party-vitals'])['error'] ?? '') === 'Permission denied', 'It is the Director\'s read');
+    counterCheck(($ask('cal', 'GET', ['action'=>'party-vitals'])['success'] ?? false) === true, 'A player may read it too (the Table\'s hero cards, October 27, 2026)');
+    counterCheck(($ask('', 'GET', ['action'=>'party-vitals'])['error'] ?? '') === 'Permission denied', 'Nobody signed in: no');
     // An unreadable store answers an error, never noughts.
     file_put_contents($site . '/data/character_sheets.json', '{ not json');
     $broken = $ask('GM', 'GET', ['action'=>'party-vitals']);

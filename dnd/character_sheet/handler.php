@@ -547,7 +547,9 @@ if ($action === 'party-vitals') {
     // Every hero's Stamina in one read, for the Director's map page, which asks every few seconds so that a
     // change made on a sheet on another device reaches the hero's token. "since" is the stamp of the answer the
     // page already has: while the sheets have not been written, nothing is read and nothing is sent.
-    if ($requestMethod !== 'GET' || !$is_gm) sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
+    // Anyone signed in may read it (October 27, 2026): the Table's hero cards show the sheets' Stamina to the players
+    // too, which the hero tokens already show them. Read only.
+    if ($requestMethod !== 'GET' || $currentUser === '') sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
     try {
         clearstatcache(true, $dataFile);
         $stamp = is_file($dataFile) ? filemtime($dataFile) . '-' . filesize($dataFile) : 'none';

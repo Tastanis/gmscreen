@@ -82,11 +82,12 @@ $other = null; foreach ($r['heroes'] as $h) { if ($h['id'] !== 'cal') { $other =
 check($other !== null && $other['relationships'] === array(), "a player does not see another hero's relationships");
 $r['heroes'] = array($own);
 $pv = $r['heroes'][0]['projects'][0];
-check(!isset($pv['points_history']) && !isset($pv['points_earned']) && !isset($pv['total_points']) && !isset($pv['extra']) && !isset($pv['source']), 'a player sees no numbers, history, source or notes');
+check(!isset($pv['points_history']) && !isset($pv['extra']) && !isset($pv['source']), 'a player sees no history, source or notes');
+check($pv['points_earned'] === 20 && $pv['total_points'] === 100, 'a player sees the points (x / y)');
 check($pv['percent'] === 20 && $pv['waiting'] === false, 'a player sees the percent');
 check($r['heroes'][0]['projects'][1]['waiting'] === true, 'a title-only project shows as waiting');
 $r = $api('character', array('character' => 'zepha'), 'cal');
-check($r['success'] && $r['heroes'][0]['id'] === 'zepha' && $r['heroes'][0]['relationships'] === array() && !isset(($r['heroes'][0]['projects'][0] ?? array())['points_earned']), "a player can look at another hero's projects (bar only), never their relationships");
+check($r['success'] && $r['heroes'][0]['id'] === 'zepha' && $r['heroes'][0]['relationships'] === array() && !isset(($r['heroes'][0]['projects'][0] ?? array())['points_history']), "a player can look at another hero's projects (bar and points), never their relationships");
 
 // ---------------- Director
 $r = $api('character', array('character' => 'all'), 'GM');

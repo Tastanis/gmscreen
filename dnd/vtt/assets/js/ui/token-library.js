@@ -1,6 +1,7 @@
 import { initializeTokenMaker } from './token-maker.js';
 import { createTokenLibraryPreferences } from './token-library-preferences.js';
 import { createMonsterImporter } from './monster-import.js';
+import { createPicturePicker } from './token-picture.mjs';
 import {
   createToken,
   createTokenFolder,
@@ -433,6 +434,11 @@ export function renderTokenLibrary(routes, store, options = {}) {
       }
     }
 
+    const fromMonsterCreator = token.source === 'monster-creator';
+    contextMenu.picture?.open(token.imageUrl || '', fromMonsterCreator ? token.sourceImageUrl || '' : '');
+    if (contextMenu.deleteButton) contextMenu.deleteButton.hidden = fromMonsterCreator;
+    if (contextMenu.monsterNote) contextMenu.monsterNote.hidden = !fromMonsterCreator;
+
     setContextMenuPending(contextMenu, false);
     showFeedback(contextMenu.feedback, '', 'info');
 
@@ -840,6 +846,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
           size: sizeValue,
           hp: hpValue,
           team: teamValue,
+          ...(contextMenu.picture?.changes() || {}),
         });
 
         stateApi.updateState?.((draft) => {
@@ -1930,6 +1937,10 @@ function createTokenContextMenu(root) {
       <header class="token-context-menu__header">
         <h3 class="token-context-menu__title">Token Details</h3>
       </header>
+      <div class="token-context-menu__field token-context-menu__field--picture">
+        <label>Picture</label>
+        <div data-token-context-picture></div>
+      </div>
       <div class="token-context-menu__field">
         <label for="token-context-size">Size</label>
         <select
@@ -1962,6 +1973,7 @@ function createTokenContextMenu(root) {
         />
       </div>
       <p class="token-context-menu__hint">Leave a field empty to clear its value.</p>
+      <p class="token-context-menu__hint" data-token-context-monster-note hidden>From the Monster Creator: it changes with the monster there. What you set here is kept for this monster.</p>
       <div class="token-context-menu__actions">
         <button class="btn btn--danger" type="button" data-token-context-delete>Delete</button>
         <button class="btn btn--primary" type="submit">Save</button>
@@ -1981,6 +1993,8 @@ function createTokenContextMenu(root) {
     feedback: element.querySelector('[data-token-context-feedback]'),
     submitButton: element.querySelector('.token-context-menu__actions .btn[type="submit"]'),
     deleteButton: element.querySelector('[data-token-context-delete]'),
+    picture: createPicturePicker(element.querySelector('[data-token-context-picture]')),
+    monsterNote: element.querySelector('[data-token-context-monster-note]'),
   };
 }
 
