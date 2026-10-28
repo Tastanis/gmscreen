@@ -67,6 +67,11 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/readability.css?v=<?= $assetVersion ?>" />
     <script src="../js/diablo-theme-loader.js?v=<?= $assetVersion ?>"></script>
+<?php if (isset($_GET['table'])): $tableEmbed = static fn ($file) => (int) @filemtime(__DIR__ . '/../../table/' . $file); ?>
+    <!-- A map popped out of the Table (?table=1): the Table's strip of map icons on the side (dnd/table/vtt-embed). -->
+    <link rel="stylesheet" href="../table/vtt-embed.css?v=<?= $tableEmbed('vtt-embed.css') ?>" />
+    <script>addEventListener('load', function () { var s = document.createElement('script'); s.src = '../table/vtt-embed.js?v=<?= $tableEmbed('vtt-embed.js') ?>'; document.body.appendChild(s); });</script>
+<?php endif; ?>
 </head>
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>

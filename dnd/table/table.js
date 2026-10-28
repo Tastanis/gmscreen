@@ -344,8 +344,8 @@
   // running twice. Windows that are part of the table itself (the creature gallery...) stay on the table.
   function popOut(w) {
     const f = w.node.querySelector('iframe');
-    let url = '';
-    try { url = f?.contentWindow?.location?.href || ''; } catch (_) { url = ''; }
+    let url = w.spec.popUrl ? new URL(w.spec.popUrl, location.href).href : '';   // a window may name its own pop-out page
+    if (!url) try { url = f?.contentWindow?.location?.href || ''; } catch (_) { url = ''; }
     if (!url || url === 'about:blank') url = f ? new URL(f.getAttribute('src') || '', location.href).href : '';
     if (!url) { toast(`${w.spec.title} lives on the table and cannot pop out`); return; }
     const wd = Math.max(520, Math.round(w.node.offsetWidth)), ht = Math.max(400, Math.round(w.node.offsetHeight));

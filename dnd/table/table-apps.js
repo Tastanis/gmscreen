@@ -309,7 +309,7 @@
 
   // The map: one window, one board. Its tools sit on its own strip and move onto the rail when it fills the table.
   let mockTokens = [{ n: 'Indigo', x: 22, y: 30 }, { n: 'Cal', x: 35, y: 55 }, { n: 'Orchard Tender', x: 62, y: 28, enemy: true }];
-  apps.map = () => T.openWindow({ id: 'map', app: 'map', title: 'Map', sub: SERVED ? '' : 'The Gravity Orchard v4', icon: I.map, size: [700, 500], heavy: true, share: true,
+  apps.map = () => T.openWindow({ id: 'map', app: 'map', title: 'Map', sub: SERVED ? '' : 'The Gravity Orchard v4', icon: I.map, size: [700, 500], heavy: true, share: true, popUrl: '/dnd/vtt/index.php?table=1',
     build(c) {
       if (SERVED) {
         c.innerHTML = `<div class="vtt real" data-drop="map"><iframe src="/dnd/vtt/index.php" title="Map" allow="fullscreen" style="opacity:0"></iframe><div class="loading">Opening the board…</div><div class="sleep-cover"><div><b>Map paused</b><br>Tucked away, covered or minimised: not drawing.<br>Open it again to wake it.</div></div></div>`;
@@ -483,6 +483,39 @@
     } catch (error) { console.warn('[Table] place monster', error); T.toast('Could not place it: ' + error.message); return false; }
   }
 
+  // A hero dropped on the map (Brandon, October 27, 2026): that hero's token from the board's PC's folder, linked to the
+  // hero, with the sheet's stamina. A hero already on this map is not put there twice.
+  async function placeHero(h, cx, cy, target) {
+    if (!SERVED) { const r = target.getBoundingClientRect(); mockTokens.push({ n: h.name, x: (cx - r.left) / r.width * 100, y: (cy - r.top) / r.height * 100 }); drawMockTokens(target.closest('.content')); T.toast(`${h.name} placed`); return true; }
+    const f = vttFrame(); if (!f) { T.toast('The map is still opening'); return false; }
+    try {
+      const fr = f.getBoundingClientRect(), v = f.contentWindow, ctx = v.vtt3dBridge.getContext(), sceneId = ctx.sceneId;
+      const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const already = (ctx.placements || []).find((p) => norm(p.profileId || p.metadata?.profileId) === h.id || norm(p.name) === norm(h.name));
+      if (already) { T.toast(`${h.name} is already on this map`); return false; }
+      const lib = v.vttConfig?.tokens || {}, folders = lib.folders || [], items = lib.items || [];
+      const pcFolders = folders.filter((x) => /^pc'?s$/i.test(String(x.name || '').trim())).map((x) => x.id);
+      const tok = items.find((t) => pcFolders.includes(t.folderId) && norm(t.name) === norm(h.name)) || items.find((t) => norm(t.name) === norm(h.name));
+      if (!tok) { T.toast(`${h.name} has no token in the PC's folder yet`); return false; }
+      const hit = v.vtt3dRenderer?.pickAtClient?.(cx - fr.left, cy - fr.top, { tokens: false });
+      if (!hit || !Number.isFinite(hit.x)) { T.toast('Drop the hero onto the ground of the map'); return false; }
+      const [w, hh] = String(tok.size || '1x1').split(/x/i).map((n) => Math.max(1, Math.round(Number(n) || 1)));
+      let cur = '', max = '';
+      try { const s = await (await fetch('/dnd/character_sheet/handler.php?action=load&character=' + encodeURIComponent(h.id), { credentials: 'same-origin', cache: 'no-store' })).json(); const vit = s?.data?.hero?.vitals || {}; if (Number.isFinite(Number(vit.staminaMax))) { max = String(vit.staminaMax); cur = String(vit.currentStamina ?? vit.staminaMax); } } catch (_) { /* the board links it later */ }
+      const folder = folders.find((x) => x.id === tok.folderId);
+      const id = 'tpl_' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36));
+      const placement = { id, tokenId: tok.id, name: tok.name || h.name, imageUrl: tok.imageUrl || '', column: Math.round(hit.x - w / 2), row: Math.round(hit.y - (hh || w) / 2), width: w, height: hh || w, size: `${w}x${hh || w}`,
+        hp: { current: cur, max }, showHp: true, showTriggeredAction: true, triggeredActionReady: true, condition: null, combatTeam: 'ally', team: 'ally', hidden: false, profileId: h.id,
+        metadata: { profileId: h.id, sourceFolderName: folder?.name || "PC's", sourceFolderId: tok.folderId || '' } };
+      if (hit.levelId || ctx.viewerLevelId) placement.levelId = hit.levelId || ctx.viewerLevelId;
+      const status = await (await fetch('/dnd/vtt/api/v2/status.php', { credentials: 'same-origin', cache: 'no-store' })).json();
+      const res = await fetch('/dnd/vtt/api/v2/commands.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'placement.batch', operationId: 'table-hero-' + id, baseRevision: status?.status?.revision, payload: { actions: [{ kind: 'add', sceneId, placementId: id, placement }] } }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); T.toast(`Could not place ${h.name}: ${j.error || res.status}`); return false; }
+      T.toast(`✓ ${h.name} placed on the map`); return true;
+    } catch (error) { console.warn('[Table] place hero', error); T.toast('Could not place the hero: ' + error.message); return false; }
+  }
+
   // Chat: the site's own chat, always open, in a window or tucked into a side.
   apps.chat = () => T.openWindow({ id: 'chat', app: 'chat', title: 'Chat', icon: I.chat, size: [340, 520],
     build(c) {
@@ -529,13 +562,15 @@
     logo.addEventListener('mouseenter', () => T.showTip(logo, '<b>Table menu</b><span class="how">Layouts, background, see as a player, log out.</span>')); logo.addEventListener('mouseleave', T.hideTip);
     logo.addEventListener('click', () => { T.hideTip(); flyTable(logo); });
     rail.append(logo);
+    let group = '';
     RAIL.forEach((r) => {
+      if (r.label) group = r.label;
       if (playerView && r.gm && !r.player) return;
       if (r.only && String(me.user || '').toLowerCase() !== r.only) return;   // one player's own button
-      if (r.label) { rail.append(el('div', 'rail-label', r.label)); return; }
+      if (r.label) { const n = el('div', 'rail-label', r.label); n.dataset.group = group; rail.append(n); return; }
       const spec = playerView && r.player ? { ...r, ...r.player } : r;
       const b = el('button', 'rail-btn', svg(spec.t === 'Map' ? 'map' : spec.k));
-      b.dataset.k = spec.k; b.setAttribute('aria-label', spec.t); if (spec.needsMap && SERVED) b.dataset.needsMap = '';
+      b.dataset.k = spec.k; b.dataset.group = group; b.setAttribute('aria-label', spec.t); if (spec.needsMap && SERVED) b.dataset.needsMap = '';
       b.addEventListener('mouseenter', () => { const now = spec.now?.(); T.showTip(b, `<b>${spec.t}</b>${spec.key ? `<kbd>${spec.key}</kbd>` : ''}${now ? `<span class="now">${now}</span>` : ''}<span class="how">${spec.d}</span>`); });
       b.addEventListener('mouseleave', T.hideTip);
       b.addEventListener('click', () => { T.hideTip(); spec.open(b); });
@@ -574,7 +609,7 @@
       const list = playerView ? HEROES.filter((h) => h.own !== false && (!me.gm || h === HEROES[0])) : HEROES;   // a player: their own hero
       f.innerHTML = header('Heroes', 'click: sheet · drag: card') + `<div class="body">${list.map((h) => { const [a, m, on, t] = heroHp(h); const r = m ? a / m : 1; return `<div class="item hero" data-key="${h.id}"><div class="pic" style="background:${portrait(h)}">${(h.pic || h.picUrl) && SERVED ? '' : initials(h.name)}</div><div class="txt"><b>${h.name}</b><i>${h.sub}${(() => { const r = liveHero(h.name); return r ? (r.elsewhere ? ' · on ' + esc(shortScene(r.elsewhere)) : ' · on the map') : ''; })()}</i>${m ? `<span class="hpbar"><span style="width:${Math.round(Math.max(0, r) * 100)}%;background:${r <= 0 ? '#d0503e' : r <= .5 ? '#d9a13e' : '#5fbf7a'}"></span>${t ? `<i class="tmp" style="width:${Math.min(100, Math.round(100 * t / m))}%"></i>` : ''}<b>${hpText(a, m, true, t)}</b></span>` : `<span class="offmap-pill">${hpText(a, m, on)}</span>`}</div></div>`; }).join('')}</div>`;
       f.querySelectorAll('.item').forEach((n) => { const h = HEROES.find((x) => x.id === n.dataset.key);
-        n.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-mock]')) return; T.dragOut(e, { click: () => { apps.sheet(h.id); T.closeFlyout(); }, onTable: (x, y) => apps.heroCard(h.id, x, y) },
+        n.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-mock]')) return; T.dragOut(e, { click: () => { apps.sheet(h.id); T.closeFlyout(); }, onTable: (x, y) => apps.heroCard(h.id, x, y), onDropTarget: (target, ev) => { if (target.dataset.drop !== 'map') return false; placeHero(h, ev.clientX, ev.clientY, target); return true; } },
           `<div class="card" style="position:static"><div class="art" style="background:${portrait(h)}"></div><div class="name">${h.name}</div><div style="height:8px"></div></div>`); }); });
     });
   }

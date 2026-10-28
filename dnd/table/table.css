@@ -61,6 +61,8 @@ body.dropping #drop-hint { display: flex; }
 .rail-btn.gm::before { content: "GM"; position: absolute; left: 1px; top: 0; font-size: 7px; color: #c98c5a; letter-spacing: .05em; }
 #map-tools { display: none; }
 body.map-docked #map-tools { display: flex; }
+/* The map filling the table: only the table things stay on the rail (Brandon, October 27, 2026). */
+body.map-docked #rail [data-group="Campaign"]:not([data-k="rules"]), body.map-docked #rail [data-group="Prep"] { display: none !important; }   /* Rules stays */
 
 /* Hover label */
 #tip { position: fixed; z-index: 3000; pointer-events: none; background: #0f0a07; border: 1px solid var(--edge-hi); color: var(--ink); padding: 6px 9px;
