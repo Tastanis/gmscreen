@@ -7536,6 +7536,10 @@ export function mountBoardInteractions(store, routes = {}) {
       event.stopImmediatePropagation();
       cancelPendingAutomationArea('Area targeting canceled.');
     }
+    if (pendingAutomationArea && (event.key === 'r' || event.key === 'R') && !event.ctrlKey && !event.metaKey && !event.altKey
+      && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]'))) {
+      if (rotateAutomationArea()) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }
   }, true);
 
   document.addEventListener('keydown', (event) => {
@@ -18746,9 +18750,30 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const dims = getAutomationAreaDimensions(pendingAutomationArea.targetConfig);
+    if (dims.unknownShape) {
+      showConditionBanner(`A "${dims.unknownShape}" area cannot be drawn yet: it is placed as a ${dims.width}-square cube.`, { tone: 'reminder' });
+      console.warn('[VTT] Area shape not drawn yet, placed as a cube:', dims.unknownShape, pendingAutomationArea.targetConfig);
+    }
+    // A burst or aura is every square around the caster: nothing to place, it is taken at once.
+    if (dims.anchored) {
+      const box = getAutomationAreaBox(pendingAutomationArea, null);
+      if (box) { commitAutomationAreaBox(box); return; }
+      showConditionBanner('The burst has no caster on this map to centre on: place it by hand.', { tone: 'reminder' });
+    }
     automationAreaOverlay = renderAutomationAreaOverlay(pendingAutomationArea);
     updateAutomationAreaRange();
     updateStatus(formatAutomationAreaPrompt(pendingAutomationArea.targetConfig));
+  }
+
+  // R (or Rotate) turns a rectangle or a line while it is being placed.
+  function rotateAutomationArea() {
+    const request = pendingAutomationArea;
+    if (!request || !getAutomationAreaDimensions(request.targetConfig).rotatable) return false;
+    request.rotated = !request.rotated;
+    if (request.previewCell) updateAutomationAreaPreview(request.previewCell);
+    notifyCoordinateView();
+    return true;
   }
 
   function doesAutomationSquaresAffectPlacement(squares, placement) {
@@ -18773,14 +18798,16 @@ export function mountBoardInteractions(store, routes = {}) {
     let shapeText;
     switch (shape) {
       case 'rectangle': shapeText = `${width}x${height} rectangle`; break;
-      case 'line': shapeText = `${length}-square line`; break;
+      case 'line': { const lw = Number.parseInt(config.width ?? config.distance?.secondary, 10) || 1; shapeText = lw > 1 ? `${length} x ${lw} line` : `${length}-square line`; break; }
       case 'wall': shapeText = `${length}-square wall`; break;
       case 'burst': shapeText = `${size}-square burst`; break;
       case 'aura': shapeText = `${size}-square aura`; break;
       case 'cube':
       default: shapeText = `${size || width}-square cube`; break;
     }
-    return `Place ${shapeText}${withinText}, then click to confirm.`;
+    if (shape === 'burst' || shape === 'aura') return `${shapeText[0].toUpperCase()}${shapeText.slice(1)} around the user.`;
+    const turns = (shape === 'rectangle' && width !== height) || (shape === 'line' && length !== (Number.parseInt(config.width ?? config.distance?.secondary, 10) || 1));
+    return `Place ${shapeText}${withinText}, then click to confirm.${turns ? ' R or Rotate turns it.' : ''}`;
   }
 
   function renderAutomationAreaOverlay(request) {
@@ -18793,6 +18820,7 @@ export function mountBoardInteractions(store, routes = {}) {
         <span>${escapeHtml(request.targetConfig?.label || request.targetConfig?.within || 'Area')}</span>
       </div>
       <div class="vtt-automation-area__controls">
+        ${getAutomationAreaDimensions(request.targetConfig).rotatable ? '<button type="button" data-rotate-automation-area title="Turn the shape (R)">Rotate</button>' : ''}
         <button type="button" data-skip-automation-area>Skip</button>
       </div>
     `;
@@ -18800,16 +18828,40 @@ export function mountBoardInteractions(store, routes = {}) {
     return overlay;
   }
 
-  function getAutomationAreaDimensions(config = {}) {
-    const shape = config.shape === 'rectangle' ? 'rectangle' : 'cube';
-    const size = Math.max(1, Number.parseInt(config.size ?? 3, 10) || 3);
-    const width = shape === 'rectangle'
-      ? Math.max(1, Number.parseInt(config.width ?? size, 10) || size)
-      : size;
-    const height = shape === 'rectangle'
-      ? Math.max(1, Number.parseInt(config.height ?? size, 10) || size)
-      : size;
-    return { width, height, shape };
+  // An area's shape (Brandon, November 3, 2026: "different shapes, mainly rectangles and bursts"). Squares are counted
+  // the board's way (a diagonal step is one square), so every shape is a box of squares:
+  //   cube       size x size, placed within range
+  //   rectangle  width x height, placed within range; R (or Rotate) turns it
+  //   line       length x width (width: `width`, else the distance's `secondary`, else 1), placed; R turns it
+  //   burst/aura every square within size of the caster's edges: on the caster, no placement step
+  // A shape the board cannot draw yet is drawn as a cube and said so (never silently).
+  const AUTOMATION_AREA_SHAPES = ['cube', 'rectangle', 'line', 'burst', 'aura', 'wall'];
+  function getAutomationAreaDimensions(config = {}, rotated = false) {
+    const named = String(config.shape || 'cube').trim().toLowerCase();
+    const known = AUTOMATION_AREA_SHAPES.includes(named);
+    const shape = known ? named : 'cube';
+    const whole = (value, fallback) => Math.max(1, Number.parseInt(value ?? fallback, 10) || fallback);
+    const size = whole(config.size, 3);
+    let width = size;
+    let height = size;
+    if (shape === 'rectangle') { width = whole(config.width, size); height = whole(config.height, size); }
+    if (shape === 'line') { width = whole(config.length, size); height = whole(config.width ?? config.distance?.secondary, 1); }
+    const rotatable = (shape === 'rectangle' || shape === 'line') && width !== height;
+    if (rotated && rotatable) [width, height] = [height, width];
+    return { width, height, shape, anchored: shape === 'burst' || shape === 'aura', rotatable, radius: size, unknownShape: known ? null : named };
+  }
+
+  // The squares an area covers, as a box: placed shapes from the picked square, a burst or aura around the caster.
+  function getAutomationAreaBox(request, cell) {
+    const dims = getAutomationAreaDimensions(request.targetConfig, request.rotated);
+    if (dims.anchored) {
+      const source = resolveAutomationSourcePlacement(request.targetConfig?.sourcePlacement);
+      if (!source) return null;
+      const n = dims.radius, w = Math.max(1, source.width || 1), h = Math.max(1, source.height || 1);
+      return { column: (source.column || 0) - n, row: (source.row || 0) - n, width: w + n * 2, height: h + n * 2, source };
+    }
+    if (!cell) return null;
+    return { column: cell.column, row: cell.row, width: dims.width, height: dims.height };
   }
 
   function updateAutomationAreaRange() {
@@ -18847,18 +18899,24 @@ export function mountBoardInteractions(store, routes = {}) {
   function updateAutomationAreaPreview(cell) {
     if (!pendingAutomationArea || !automationAreaOverlay || !cell) return;
     pendingAutomationArea.previewCell = cell;
-    const { width, height } = getAutomationAreaDimensions(pendingAutomationArea.targetConfig);
+    const box = getAutomationAreaBox(pendingAutomationArea, cell);
+    if (!box) return;
     const preview = automationAreaOverlay.querySelector('[data-automation-area-preview]');
     if (preview instanceof HTMLElement) {
-      positionAutomationCell(preview, cell.column, cell.row, width, height);
+      positionAutomationCell(preview, box.column, box.row, box.width, box.height);
     }
-    const affected = findAutomationAreaTargets(cell, width, height, pendingAutomationArea.targetConfig);
+    const affected = findAutomationAreaTargets(box, box.width, box.height, pendingAutomationArea.targetConfig);
     updateAutomationAreaHover(affected);
   }
 
   function handleAutomationAreaPointerDown(event) {
     if (!pendingAutomationArea) return false;
     const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-rotate-automation-area]')) {
+      event.preventDefault();
+      rotateAutomationArea();
+      return true;
+    }
     if (target?.closest('[data-skip-automation-area]')) {
       event.preventDefault();
       const request = pendingAutomationArea;
@@ -18879,8 +18937,20 @@ export function mountBoardInteractions(store, routes = {}) {
     const request = pendingAutomationArea;
     if (!request) return false;
     if (!cell) return true;
-    const { width, height } = getAutomationAreaDimensions(request.targetConfig);
-    const affected = findAutomationAreaTargets(cell, width, height, request.targetConfig);
+    const box = getAutomationAreaBox(request, cell);
+    if (!box) return true;
+    return commitAutomationAreaBox(box);
+  }
+
+  function commitAutomationAreaBox(box) {
+    const request = pendingAutomationArea;
+    if (!request || !box) return false;
+    const { width, height } = box;
+    const cell = { column: box.column, row: box.row };
+    const dims = getAutomationAreaDimensions(request.targetConfig);
+    // A burst or aura leaves its caster out unless the ability says it takes in "self".
+    const affected = findAutomationAreaTargets(cell, width, height, request.targetConfig)
+      .filter((placement) => !dims.anchored || !box.source || placement.id !== box.source.id || /self/i.test(String(request.targetConfig.creature || request.targetConfig.affects || '')));
     affected.forEach((placement) => {
       if (!isAutomationPlacementHidden(placement)) flashAutomationTargetToken(placement.id);
     });
@@ -18895,7 +18965,9 @@ export function mountBoardInteractions(store, routes = {}) {
         placement: getAutomationPlacementSnapshot(placement),
       })),
     });
-    updateStatus(`${affected.length} target${affected.length === 1 ? '' : 's'} selected in area.`);
+    updateStatus(dims.anchored
+      ? `${affected.length} target${affected.length === 1 ? '' : 's'} in the ${dims.shape} around ${tokenLabel(box.source) || 'the user'}.`
+      : `${affected.length} target${affected.length === 1 ? '' : 's'} selected in area.`);
     notifyCoordinateView();
     return true;
   }
@@ -28638,7 +28710,8 @@ function createTemplateTool() {
     }
     if (pendingAutomationArea) {
       const r = pendingAutomationArea;
-      return { kind: 'area', ...getAutomationAreaDimensions(r.targetConfig), shape: r.targetConfig.shape || 'cube', source: r.targetConfig.sourcePlacement ?? null, distance: r.targetConfig.distance ?? null, levelId: getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID, previewCell: r.previewCell ? { ...r.previewCell } : null, targetIds: [...r.hoverIds] };
+      const box = r.previewCell ? getAutomationAreaBox(r, r.previewCell) : null;
+      return { kind: 'area', ...getAutomationAreaDimensions(r.targetConfig, r.rotated), ...(box ? { width: box.width, height: box.height } : {}), shape: r.targetConfig.shape || 'cube', source: r.targetConfig.sourcePlacement ?? null, distance: r.targetConfig.distance ?? null, levelId: getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID, previewCell: box ? { column: box.column, row: box.row } : null, targetIds: [...r.hoverIds] };
     }
     if (pendingAutomationTarget) return { kind: 'token', source: pendingAutomationTarget.targetConfig.sourcePlacement ?? null, distance: pendingAutomationTarget.targetConfig.distance ?? null, excludeTargetIds: [...(pendingAutomationTarget.targetConfig.excludeTargetIds || [])] };
     return null;

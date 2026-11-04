@@ -433,7 +433,7 @@ async function mount(){
  const tidyControls=()=>{for(const selector of relocate)for(const el of mapTransform.querySelectorAll(selector)){const home=el.parentElement;overlayHost.append(el);el.classList.add('vtt3d-board-controls');relocated.set(el,home);}
   for(const [el,home] of relocated)if(!home.isConnected){el.remove();relocated.delete(el);}};
  new MutationObserver(tidyControls).observe(mapTransform,{childList:true,subtree:true});
- overlayHost.addEventListener('pointerdown',e=>{if(!e.target.closest?.('[data-skip-automation-area],[data-skip-automation-move]'))return;e.preventDefault();e.stopPropagation();bridge.skipAbility?.(e);tidyControls();});
+ overlayHost.addEventListener('pointerdown',e=>{if(!e.target.closest?.('[data-skip-automation-area],[data-skip-automation-move],[data-rotate-automation-area]'))return;e.preventDefault();e.stopPropagation();bridge.skipAbility?.(e);tidyControls();});
  const resizeObserver=new ResizeObserver(()=>view?.resize());resizeObserver.observe(host);
 
  // Keyboard camera (Brandon, October 2026): W A S D move the view, Q and E take it straight up and down (whatever the

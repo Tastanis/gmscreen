@@ -195,7 +195,7 @@ async function start() {
   const memoryData = new Uint8Array(MEMORY_SIZE * MEMORY_SIZE * 4);
   const memoryTexture = new THREE.DataTexture(memoryData, MEMORY_SIZE, MEMORY_SIZE, THREE.RGBAFormat, THREE.UnsignedByteType);
   memoryTexture.magFilter = THREE.NearestFilter; memoryTexture.minFilter = THREE.NearestFilter;
-  let memoryScene = '', unsent = new Set();
+  let memoryScene = '', unsent = new Set(), memoryForgotten = null;
   const markCell = (c, r) => { if (c < 0 || r < 0 || c >= MEMORY_SIZE || r >= MEMORY_SIZE) return false; const k = (r * MEMORY_SIZE + c) * 4; if (memoryData[k]) return false; memoryData[k] = 255; return true; };
   function remember(left, top, size, data) {
     let fresh = false;
@@ -208,15 +208,19 @@ async function start() {
     }
     if (fresh) memoryTexture.needsUpdate = true;
   }
-  // The party's memory as the server has it, plus what this page saw and has not sent yet. Another scene starts empty.
+  // The party's memory as the server has it, added to what this page already has: a refresh never takes a square
+  // away, so nothing pops black and back (Brandon, October 28, 2026). Only the Director's Forget wipes it: the
+  // scene's forget count changes. Another scene starts empty.
   function loadMemory(scene) {
-    if (scene !== memoryScene) { memoryData.fill(0); memoryTexture.needsUpdate = true; unsent = new Set(); memoryScene = scene; }
+    if (scene !== memoryScene) { memoryData.fill(0); memoryTexture.needsUpdate = true; unsent = new Set(); memoryScene = scene; memoryForgotten = null; }
     if (!scene) return;
     fetch(VISION_URL + '?explored=' + encodeURIComponent(scene), { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((j) => {
       if (!j?.success || memoryScene !== scene) return;
-      memoryData.fill(0);   // a scene the Director made the party forget goes black again here too
-      for (const cell of j.cells || []) { const [c, r] = String(cell).split(',').map(Number); if (Number.isInteger(c) && Number.isInteger(r)) markCell(c, r); }
-      for (const cell of unsent) { const [c, r] = cell.split(',').map(Number); markCell(c, r); }
+      const forgotten = Number(j.forgotten) || 0;
+      if (memoryForgotten !== null && forgotten !== memoryForgotten) { memoryData.fill(0); unsent = new Set(); }
+      memoryForgotten = forgotten;
+      let added = false;
+      for (const cell of j.cells || []) { const [c, r] = String(cell).split(',').map(Number); if (Number.isInteger(c) && Number.isInteger(r) && markCell(c, r)) added = true; }
       memoryTexture.needsUpdate = true;
     }).catch(() => { /* next time */ });
   }
@@ -227,7 +231,9 @@ async function start() {
     if (scene !== memoryScene) { loadMemory(scene); return; }
     if (unsent.size) {
       const cells = [...unsent].slice(0, 5000); cells.forEach((c) => unsent.delete(c));
-      fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ explore: scene, cells }) }).catch(() => cells.forEach((c) => unsent.add(c)));
+      fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ explore: scene, cells, ...(memoryForgotten !== null ? { forgotten: memoryForgotten } : {}) }) })
+        .then((r) => r.json()).then((j) => { if (j?.success && Number(j.forgotten) !== memoryForgotten) loadMemory(scene); })   // the Director wiped it meanwhile
+        .catch(() => cells.forEach((c) => unsent.add(c)));
     }
   }, 3000);
   window.vttVisionMemory = { count: () => { let n = 0; for (let k = 0; k < memoryData.length; k += 4) if (memoryData[k]) n += 1; return n; }, scene: () => memoryScene, reload: () => loadMemory(memoryScene) };   // for checking from the console

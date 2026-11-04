@@ -6,7 +6,8 @@ declare(strict_types=1);
 // switch and look button write it.
 //   GET                          → {success, vision: {on, look, updatedAt}}
 //   POST {on: bool, look: name}  → the same, after the change (Director only)
-//   GET  ?explored=<scene>       → {success, cells: ["c,r", ...]}  squares the party has seen (look "Explored")
+//   GET  ?explored=<scene>       → {success, cells: ["c,r", ...], forgotten: n}  squares the party has seen (look
+//                                   "Explored"); forgotten counts the Director's wipes, so a page knows to wipe too
 //   POST {explore: <scene>, cells: ["c,r", ...]}  a player's page adds the squares its heroes saw (anyone signed in)
 //   POST {forget: <scene>}       → the scene's memory wiped (Director only)
 // Looks: Grey, Dark, Black (what nobody sees), Explored (black, but greyed where the heroes have been).
@@ -28,6 +29,14 @@ function vttVisionExplored(): array
     return is_array($stored) ? $stored : [];
 }
 
+/** One scene's memory: ['cells' => ["c,r" => 1], 'forgotten' => n]. */
+function vttVisionSceneMemory(array $all, string $scene): array
+{
+    $entry = is_array($all[$scene] ?? null) ? $all[$scene] : [];
+    if (!array_key_exists('cells', $entry)) $entry = ['cells' => $entry, 'forgotten' => 0];
+    return ['cells' => is_array($entry['cells']) ? $entry['cells'] : [], 'forgotten' => (int) ($entry['forgotten'] ?? 0)];
+}
+
 function vttVisionRead(): array
 {
     $stored = loadVttJson('vision.json');
@@ -46,8 +55,8 @@ try {
         header('Cache-Control: no-store');
         if (isset($_GET['explored'])) {
             $scene = vttVisionScene($_GET['explored']);
-            $cells = $scene === '' ? [] : array_keys((array) (vttVisionExplored()[$scene] ?? []));
-            vttSyncV2Respond(200, ['success' => true, 'cells' => $cells]);
+            $memory = $scene === '' ? ['cells' => [], 'forgotten' => 0] : vttVisionSceneMemory(vttVisionExplored(), $scene);
+            vttSyncV2Respond(200, ['success' => true, 'cells' => array_keys($memory['cells']), 'forgotten' => $memory['forgotten']]);
         }
         vttSyncV2Respond(200, ['success' => true, 'vision' => vttVisionRead()]);
     }
@@ -62,21 +71,26 @@ try {
             vttSyncV2Respond(422, ['success' => false, 'error' => 'A scene and squares are needed.']);
         }
         $all = vttVisionExplored();
-        $seen = is_array($all[$scene] ?? null) ? $all[$scene] : [];
+        $memory = vttVisionSceneMemory($all, $scene);
+        // Squares seen before the Director's last wipe (a page that has not heard of it yet) are not taken.
+        if (isset($body['forgotten']) && (int) $body['forgotten'] !== $memory['forgotten']) {
+            vttSyncV2Respond(200, ['success' => true, 'count' => count($memory['cells']), 'forgotten' => $memory['forgotten']]);
+        }
+        $seen = $memory['cells'];
         foreach (array_slice($body['cells'], 0, 5000) as $cell) {
             if (is_string($cell) && preg_match('/^-?\d{1,4},-?\d{1,4}$/', $cell) === 1 && count($seen) < VTT_VISION_MAX_CELLS) $seen[$cell] = 1;
         }
-        $all[$scene] = $seen;
+        $all[$scene] = ['cells' => $seen, 'forgotten' => $memory['forgotten']];
         if (!saveVttJson('vision-explored.json', $all)) {
             vttSyncV2Respond(500, ['success' => false, 'error' => 'The explored squares could not be saved.']);
         }
-        vttSyncV2Respond(200, ['success' => true, 'count' => count($seen)]);
+        vttSyncV2Respond(200, ['success' => true, 'count' => count($seen), 'forgotten' => $memory['forgotten']]);
     }
     vttSyncV2RequireGm('Only the Director sets vision.');
     if (isset($body['forget'])) {
         $scene = vttVisionScene($body['forget']);
         $all = vttVisionExplored();
-        unset($all[$scene]);
+        $all[$scene] = ['cells' => [], 'forgotten' => vttVisionSceneMemory($all, $scene)['forgotten'] + 1];
         saveVttJson('vision-explored.json', $all);
         vttSyncV2Respond(200, ['success' => true]);
     }
