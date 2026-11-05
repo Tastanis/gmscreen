@@ -1124,8 +1124,11 @@
         // Switches the caster's token aura on (or off) when the ability runs.
         // Token auras are a VTT placement feature; the runner forwards this to
         // the board via the setAura context hook. radius is clamped 1-20.
-        const known = new Set(["kind", "enabled", "radius", "color", "target", "text", "affects", "triggers", "trigger", "effects", "expires", "lifetime"]);
+        const known = new Set(["kind", "enabled", "radius", "radiusAttribute", "color", "target", "text", "affects", "triggers", "trigger", "effects", "expires", "lifetime", "requires", "toggle"]);
         const enabled = input.enabled !== false;
+        // radius: a number of squares, or a characteristic ("Reason": Mantle of Essence's "distance equal to your Reason").
+        const ATTRIBUTES = { m: "Might", might: "Might", a: "Agility", agility: "Agility", r: "Reason", reason: "Reason", i: "Intuition", intuition: "Intuition", p: "Presence", presence: "Presence" };
+        const radiusAttribute = ATTRIBUTES[asTrimmedString(input.radiusAttribute || (Number.isFinite(Number(input.radius)) ? "" : input.radius)).toLowerCase()] || "";
         const radius = Math.min(20, Math.max(1, asPosInt(input.radius, 1)));
         const effect = {
           kind: "aura",
@@ -1133,6 +1136,16 @@
           radius,
           target: pickKnown(input.target, ["self", "target"], "self"),
         };
+        if (radiusAttribute) effect.radiusAttribute = radiusAttribute;
+        if (input.toggle === true) effect.toggle = true;
+        // requires: the aura does nothing while it is not met (checked each time it would act).
+        if (input.requires && typeof input.requires === "object") {
+          const requires = {};
+          const resourceMin = asPosInt(input.requires.resourceMin, 0);
+          if (resourceMin) requires.resourceMin = resourceMin;
+          if (input.requires.notDying === true) requires.notDying = true;
+          if (Object.keys(requires).length) effect.requires = requires;
+        }
         const color = asTrimmedString(input.color);
         if (color) effect.color = color;
         const text = asTrimmedString(input.text);

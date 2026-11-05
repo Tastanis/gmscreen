@@ -1678,6 +1678,9 @@ An aura can also carry automation that checks the aura's live occupants when a t
 |---|---|
 | `enabled` | `true` (default — turn the aura on) or `false` (turn it off) |
 | `radius` | `1`-`20` squares (clamped). Square area: a radius-3 aura reaches 3 squares out in every direction including diagonals. |
+| `radius` as a characteristic | `"Reason"` (or `"radiusAttribute": "Reason"`): the size is the hero's score, at least 1. Mantle of Essence: "distance equal to your Reason score". |
+| `toggle` | `true`: using the ability again switches the aura off, and again on (Mantle of Essence, "activate and deactivate at will"). The runner's chat says which. |
+| `requires` | `{ "resourceMin": 3, "notDying": true }`: while the owner has less of their heroic resource, or is dying (Stamina 0 or below), the aura does nothing when it would act, and chat says why. The aura stays on. |
 | `color` | optional hex string; omit to keep the token's current aura color |
 | `target` | `"self"` (default — the caster's token) or `"target"` (each resolved target) |
 | `affects` | Target predicate for live occupants: `"creature"`, `"enemy"`, `"ally"`, `"selfOrAlly"`, `"selfAndAlly"`, etc. Defaults to `"creature"`. |

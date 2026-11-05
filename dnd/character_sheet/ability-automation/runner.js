@@ -4023,7 +4023,10 @@
 
   async function applyAuraEffect(state, effect, targets) {
     const enabled = effect.enabled !== false;
-    const radius = Math.min(20, Math.max(1, asInt(effect.radius, 1)));
+    const fromAttribute = effect.radiusAttribute && typeof state.context.getAttributeBonus === "function"
+      ? asInt(state.context.getAttributeBonus(effect.radiusAttribute), 0)
+      : 0;
+    const radius = Math.min(20, Math.max(1, effect.radiusAttribute ? fromAttribute : asInt(effect.radius, 1)));
     const targetMode = effect.target === "target" ? "target" : "self";
     let ids = [];
     if (targetMode === "target") {
@@ -4054,21 +4057,25 @@
             triggers: effect.triggers,
             effects: effect.effects,
             expires: effect.expires || null,
+            requires: effect.requires || null,
             attributeBonuses,
           }
         : null;
+      let nowEnabled = enabled;
       for (const id of ids) {
-        await state.context.setAura({
+        const answer = await state.context.setAura({
           placementId: id,
           enabled,
           radius,
           color: effect.color || "",
           automation,
+          toggle: effect.toggle === true,
         });
+        if (typeof answer?.enabled === "boolean") nowEnabled = answer.enabled;
       }
       const on = targetMode === "target" ? ` on ${(targets || []).map((t) => t?.name).filter(Boolean).join(", ") || "the target"}` : "";
       await postChat(state.context, {
-        message: `${state.heroName} - ${state.action.name || "Ability"}: aura ${enabled ? `on, ${radius} ${radius === 1 ? "square" : "squares"}` : "off"}${on}.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: aura ${nowEnabled ? `on, ${radius} ${radius === 1 ? "square" : "squares"}` : "off"}${on}.`,
       });
       return;
     }
@@ -4788,6 +4795,8 @@
   }
 
   function getActionKind(state) {
+    // "No action required" (Mantle of Essence switched on or off): it uses neither the main action nor the maneuver.
+    if (/no action/i.test(String(state.action?.actionLabel || ""))) return "free";
     const text = String(
       state.action?.actionKind ||
         state.action?.kind ||

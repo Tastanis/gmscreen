@@ -4990,6 +4990,9 @@ export function mountBoardInteractions(store, routes = {}) {
       attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
         ? JSON.parse(JSON.stringify(payload.attributeBonuses))
         : {},
+      requires: payload.requires && typeof payload.requires === 'object'
+        ? JSON.parse(JSON.stringify(payload.requires))
+        : null,
     };
   }
 
@@ -5198,9 +5201,34 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  // Why an aura that needs something (requires: resourceMin, notDying) does nothing now, or '' when it acts.
+  async function automationAuraQuietReason(owner, requires) {
+    if (!requires || typeof requires !== 'object') return '';
+    const fresh = getPlacementFromStore(owner.id) || owner;
+    if (requires.notDying) {
+      const current = parseHitPointNumber(ensurePlacementHitPoints(fresh.hp).current);
+      if (Number.isFinite(current) && current <= 0) return `${tokenLabel(fresh) || 'its owner'} is dying`;
+    }
+    const min = Number(requires.resourceMin) || 0;
+    if (min > 0) {
+      characterSummaryCache.delete(getAutomationProfileIdForPlacement(owner.id));
+      const sheet = await getAutomationSheetForPlacement(owner.id).catch(() => null);
+      const resource = sheet?.hero?.resource;
+      const value = Number.parseInt(resource?.value ?? 0, 10) || 0;
+      const name = resource?.title || sheet?.sidebar?.resource?.title || 'resource';
+      if (value < min) return `${tokenLabel(fresh) || 'its owner'} has ${value} ${name}, needs ${min}`;
+    }
+    return '';
+  }
+
   async function applyAutomationAuraEffects(owner, aura, placements, reason) {
     const automation = aura?.automation && typeof aura.automation === 'object' ? aura.automation : null;
     if (!automation || !Array.isArray(placements) || !placements.length) return;
+    const quiet = await automationAuraQuietReason(owner, automation.requires);
+    if (quiet) {
+      announceAutomationAuraTick(owner, automation, [], `does nothing: ${quiet}`);
+      return;
+    }
     const result = await applyOngoingAutomationEffects({
       sourceId: automation.sourceId || owner.id,
       sourceName: automation.sourceName || tokenLabel(owner),
@@ -6263,7 +6291,6 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Aura request token is not on the active scene.'));
       return;
     }
-    const enabled = payload.enabled !== false;
     const radius = Math.max(1, Math.min(20, parseInt(payload.radius, 10) || 1));
     const automation = normalizeAuraAutomationPayload(payload.automation, {
       ownerId: placementId,
@@ -6271,10 +6298,21 @@ export function mountBoardInteractions(store, routes = {}) {
       round: combatRound,
       activeCombatantId,
     });
+    let enabled = payload.enabled !== false;
+    if (automation && payload.toggle === true) {
+      const auraId = createAutomationAuraId(automation, payload);
+      const existing = getAutomationAuraRecords(placement, { includeDisabled: true }).find((record) => record.id === auraId);
+      enabled = existing ? existing.enabled === false : true;
+    }
     const update = updatePlacementById(placementId, (target) => {
       if (automation) {
         const auraId = createAutomationAuraId(automation, payload);
         removeAutomationAuraRecord(target, auraId);
+        if (payload.toggle === true && !enabled) {
+          const existing = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+          target.automationAuras = [...existing, { id: auraId, enabled: false, radius, color: payload.color || '#3b82f6', automation }];
+          return;
+        }
         if (enabled) {
           const existing = Array.isArray(target.automationAuras) ? target.automationAuras : [];
           target.automationAuras = [

@@ -966,6 +966,50 @@ Until the start of your next turn, the area gains: (1) Once at the start of your
 }
 ```
 
+### Burning Grounds (Mantle of Essence, Fire)
+
+Not on the live sheet yet (November 4, 2026). Add it in the sheet: **✎ Edit → ⇪ Import JSON**, paste the block below; it lands in Maneuvers. Its label says "no action required", so it does not use up his maneuver.
+
+Maneuver (no action required) | Area, Fire, Magic | Range: Aura (Reason) | Target: Each enemy in the area | Cost: none
+
+Use it once to switch the aura on (size = his Reason), again to switch it off. At the end of each of his turns each enemy inside takes fire damage equal to his Reason (ignores fire immunity: Disciple of Fire). While he has under 3 essence or is dying it does nothing, and chat says why. It ends with the fight.
+
+```json
+{
+  "name": "Burning Grounds",
+  "actionLabel": "Maneuver (no action required)",
+  "keywords": "Area, Fire, Magic",
+  "range": "Aura (Reason)",
+  "target": "Each enemy in the area",
+  "cost": "",
+  "description": "Mantle of Essence (Fire). While you have 3 or more essence and are not dying, you exude an aura whose distance equals your Reason score. At the end of each of your turns, each enemy in the area takes fire damage equal to your Reason score. Use this to switch the aura on, and again to switch it off (no action required).",
+  "automation": {
+    "schema": "ability-automation/v3",
+    "cards": [
+      {
+        "type": "effect",
+        "id": "effect-burning-grounds",
+        "target": "self",
+        "effects": [
+          {
+            "kind": "aura",
+            "radius": "Reason",
+            "toggle": true,
+            "color": "#f97316",
+            "affects": "enemy",
+            "requires": { "resourceMin": 3, "notDying": true },
+            "triggers": [ { "event": "turnEnd", "whose": "self" } ],
+            "effects": [ { "kind": "damage", "amount": 0, "attribute": "Reason", "damageType": "fire", "ignoreImmunity": true } ],
+            "expires": { "event": "combatEnd", "whose": "any" },
+            "text": "Each enemy in Zepha's Reason aura takes fire damage equal to his Reason at the end of each of his turns, while he has 3+ essence and is not dying."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## Triggered Actions
 
 ### Explosive Assistance
