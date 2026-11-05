@@ -2541,15 +2541,21 @@ export function mountBoardInteractions(store, routes = {}) {
   });
 
   // Vertical push / pull / slide: how many of the squares go up (or down, for a flier). A small popup.
-  function askVerticalPart(placement, distance, verbLabel) {
+  // The up (or down) part of a vertical push, pull or slide, asked first; the rest is picked on the map. It starts at
+  // what brings a pulled creature level with the puller (nothing for a push or a slide), never all of it: OK at once
+  // used to spend the whole move going up, with nothing left to pick.
+  function askVerticalPart(placement, distance, verbLabel, { source = null, verb = '' } = {}) {
     return new Promise((resolve) => {
       const flying = ['fly', 'hover'].includes(placement?.movementMode);
       const stack = document.querySelector('.vtt-hero-move-stack') || (() => { const el = document.createElement('div'); el.className = 'vtt-hero-move-stack'; document.body.appendChild(el); return el; })();
       const popup = document.createElement('div');
       popup.className = 'vtt-hero-move-popup vtt-vertical-popup';
-      let up = distance;
       const min = flying ? -distance : 0;
-      popup.innerHTML = `<div class="vtt-hero-move-popup__text"><strong>${escapeHtml(tokenLabel(placement) || 'Target')}</strong>: ${escapeHtml(verbLabel)} ${escapeHtml(String(distance))}. Squares up${flying ? ' (minus = down)' : ''}:</div>
+      const heightOf = (p) => { const z = p?.id ? Number(window.vtt3dBridge?.heightFor?.(p.id)) : NaN; return Number.isFinite(z) ? z : null; };
+      const sourceZ = heightOf(source), targetZ = heightOf(placement);
+      const toward = /pull/i.test(String(verb)) && sourceZ !== null && targetZ !== null ? Math.round(sourceZ - targetZ) : 0;
+      let up = Math.max(min, Math.min(distance, toward));
+      popup.innerHTML = `<div class="vtt-hero-move-popup__text"><strong>${escapeHtml(tokenLabel(placement) || 'Target')}</strong>: ${escapeHtml(verbLabel)} ${escapeHtml(String(distance))}. How much of it goes up${flying ? ' or down (minus = down)' : ''}? The rest you pick on the map.</div>
         <div class="vtt-vertical-popup__row"><button type="button" class="btn" data-vertical-less aria-label="Fewer up">&minus;</button><span data-vertical-value></span><button type="button" class="btn" data-vertical-more aria-label="More up">+</button></div>
         <div class="vtt-hero-move-popup__actions"><button type="button" class="btn btn--primary" data-vertical-go>OK</button><button type="button" class="btn" data-vertical-skip>Skip</button></div>`;
       const value = popup.querySelector('[data-vertical-value]');
@@ -20342,13 +20348,14 @@ export function mountBoardInteractions(store, routes = {}) {
     let acrossDistance = effectiveDistance;
     let finish = resolve;
     if (verb !== getAutomationMoveBaseVerb(verb) && effectiveDistance > 0) {
-      const answer = await askVerticalPart(targetPlacement, effectiveDistance, payload.verbLabel || verbLabel);
+      const answer = await askVerticalPart(targetPlacement, effectiveDistance, payload.verbLabel || verbLabel, { source: sourcePlacement, verb });
       if (answer?.skipped) { resolve?.({ skipped: true, reason: 'user-skip' }); return; }
       verticalUp = Number(answer?.up) || 0;
       acrossDistance = Math.max(0, effectiveDistance - Math.abs(verticalUp));
       finish = async (result) => {
         const height = verticalUp ? await applyVerticalPart(targetPlacement.id, verticalUp, payload.verbLabel || verbLabel).catch((error) => { console.warn('[VTT] vertical part failed', error); return null; }) : null;
-        resolve?.({ ...(result || {}), skipped: Boolean(result?.skipped) && !verticalUp, vertical: { up: verticalUp, ...(height || {}) } });
+        const across = Number(result?.movedDistance) || 0;
+        resolve?.({ ...(result || {}), skipped: Boolean(result?.skipped) && !verticalUp, ...(verticalUp ? { movedDistance: across + Math.abs(verticalUp) } : {}), vertical: { up: verticalUp, ...(height || {}) } });
       };
       if (acrossDistance <= 0) { await finish({ skipped: true, name: tokenLabel(targetPlacement), movedDistance: 0 }); return; }
     }

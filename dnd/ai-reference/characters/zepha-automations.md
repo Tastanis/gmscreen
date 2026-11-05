@@ -1022,6 +1022,7 @@ You add a little magic to an ally's aggression at just the right time. Effect: T
 
 Authoring notes:
 - The trigger listens on `forcedMovementDealt` (Zepha or an ally force moves a creature or object). By the time the `!` is resolved, the original push/pull/slide has already happened at its printed distance, so the "bonus" is applied as **follow-up forced movement of the pushed creature** — pick the creature that was force moved and move it the extra squares, continuing the original direction (the engine offers a free-form slide; honor the original verb's direction manually).
+- The bonus slide ignores Stability (`ignoreStability`): it adds to a push or pull that already had Stability taken off. Without it, a Stability 3 creature (the Orchard Tender) was "not moved" (November 4, 2026).
 - "Twice your Reason instead" is modeled as base +R always, plus an optional **Spend 1 Essence for another +R** (R + R = 2R — same total, and declining the spend leaves the base R bonus).
 
 ```json
@@ -1079,7 +1080,8 @@ Authoring notes:
             "verb": "slide",
             "distance": 0,
             "attribute": "Reason",
-            "upTo": true
+            "upTo": true,
+            "ignoreStability": true
           },
           {
             "kind": "spend",
@@ -1094,7 +1096,8 @@ Authoring notes:
                 "verb": "slide",
                 "distance": 0,
                 "attribute": "Reason",
-                "upTo": true
+                "upTo": true,
+                "ignoreStability": true
               }
             ]
           }
