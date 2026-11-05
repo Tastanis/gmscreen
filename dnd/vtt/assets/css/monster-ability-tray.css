@@ -24,6 +24,12 @@ body.chat-panel-is-open .vtt-monster-ability-tray__inner {
   );
 }
 
+/* Centred in the uncovered board (character-summary.css, board-free-area.js), at its wider 960px. */
+html.vtt-free-area .vtt-monster-ability-tray__inner,
+html.vtt-free-area body.chat-panel-is-open .vtt-monster-ability-tray__inner {
+  width: min(960px, calc(100% - 48px));
+}
+
 .vtt-monster-ability-tab {
   border-color: rgba(220, 210, 190, 0.78);
   background:

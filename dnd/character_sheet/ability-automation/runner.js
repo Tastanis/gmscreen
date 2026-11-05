@@ -4901,6 +4901,21 @@
     });
   }
 
+  // "Persistent N" in an ability's own words (an Elementalist's persistent magic), 0 when it has none. Its automation
+  // JSON is not read: the rules text is where the number is.
+  function getPersistentValue(action) {
+    const texts = [];
+    const walk = (value, depth) => {
+      if (value == null || depth > 4) return;
+      if (typeof value === "string") texts.push(value);
+      else if (Array.isArray(value)) value.forEach((item) => walk(item, depth + 1));
+      else if (typeof value === "object") Object.entries(value).forEach(([key, item]) => { if (key !== "automation") walk(item, depth + 1); });
+    };
+    walk(action, 0);
+    const match = texts.join("\n").match(/\bPersistent\s+(\d+)\b/i);
+    return match ? Number(match[1]) : 0;
+  }
+
   function fireActionUsedEvent(state, force = false) {
     if (state.actionUsedFired || (state.deferActionUsed && !force)) return;
     if (typeof state.context.fireTriggerEvent !== "function") return;
@@ -4915,6 +4930,9 @@
         actionKind: getActionKind(state),
         cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
         keywords: getAbilityKeywords(state),
+        persistent: getPersistentValue(state.action),
+        // Used again for free because it is maintained (VTTCharacterAbilities.runFree): not asked to maintain again.
+        maintainRerun: Boolean(state.action?._maintainRerun),
       },
     });
   }

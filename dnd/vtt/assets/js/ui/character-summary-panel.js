@@ -118,6 +118,28 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let panelPreferredOpen = readPanelVisibilityPreference(storageKey);
   let activeRequestId = 0;
   let activeCharacterId = null;
+  // A maintained persistent ability used again for free, from the start-of-turn question (board-interactions.js
+  // runMaintainedAgain). Found on the hero's sheet by its id or its name.
+  window.VTTCharacterAbilities = {
+    async runFree({ characterId, sourceToken = null, abilityId = '', name = '' } = {}) {
+      if (!characterId) return { ran: false, reason: 'no-character' };
+      const sheet = await fetchCharacterSummary(routes, characterId);
+      const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
+      const wantName = String(name || '').trim().toLowerCase();
+      for (const [category, list] of Object.entries(actions)) {
+        if (!Array.isArray(list)) continue;
+        const index = list.findIndex((action, i) => action && (
+          (abilityId && (action.id === abilityId || (action._stableActionId || getStableActionId(action, category, i)) === abilityId))
+          || (wantName && String(action.name || '').trim().toLowerCase() === wantName)));
+        if (index < 0) continue;
+        const action = { ...list[index], _stableActionId: list[index]._stableActionId || getStableActionId(list[index], category, index), _maintainRerun: true };
+        if (!hasAbilityAutomation(action.automation)) return { ran: false, reason: 'no-automation', name: action.name };
+        startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, free: true });
+        return { ran: true, name: action.name };
+      }
+      return { ran: false, reason: 'not-found' };
+    },
+  };
   let activeAbilityCategory = null;
   let activeSheet = null;
   let activeToken = null;
@@ -3707,6 +3729,8 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
 }
 
 async function spendAbilityResource(sheet, ability, options = {}) {
+  // A maintained persistent ability used again at the start of the turn costs nothing (board-interactions.js).
+  if (options?.free) return { skipped: true, free: true };
   const cost = parseAbilityResourceCost(ability?.cost);
   if (!cost.amount) return { skipped: true };
   const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};

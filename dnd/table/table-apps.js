@@ -360,7 +360,7 @@
         if (r) { const want = level === 'low' ? top * .6 : top; if (Math.abs(r.getPixelRatio() - want) > .01) { r.setPixelRatio(want); vtt.dispatchEvent(new vtt.Event('resize')); } }
       } catch (_) { /* not loaded yet */ }
     },
-    onMax(w, on) { document.body.classList.toggle('map-docked', on && !w.state.min); syncDock(); },
+    onMax(w, on) { document.body.classList.toggle('map-docked', on && !w.state.min); syncDock(); setTimeout(sendMapInsets, 60); },
     onClose() { document.body.classList.remove('map-docked'); const dock = $('#map-tools'); if (dock) dock.innerHTML = ''; },   // its tools leave the rail with it
   });
   function drawMockTokens(c) {
@@ -800,6 +800,25 @@
   function togglePlayerView() { playerView = !playerView; T.closeFlyout(); buildRail(); T.toast(playerView ? 'Player view: only what a player has' : 'Director view'); }
 
   // Drawers slide out OVER the table (Brandon: chat opens on top of the map without changing it). Kept off on purpose.
+  // The map is told how much of it they cover, so its ability tray centres in the rest (Brandon, November 4, 2026).
+  function sendMapInsets() {
+    const f = vttFrame(), embed = f?.contentWindow?.vttEmbed;
+    if (!embed?.setInsets) return;
+    const map = f.getBoundingClientRect();
+    let left = 0, right = 0;
+    T.windows.forEach((w) => {
+      if (!w?.node || !w.state.dock || !w.state.open || w.node.contains(f) || (w.state.dock !== 'left' && w.state.dock !== 'right')) return;
+      // Where the drawer is going (its left is set at once; it slides there).
+      const host = w.node.offsetParent?.getBoundingClientRect?.() || { left: 0 };
+      const x = host.left + (Number.parseFloat(w.node.style.left) || w.node.offsetLeft || 0), width = w.node.offsetWidth;
+      if (w.state.dock === 'right') right = Math.max(right, map.right - x);
+      else left = Math.max(left, x + width - map.left);
+    });
+    try { embed.setInsets({ left: Math.max(0, Math.min(map.width, Math.round(left))), right: Math.max(0, Math.min(map.width, Math.round(right))) }); } catch (_) { /* map not ready */ }
+  }
+  document.addEventListener('table:drawer', () => { sendMapInsets(); setTimeout(sendMapInsets, 260); });
+  addEventListener('resize', () => setTimeout(sendMapInsets, 60));
+  addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.type === 'vtt-embed-ready') setTimeout(sendMapInsets, 100); });
   const DRAWERS_MAKE_ROOM = false;
   document.addEventListener('table:drawer', (e) => {
     if (!DRAWERS_MAKE_ROOM) return;

@@ -1847,6 +1847,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let automationDamageTypePrompt = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
+  // The creatures picked so far for one ability's targets ({id, name}): each keeps a red ring and its number until
+  // the picking ends (a moment after, so the last one is seen).
+  let pickedAutomationTargets = [];
+  let pickedAutomationTargetsTimer = null;
   let automationTargetPrompt = null;
   let automationTargetRangeOverlay = null;
   let pendingAutomationArea = null;
@@ -3801,6 +3805,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function triggerFire(eventType, payload) {
     try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
+    if (eventType === 'damage') noteMaintainedDamage(payload).catch((err) => console.warn('[VTT] persistent damage check failed', err));
     const list = [...(triggerRegistry.byEvent.get(eventType) || [])];
     for (const entry of list) {
       try {
@@ -4169,6 +4174,183 @@ export function mountBoardInteractions(store, routes = {}) {
     return Boolean(key && automationScopedFlags.has(key));
   }
 
+  // ---------------------------------------------------------------- persistent abilities (Elementalist)
+  // A hero keeping persistent abilities going: placement.maintainedAbilities = [{id, abilityId, name, value, since}].
+  // Each one's value comes off the essence gained at the start of the hero's turn (the question there keeps or drops
+  // each, and can use one again for free); all end when the fight does, and taking 5 x Reason damage or more in one
+  // turn asks the hero's player whether they end (the rules say they do; Brandon asked for a question).
+  function getMaintainedAbilities(placement) {
+    const list = Array.isArray(placement?.maintainedAbilities) ? placement.maintainedAbilities : [];
+    return list.filter((item) => item && item.id && Number(item.value) > 0).map((item) => ({ ...item, value: Number(item.value) }));
+  }
+
+  function setMaintainedAbilities(placementId, list) {
+    return updatePlacementById(placementId, (target) => {
+      target.maintainedAbilities = list.length ? list.map((item) => ({ id: item.id, abilityId: item.abilityId || '', name: item.name || 'Ability', value: item.value, since: item.since ?? null })) : null;
+      if (!list.length) target.maintainedDamage = null;
+    });
+  }
+
+  function sayInChat(message) {
+    try { window.dashboardChat?.sendMessage?.({ message, type: 'text' })?.catch?.(() => {}); } catch (error) { /* chat not open */ }
+  }
+
+  async function offerMaintainPersistentAbility(used = {}) {
+    const value = Number(used.persistent) || 0;
+    if (!value || used.maintainRerun || !combatActive) return;
+    const placement = getPlacementFromStore(used.actorId);
+    if (!placement) return;
+    const id = String(used.actionId || used.actionName || '').trim();
+    if (!id || getMaintainedAbilities(placement).some((item) => item.id === id)) return;
+    const who = tokenLabel(placement) || 'Hero';
+    const name = used.actionName || 'Ability';
+    const answer = await queueHeroicResourcePrompt({
+      title: `${who} - Persistent ${value}`,
+      message: `Maintain ${name}?`,
+      detail: `While it is kept, ${who} gains ${value} less essence at the start of each turn. It ends when the fight does, or on 5 x Reason damage in one turn.`,
+      applyLabel: 'Maintain',
+      dismissLabel: 'Not now',
+    });
+    if (!answer?.applied) return;
+    const fresh = getPlacementFromStore(placement.id);
+    if (!fresh) return;
+    setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh).filter((item) => item.id !== id),
+      { id, abilityId: used.actionId || '', name, value, since: combatRound }]);
+    sayInChat(`${who} maintains ${name} (Persistent ${value}).`);
+  }
+
+  // The start of the hero's turn: each maintained ability kept or let go, and "use it again" for the free use.
+  function queueMaintainPrompt(config) {
+    heroicResourcePromptQueue = heroicResourcePromptQueue
+      .catch(() => {})
+      .then(() => showMaintainPrompt(config));
+    return heroicResourcePromptQueue;
+  }
+
+  function showMaintainPrompt({ placement, maintained, gain, resourceName, current }) {
+    return new Promise((resolve) => {
+      const who = tokenLabel(placement) || 'Hero';
+      const host = document.createElement('div');
+      host.className = 'heroic-resource-prompt';
+      host.innerHTML = `
+        <div class="heroic-resource-prompt__modal heroic-resource-prompt--maintain" role="dialog" aria-modal="true">
+          <header class="heroic-resource-prompt__header"><h2>${escapeHtml(who)} - start of turn</h2></header>
+          <div class="heroic-resource-prompt__body">
+            <p>Keep your persistent abilities going? Each one kept comes off the ${escapeHtml(resourceName)} you gain.</p>
+            <div class="maintain-list">
+              ${maintained.map((item, index) => `
+                <div class="maintain-row">
+                  <label><input type="checkbox" data-keep="${index}" checked> Keep <b>${escapeHtml(item.name)}</b> (${item.value})</label>
+                  <label class="maintain-again"><input type="checkbox" data-again="${index}"> use it again now (free)</label>
+                </div>`).join('')}
+            </div>
+            <p class="heroic-resource-prompt__detail" data-maintain-sum></p>
+          </div>
+          <div class="heroic-resource-prompt__actions">
+            <button type="button" class="btn btn--ghost" data-heroic-resource-dismiss>Dismiss</button>
+            <button type="button" class="btn" data-heroic-resource-apply>Apply</button>
+          </div>
+        </div>`;
+      const sum = host.querySelector('[data-maintain-sum]');
+      const kept = () => maintained.filter((item, index) => host.querySelector(`[data-keep="${index}"]`)?.checked);
+      const paint = () => {
+        const upkeep = kept().reduce((total, item) => total + item.value, 0);
+        const net = Math.max(0, gain - upkeep);
+        sum.textContent = `Gain ${gain} - ${upkeep} kept = ${net} ${resourceName} (${current} -> ${current + net}).`
+          + (upkeep > gain ? ` That is ${upkeep - gain} more than you gain: the rules say you can't keep them all.` : '');
+        sum.classList.toggle('is-over', upkeep > gain);
+        maintained.forEach((item, index) => {
+          const again = host.querySelector(`[data-again="${index}"]`);
+          if (!again) return;
+          const on = host.querySelector(`[data-keep="${index}"]`)?.checked;
+          again.disabled = !on;
+          if (!on) again.checked = false;
+        });
+      };
+      host.addEventListener('change', paint);
+      paint();
+      const done = (applied) => {
+        const keptNow = kept();
+        const again = maintained.filter((item, index) => host.querySelector(`[data-again="${index}"]`)?.checked);
+        host.remove();
+        resolve({ applied, kept: keptNow, again });
+      };
+      host.querySelector('[data-heroic-resource-dismiss]')?.addEventListener('click', () => done(false));
+      host.querySelector('[data-heroic-resource-apply]')?.addEventListener('click', () => done(true));
+      document.body.appendChild(host);
+      makeHeroicResourcePromptDraggable(host);
+      positionAutomationPopup(host.querySelector('.heroic-resource-prompt__modal'));
+      host.querySelector('[data-heroic-resource-apply]')?.focus();
+    });
+  }
+
+  // The free uses, one after another (each waits for the ability runner before it to close).
+  async function runMaintainedAgain(placement, profileId, list) {
+    const runnerOpen = () => Boolean(document.getElementById('ability-automation-runner'));
+    for (const item of list) {
+      for (let waited = 0; runnerOpen() && waited < 600; waited += 1) await new Promise((wake) => setTimeout(wake, 500));
+      const fresh = getPlacementFromStore(placement.id) || placement;
+      const result = await window.VTTCharacterAbilities?.runFree?.({
+        characterId: profileId, sourceToken: cloneJsonSafe(fresh), abilityId: item.abilityId, name: item.name,
+      }).catch(() => null);
+      if (!result?.ran) {
+        showConditionBanner(`${item.name}: ${result?.reason === 'no-automation' ? 'it has no automation, use it again by hand' : 'not found on the sheet, use it again by hand'}.`, { tone: 'reminder' });
+      }
+      await new Promise((wake) => setTimeout(wake, 400));
+    }
+  }
+
+  // Damage to a hero who maintains something: added up for the turn it falls in. Reaching 5 x Reason asks the
+  // hero's player (End / Keep), once a turn.
+  async function noteMaintainedDamage(hit = {}) {
+    const placementId = hit.targetId || hit.placementId;
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    const amount = Math.max(0, Number(hit.amount) || 0);
+    if (!placement || !amount || !combatActive || !getMaintainedAbilities(placement).length) return;
+    const turnKey = `${combatRound}:${activeCombatantId || ''}`;
+    const before = placement.maintainedDamage && placement.maintainedDamage.turn === turnKey ? placement.maintainedDamage : { turn: turnKey, amount: 0, asked: false };
+    const total = before.amount + amount;
+    const sheet = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    const reason = Number.parseInt(sheet?.hero?.stats?.reason ?? sheet?.hero?.stats?.Reason ?? 0, 10) || 0;
+    const limit = Math.max(1, reason * 5);
+    const ask = total >= limit && !before.asked;
+    updatePlacementById(placement.id, (target) => { target.maintainedDamage = { turn: turnKey, amount: total, asked: before.asked || ask }; });
+    if (!ask) return;
+    const details = { total, limit, reason };
+    const profileId = getAutomationProfileIdForPlacement(placement.id);
+    const ownerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+    if (ownerId && ownerId === normalizeProfileId(getCurrentUserId())) {
+      await askMaintainBreak(placement, details);
+      return;
+    }
+    routeHeroicResourcePromptToOwner({
+      eventType: 'persistentBreak', payload: details, placement, profileId, recipientUserId: ownerId,
+      rule: { id: 'persistent-break', effect: { kind: 'note' }, details }, eventTargetId: placement.id,
+    });
+  }
+
+  async function askMaintainBreak(placement, details = {}) {
+    const list = getMaintainedAbilities(getPlacementFromStore(placement.id) || placement);
+    if (!list.length) return;
+    const who = tokenLabel(placement) || 'Hero';
+    const answer = await queueHeroicResourcePrompt({
+      title: `${who} - persistent abilities`,
+      message: `You took ${details.total ?? '?'} damage this turn (5 x Reason = ${details.limit ?? '?'}). That breaks ${list.map((item) => item.name).join(', ')}. End them?`,
+      detail: 'The rules end them. Keep only if the Director says so.',
+      applyLabel: 'End them',
+      dismissLabel: 'Keep',
+    });
+    if (!answer?.applied) return;
+    setMaintainedAbilities(placement.id, []);
+    sayInChat(`${who} stops maintaining ${list.map((item) => item.name).join(', ')} (took ${details.total} damage in one turn).`);
+  }
+
+  function clearMaintainedAbilitiesAtCombatEnd() {
+    getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => {
+      if (placement?.maintainedAbilities || placement?.maintainedDamage) setMaintainedAbilities(placement.id, []);
+    });
+  }
+
   function queueHeroicResourcePrompt(config) {
     heroicResourcePromptQueue = heroicResourcePromptQueue
       .catch(() => {})
@@ -4394,6 +4576,11 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const placement = getPlacementFromStore(placementId);
       if (!placement) return;
+      if (record.eventType === 'persistentBreak') {
+        // The numbers ride on the rule: an event's payload is cut down to its usual fields on the way.
+        await askMaintainBreak(placement, record.rule?.details || {});
+        return;
+      }
       const rule = record.rule && typeof record.rule === 'object' ? record.rule : null;
       if (!rule || !rule.effect || typeof rule.effect !== 'object') return;
       const sheet = await getAutomationSheetForPlacement(placementId);
@@ -4465,7 +4652,22 @@ export function mountBoardInteractions(store, routes = {}) {
     if (rule.limit?.markOn === 'offered') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
-    if (!rule.autoApply) {
+    const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && !shouldRollAfterPrompt
+      ? getMaintainedAbilities(placement)
+      : [];
+    if (maintained.length) {
+      const choice = await queueMaintainPrompt({ placement, maintained, gain: amount, resourceName, current: change.current });
+      if (!choice?.applied) return;
+      setMaintainedAbilities(placement.id, choice.kept);
+      const upkeep = choice.kept.reduce((sum, item) => sum + item.value, 0);
+      amount = Math.max(0, amount - upkeep);
+      change = normalizeHeroicResourceChange(rule, sheet, amount);
+      if (choice.again.length) runMaintainedAgain(placement, profileId, choice.again);
+      if (!amount) {
+        updateStatus(`${tokenLabel(placement) || 'Hero'}: no ${resourceName} gained (${upkeep} kept for persistent abilities).`);
+        return;
+      }
+    } else if (!rule.autoApply) {
       const promptResult = await queueHeroicResourcePrompt({
         title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
         message,
@@ -5415,6 +5617,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function endPersistentZonesAtCombatEnd() {
+    clearMaintainedAbilitiesAtCombatEnd();
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     Object.keys(state.boardState?.placements || {}).forEach((sceneId) => {
@@ -6185,6 +6388,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (eventType === 'actionUsed') {
       markTurnActionUsedFromAutomation(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+      offerMaintainPersistentAbility(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}).catch((err) => {
+        console.warn('[VTT] maintain question failed', err);
+      });
     }
     triggerFire(eventType, payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
     resolve?.({ fired: true, eventType });
@@ -10575,6 +10781,7 @@ export function mountBoardInteractions(store, routes = {}) {
         'is-hover-highlight',
         boardHoverTokenIds.has(normalized.id) || trackerHoverTokenIds.has(normalized.id)
       );
+      if (pickedAutomationTargets.length || token.classList.contains('vtt-token--picked-target')) paintPickedTargetMark(token, normalized.id);
 
       if (previewPositions && previewPositions.has(normalized.id)) {
         token.classList.add('is-dragging');
@@ -18419,6 +18626,8 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     closeDamageHealWidget();
     closeHealOverflowPopup();
+    window.clearTimeout(pickedAutomationTargetsTimer);
+    if (!(Number(pendingAutomationTarget.targetConfig.pickIndex) > 1)) setPickedAutomationTargets([]);
     updateStatus(formatAutomationTargetPrompt(pendingAutomationTarget.targetConfig));
     showAutomationTargetPrompt(pendingAutomationTarget.targetConfig);
     // If a suggested target was threaded through (e.g. the mover whose
@@ -18449,7 +18658,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const host = document.createElement('div');
     host.className = 'vtt-automation-picker-prompt';
     const text = targetConfig.promptText || formatAutomationTargetPrompt(targetConfig);
-    host.innerHTML = buildAutomationTargetPromptHtml(targetConfig, text);
+    host.innerHTML = buildAutomationTargetPromptHtml(targetConfig, text, pickedAutomationTargets.map((picked) => picked.name));
     document.body?.appendChild(host);
     automationTargetPrompt = host;
     host.addEventListener('click', (event) => {
@@ -18643,6 +18852,10 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationTargetRangeOverlay();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
+    setPickedAutomationTargets([...pickedAutomationTargets.filter((picked) => picked.id !== placement.id), { id: placement.id, name }]);
+    pingBoardTokens([placement.id]);
+    const pickTotal = Number(targetRequest.targetConfig?.pickTotal) || 1;
+    if ((Number(targetRequest.targetConfig?.pickIndex) || 1) >= pickTotal) clearPickedAutomationTargetsSoon();
     // A note, never a refusal: no line of effect, or cover.
     const coverSource = resolveAutomationSourcePlacement(targetRequest.targetConfig?.sourcePlacement);
     const sight = coverSource && coverSource.id !== placement.id ? coverBetween(getPlacementFromStore(coverSource.id) || coverSource, getPlacementFromStore(placement.id) || placement) : null;
@@ -20709,11 +20922,50 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  // Where a forced move picked on this square would leave the creature: the offered square nearest to it, then
+  // stopped by walls and creatures as the move itself is (handleAutomationMovePointerDown). For the 3D board's preview.
+  function predictAutomationMoveLanding(request, cell) {
+    if (!request || !cell || request.ownMove) return null;
+    const kind = request.movementKind || 'forced';
+    const target = request.targetSnapshot;
+    let destination = { column: cell.column, row: cell.row };
+    const offered = Array.isArray(request.legalCells) ? request.legalCells : [];
+    if (kind === 'forced' && request.baseVerb === 'pull'
+      && automationFootprintsOverlap({ ...destination, width: target.width, height: target.height }, request.sourceSnapshot)) {
+      destination = nearestAutomationPullCell(request) || { column: target.column, row: target.row };
+    }
+    if (offered.length && !offered.some((square) => square.column === destination.column && square.row === destination.row)) {
+      destination = closestCell(offered, destination) || destination;
+    }
+    let landing = clampPlacementToBounds(destination.column, destination.row, target.width, target.height);
+    let collided = [];
+    let wall = false;
+    if (kind === 'forced') {
+      const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[request.sceneId] || {};
+      const origin = canonical[target.id];
+      if (origin) {
+        try {
+          const drag = resolveForcedDrag(origin, { column: landing.column, row: landing.row }, Object.values(canonical), {
+            wallBlocked: (from, to) => window.wallPrototype?.forcedBlockedMove?.(from, to) || false,
+            height: (token) => window.terrainPrototype?.groundFor(token) ?? 0,
+            moverHeight: (from, at) => window.wallPrototype?.moverHeight?.(from, at, 'forced') ?? window.terrainPrototype?.groundFor(at) ?? 0,
+          });
+          landing = { column: drag.destination.column, row: drag.destination.row };
+          collided = drag.collidedIds || [];
+          wall = Boolean(drag.wall);
+        } catch (error) { /* the preview only; the move itself checks again */ }
+      }
+    }
+    const moved = automationChebyshevDistance(target, landing);
+    return { column: landing.column, row: landing.row, moved, collidedIds: collided.map(String), wall };
+  }
+
   function updateAutomationMovePreview(cell) {
     if (!pendingAutomationMove || !automationMoveOverlay || !cell) {
       return;
     }
     pendingAutomationMove.previewCell = cell;
+    pendingAutomationMove.previewLanding = predictAutomationMoveLanding(pendingAutomationMove, cell);
     const ghost = automationMoveOverlay.querySelector('[data-automation-move-ghost]');
     const arrow = automationMoveOverlay.querySelector('[data-automation-move-arrow]');
     if (ghost instanceof HTMLElement) {
@@ -20837,6 +21089,39 @@ export function mountBoardInteractions(store, routes = {}) {
     automationMoveOverlay?.remove();
     automationMoveOverlay = null;
     pendingAutomationMove = null;
+  }
+
+  function setPickedAutomationTargets(list) {
+    pickedAutomationTargets = list;
+    paintPickedAutomationTargets();
+  }
+
+  function clearPickedAutomationTargetsSoon(delay = 1800) {
+    window.clearTimeout(pickedAutomationTargetsTimer);
+    pickedAutomationTargetsTimer = window.setTimeout(() => setPickedAutomationTargets([]), delay);
+  }
+
+  // A picked target: a red ring and its number over it (renderTokens paints it again after a redraw).
+  function paintPickedTargetMark(token, placementId) {
+    const number = pickedAutomationTargets.findIndex((picked) => picked.id === placementId) + 1;
+    token.classList.toggle('vtt-token--picked-target', number > 0);
+    let badge = token.querySelector(':scope > .vtt-token__pick-number');
+    if (number > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'vtt-token__pick-number';
+        badge.setAttribute('aria-hidden', 'true');
+        token.appendChild(badge);
+      }
+      badge.textContent = String(number);
+    } else badge?.remove();
+  }
+
+  function paintPickedAutomationTargets() {
+    if (!tokenLayer) return;
+    tokenLayer.querySelectorAll('.vtt-token--picked-target, [data-placement-id]').forEach((token) => {
+      if (token instanceof HTMLElement && token.dataset.placementId) paintPickedTargetMark(token, token.dataset.placementId);
+    });
   }
 
   function flashAutomationTargetToken(placementId) {
@@ -21080,6 +21365,7 @@ export function mountBoardInteractions(store, routes = {}) {
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
+    setPickedAutomationTargets([]);
     updateStatus(message || 'Target selection canceled.');
     request.resolve?.({ canceled: true });
   }
@@ -21094,6 +21380,7 @@ export function mountBoardInteractions(store, routes = {}) {
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
+    clearPickedAutomationTargetsSoon();
     updateStatus(message || 'Target selection skipped.');
     request.resolve?.({ skipped: true });
   }
@@ -21108,6 +21395,7 @@ export function mountBoardInteractions(store, routes = {}) {
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
     clearAutomationTargetRangeOverlay();
+    clearPickedAutomationTargetsSoon();
     updateStatus(message || 'Target selection complete.');
     request.resolve?.({ done: true });
   }
@@ -28706,7 +28994,7 @@ function createTemplateTool() {
   function getCoordinateAbilityGuide() {
     if (pendingAutomationMove) {
       const r = pendingAutomationMove;
-      return { kind: 'move', sceneId: r.sceneId, levelId: r.targetSnapshot.levelId, source: { ...r.sourceSnapshot }, target: { ...r.targetSnapshot }, movementKind: r.movementKind, verb: r.baseVerb, ownMove: r.ownMove, distance: r.effectiveDistance, committing: Boolean(r.committing), legalCells: (r.legalCells || []).map(p => ({ ...p })), previewCell: r.previewCell ? { ...r.previewCell } : null };
+      return { kind: 'move', sceneId: r.sceneId, levelId: r.targetSnapshot.levelId, source: { ...r.sourceSnapshot }, target: { ...r.targetSnapshot }, movementKind: r.movementKind, verb: r.baseVerb, ownMove: r.ownMove, distance: r.effectiveDistance, committing: Boolean(r.committing), legalCells: (r.legalCells || []).map(p => ({ ...p })), previewCell: r.previewCell ? { ...r.previewCell } : null, landing: r.previewLanding ? { ...r.previewLanding, collidedIds: [...r.previewLanding.collidedIds] } : null };
     }
     if (pendingAutomationArea) {
       const r = pendingAutomationArea;

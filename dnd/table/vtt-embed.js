@@ -36,7 +36,7 @@
 
   // ---------------------------------------------------------------- the tools (also what the table puts on its rail)
   const TOOLS = [
-    { id: 'measure', t: 'Measure', d: 'Ruler. Click again to stop.', sel: '[data-action="measure-distance"]', toggle: true },
+    { id: 'measure', t: 'Measure', key: 'Hold M', d: 'Ruler. Click again to stop, or hold M to measure and let go to stop.', sel: '[data-action="measure-distance"]', toggle: true },
     { id: 'mark', t: 'Mark the board', d: 'Templates (circle, rectangle, wall) and the pen.', menu: 'mark', on: () => pressed('[data-action="toggle-draw"]') },
     { id: 'tokens', t: 'Tokens', d: 'The token library: every Monster Creator monster, the heroes and your own pictures. Drag one onto the map; right-click one to change its size, side or picture.', sel: '[data-settings-launch="tokens"]', gm: true },
     { id: 'damage', t: 'Damage / heal', d: 'Set the amount, press Damage or Heal, then click a token.', sel: '#vtt-damage-heal-btn' },
@@ -246,7 +246,10 @@
 
   function dock(on) { doc.documentElement.classList.toggle('te-docked', !!on); setTimeout(() => dispatchEvent(new Event('resize')), 30); }
 
-  window.vttEmbed = { tools: () => TOOLS.map(({ sel, on, ...t }) => t), run, status, dock, refresh, isActive: (id) => { const t = TOOLS.find((x) => x.id === id); return Boolean(t && (t.on ? t.on() : t.sel && t.toggle && pressed(t.sel))); } };   // always true or false: an undefined made the rail flip a tool on and off every second
+  // What the Table's side drawers cover of the map (table-apps.js sendMapInsets): the ability trays centre in the rest.
+  function setInsets(insets) { try { window.vttBoardFreeArea?.setOutside?.(insets); } catch (_) { /* not mounted yet */ } }
+
+  window.vttEmbed = { tools: () => TOOLS.map(({ sel, on, ...t }) => t), run, status, dock, refresh, setInsets, isActive: (id) => { const t = TOOLS.find((x) => x.id === id); return Boolean(t && (t.on ? t.on() : t.sel && t.toggle && pressed(t.sel))); } };   // always true or false: an undefined made the rail flip a tool on and off every second
   build();
   setInterval(() => { try { paintTop(); } catch (_) { /* not ready */ } }, 1000);
   setTimeout(() => dispatchEvent(new Event('resize')), 50);

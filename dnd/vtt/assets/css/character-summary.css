@@ -800,6 +800,20 @@ body.chat-panel-is-open .vtt-character-ability-tray {
   display: none;
 }
 
+/* Centred in what the side panels leave of the board (board-free-area.js; Brandon, November 4, 2026): it slides over
+ * when a left panel opens and back the other way for the chat. Before that script runs, the rules above hold. */
+html.vtt-free-area .vtt-character-ability-tray,
+html.vtt-free-area body.chat-panel-is-open .vtt-character-ability-tray {
+  left: var(--vtt-free-left, 0px);
+  right: var(--vtt-free-right, 0px);
+  transition: left 0.35s ease, right 0.35s ease;
+}
+
+html.vtt-free-area .vtt-character-ability-tray__inner,
+html.vtt-free-area body.chat-panel-is-open .vtt-character-ability-tray__inner {
+  width: min(820px, calc(100% - 48px));
+}
+
 body.chat-panel-is-open .vtt-character-ability-tray__inner {
   width: min(
     820px,
@@ -969,6 +983,12 @@ body.vtt-body .vtt-character-ability-tab[aria-expanded="true"] {
   margin-top: 8px !important;
   color: var(--vtt-text-dark-muted, #5e4b36);
 }
+
+/* Start of turn with persistent abilities kept (board-interactions.js showMaintainPrompt). */
+.heroic-resource-prompt--maintain .maintain-list { display: grid; gap: 8px; margin: 6px 0 2px; }
+.heroic-resource-prompt--maintain .maintain-row { display: grid; gap: 2px; padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); }
+.heroic-resource-prompt--maintain .maintain-again { padding-left: 22px; font-size: 0.88em; opacity: 0.9; }
+.heroic-resource-prompt--maintain .is-over { color: #fca5a5; }
 
 .heroic-resource-prompt__actions {
   display: flex;

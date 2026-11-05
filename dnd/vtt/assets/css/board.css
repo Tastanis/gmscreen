@@ -2835,6 +2835,30 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   animation: vtt-token-automation-target-flash 0.7s ease-in-out 0s 2;
 }
 
+/* A picked target (board-interactions.js paintPickedTargetMark): a red ring and its number while the picking lasts. */
+.vtt-token.vtt-token--picked-target {
+  outline: 3px solid #ef4444;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 7px rgba(239, 68, 68, 0.45), 0 0 18px rgba(239, 68, 68, 0.7);
+}
+.vtt-token__pick-number {
+  position: absolute;
+  right: calc(var(--tok-unit) * -6);
+  top: calc(var(--tok-unit) * -6);
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 11px;
+  background: #ef4444;
+  color: #fff;
+  font: 800 14px/22px system-ui, sans-serif;
+  text-align: center;
+  box-shadow: 0 0 0 2px #1b0606, 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 4;
+}
+
 .vtt-token.vtt-token--selection-flash {
   animation: vtt-token-selection-flash 0.7s ease-in-out 0s 2;
 }

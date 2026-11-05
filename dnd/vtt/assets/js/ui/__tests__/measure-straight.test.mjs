@@ -37,7 +37,9 @@ const ruler = readFileSync(new URL('../drag-ruler.js', import.meta.url), 'utf8')
 const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
 
 test('the Measure tool: M, click then click, tokens as points, Space for the walking route', () => {
-  assert.match(ruler, /if \(\(event\.key === 'm' \|\| event\.key === 'M'\) && !event\.repeat && !event\.ctrlKey && !event\.metaKey && !event\.altKey/, 'M, not while typing nor with Ctrl, Alt or Cmd');
+  assert.ok(ruler.includes("if (event.code === 'KeyM' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey"), 'hold M, not while typing nor with Ctrl, Alt or Cmd');
+  assert.ok(ruler.includes("document.addEventListener('keyup', (event) => { if (event.code === 'KeyM') releaseM(); }, true);"), 'letting M go stops measuring');
+  assert.ok(ruler.includes("window.addEventListener('blur', releaseM);"), 'leaving the window while M is held stops it too');
   assert.match(ruler, /if \(snapPoint && state\.pressSquare && pointsShareCell\(snapPoint, state\.pressSquare\)\) \{\s*state\.following = true;\s*return;\s*\}/, 'let go where pressed: the line follows the pointer');
   assert.match(ruler, /if \(state\.measuring && state\.mode === 'pointer' && state\.following\) \{\s*commitHoverPoint\(state, snapPoint\);\s*endMeasurement\(state\);/, 'the next click ends it there');
   assert.match(ruler, /boardCanvas\.addEventListener\('pointerdown', \(event\) => \{\s*if \(!state\.active \|\| event\.button !== 0 \|\| state\.mode === 'external' \|\| !window\.vtt3d\?\.active\) return;\s*const snapPoint = tokenUnderPointer\(state, event\);\s*if \(!snapPoint\) return;\s*event\.stopImmediatePropagation\(\);/, 'a token press is a measuring point, not a grab');

@@ -44,6 +44,7 @@ async function mount(){
  let sceneArtParts=[];
  let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
+ let guideHeld=null,guideRoute=null;
  let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
 
  function pictureRect(){
@@ -413,11 +414,23 @@ async function mount(){
   const z=Number.isFinite(bridge.heightFor(source.id))?bridge.heightFor(source.id):0,left=source.column-range,top=source.row-range,right=source.column+(source.width||1)+range,bottom=source.row+(source.height||1)+range;
   setOverlay('ability-range',[{kind:'line',points:[{x:left,y:top,z},{x:right,y:top,z},{x:right,y:bottom,z},{x:left,y:bottom,z},{x:left,y:top,z}],color:'#ffffff',opacity:.9}]);
  }
+ // A forced move being aimed (Brandon, November 4, 2026): the squares it may end on, on the ground; the creature
+ // standing where it would land (guideHeld, as a dragged token is shown); a thick route to it with what it moves. The
+ // ability's range box is not drawn for a move: it is the pusher's reach, not where the creature can go.
  function paintAbilityGuide(){if(!view)return;const guide=context.abilityGuide,signature=JSON.stringify(guide);if(signature===guideSignature)return;guideSignature=signature;
-  paintAbilityRange(guide);if(guide?.kind!=='area')paintAreaPreview(null);
+  paintAbilityRange(guide?.kind==='move'?null:guide);if(guide?.kind!=='area')paintAreaPreview(null);guideHeld=null;guideRoute=null;
   if(!guide){view.setReachable([]);view.setPath([]);return;}
-  const level=context.levels?.find(l=>l.id===guide.levelId),height=Number(level?.elevationSquares)||0,at=cell=>({x:cell.column+.5,y:cell.row+.5,z:Number.isFinite(cell.rawHeight)?cell.rawHeight:height,level:-1});
-  if(guide.kind==='move'){view.setReachable((guide.legalCells||[]).map(at));if(guide.target&&guide.previewCell)view.setPath([world(guide.target),at(guide.previewCell)]);}
+  const level=context.levels?.find(l=>l.id===guide.levelId),height=Number(level?.elevationSquares)||0,onFloor=guide.levelId&&guide.levelId!=='level-0';
+  const ground=(x,y)=>onFloor?height:(Number.isFinite(helpers.groundAt?.(x,y))?helpers.groundAt(x,y):height);
+  const at=cell=>({x:cell.column+.5,y:cell.row+.5,z:Number.isFinite(cell.rawHeight)?cell.rawHeight:ground(cell.column+.5,cell.row+.5),level:-1});
+  if(guide.kind==='move'){view.setReachable((guide.legalCells||[]).map(at));view.setPath([]);
+   const target=guide.target,land=guide.landing;
+   if(target&&land){const w=target.width||1,h=target.height||1,from=world(target),x=land.column+w/2,y=land.row+h/2,z=ground(x,y);
+    if(land.column!==target.column||land.row!==target.row)guideHeld={id:target.id,x,y,z};
+    const verb=String(guide.verb||(guide.movementKind==='teleport'?'teleport':'move'));
+    const text=`${verb[0].toUpperCase()}${verb.slice(1)} ${land.moved}${land.wall?' · hits a wall':land.collidedIds?.length?' · hits a creature':''}`;
+    guideRoute=land.moved?{pieces:[{points:[{x:from.x,y:from.y,z:from.z},{x,y,z}],color:'#f59e0b'}],total:{text,at:{x,y,z:z+1.6}}}:null;}
+  }
   else if(guide.kind==='area'){view.setReachable([]);view.setPath([]);paintAreaPreview(guide,height);return;}
   else{view.setReachable([]);view.setPath([]);}
  }
@@ -499,9 +512,9 @@ async function mount(){
    if(!recordsCache||recordKey.some((v,i)=>v!==recordsCache.key[i]))recordsCache={key:recordKey,records:(context.placements||[]).filter(p=>context.isGM||!p.hidden).map(world)};
    const records=recordsCache.records,signature=JSON.stringify([records,context.selectedIds]);if(signature!==lastTokenSignature){lastTokenSignature=signature;view.setTokens(records,context.selectedIds?.[0]);}
    // The ruler on the board, whether it measures a held token or the Measure tool.
-   view.setMovementRoute(getCurrentMeasurementPresentation());
+   view.setMovementRoute(getCurrentMeasurementPresentation()||guideRoute);
    effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}view.render(dt);
-   const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});
+   const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});else if(guideHeld&&context.abilityGuide?.kind==='move'&&recordById.has(guideHeld.id))recordById.set(guideHeld.id,{...recordById.get(guideHeld.id),...guideHeld});
    // A token just put down stays where it is landing until the move is answered and the board has it on that square:
    // in between, the board has it on the new square at ground height (its floor not yet known), which looked like a
    // dip under the ground and a pop back up (Brandon, October 2026).

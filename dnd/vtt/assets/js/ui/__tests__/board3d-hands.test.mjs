@@ -66,7 +66,7 @@ test('a token with a mini is the mini: its box covers the model from base to hea
   assert.match(board3d, /const head=miniStanding\.has\(p\.id\)&&Number\.isFinite\(miniTops\.get\(p\.id\)\)\?view\.project\(\{\.\.\.p,z:miniTops\.get\(p\.id\)\}\):null;\s*const boxTop=head\?Math\.min\(head\.y,foot\.y-size\*\.5\):/);
   assert.match(board3d, /if\(head\)node\.style\.setProperty\('--vtt3d-height',`\$\{foot\.y\+size\*\.12-boxTop\}px`\);else node\.style\.removeProperty\('--vtt3d-height'\);/, 'down to its base');
   assert.match(css, /#vtt-token-layer>\.vtt-token\.vtt3d-mini \{ height: var\(--vtt3d-height, var\(--vtt3d-size, 36px\)\) !important;/);
-  assert.match(css, /\.vtt3d-mini \.vtt-token__condition \{ bottom: auto; top: calc\(var\(--tok-unit\) \* -18\); \}/, 'conditions above the head too');
+  assert.match(css, /\.vtt3d-mini \.vtt-token__condition \{ top: auto; bottom: calc\(100% \+ var\(--tok-unit\) \* 32\); z-index: 2; \}/, 'conditions above the health bar');
   assert.doesNotMatch(board3d + css, /vtt3d-grab|vtt3d-mini::after/, 'no box floats over the model any more');
   assert.match(board3d, /node\.style\.setProperty\('--tok-unit',`\$\{\(1\.25\*size\//, 'badges and bars a quarter bigger');
   assert.match(board3d, /const placeKey=cameraKey\+'\|'\+shownLevel\+'\|'\+tokenLayer\.childElementCount\+'\|'\+miniIds\+/, 'placed again when a mini appears');

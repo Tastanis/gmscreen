@@ -29,10 +29,16 @@
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-selected { outline: none !important; }
 /* The turn tracker's hover (and the active combatant) shows on a mini too: a ring round the model, as board.css
    .vtt-token.is-hover-highlight rings a flat token (its box-shadow is cleared on a mini above). */
+/* A picked target shows on a mini too (board.css .vtt-token--picked-target; the mini's own ring is cleared above). */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.vtt-token--picked-target { outline: 3px solid #ef4444 !important; outline-offset: 2px; box-shadow: 0 0 0 7px rgba(239, 68, 68, .45), 0 0 18px rgba(239, 68, 68, .7) !important; }
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__pick-number { top: -11px; right: -11px; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-hover-highlight { outline: 3px solid rgba(129, 140, 248, .95) !important; outline-offset: 2px; box-shadow: 0 0 0 7px rgba(165, 180, 252, .45), 0 0 18px rgba(129, 140, 248, .6) !important; }
 /* A held token lets the pointer through to the square it is being put down on (integration.mjs markHeld). */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held, .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held * { pointer-events: none !important; }
-.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { bottom: auto; top: calc(var(--tok-unit) * -18); }
+/* Conditions sit above the health bar (Brandon, November 4, 2026: they covered it). The bar's top is at -30.4u
+   (board.css .vtt-token__hp-bar); a token with no bar keeps them just over the head. */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { top: auto; bottom: calc(100% + var(--tok-unit) * 32); z-index: 2; }
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini:not(:has(> .vtt-token__hp-bar)) .vtt-token__condition { bottom: calc(100% + var(--tok-unit) * 6); }
 
 /* Where the turn began (integration.mjs placeTurnGhost): a faint copy of the token, in a dashed gold ring. */
 #vtt-board3d-overlay-host .vtt3d-turn-ghost { position: absolute; border-radius: 50%; background: center / cover no-repeat rgba(15, 23, 42, .35); border: 2px dashed rgba(245, 210, 132, .9); opacity: .5; filter: grayscale(.35); pointer-events: none; box-sizing: border-box; }

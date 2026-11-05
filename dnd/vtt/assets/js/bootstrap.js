@@ -15,6 +15,7 @@ import { mountCharacterSummaryPanel } from './ui/character-summary-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
 import { mountBoardInteractions } from './ui/board-interactions.js';
 import { mountDragRuler } from './ui/drag-ruler.js';
+import { mountBoardFreeArea } from './ui/board-free-area.js';
 import { mountDrawingTool } from './ui/drawing-tool.js';
 import { mountDiceRoller } from './ui/dice-roller.js';
 import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memory monitor widget
@@ -70,6 +71,8 @@ async function bootstrap() {
   window.vtt3dBridge = boardInteractions?.coordinateBridge ?? null;
   window.dispatchEvent(new CustomEvent('vtt3d:bridge-ready'));
   mountDragRuler();
+  // The uncovered part of the board, for the ability trays (the Table adds its drawers: vtt-embed.js setInsets).
+  window.vttBoardFreeArea = mountBoardFreeArea();
   mountDrawingTool({
     onDrawingChange: (edits, context) => storeApi.commitDrawingChanges(context.sceneId, edits),
     getContext: () => storeApi.getDrawingContext(),

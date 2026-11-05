@@ -24,6 +24,9 @@ const ARROW_COLOR_END = '#0f0f0f';
 let sharedState = null;
 let cachedMapRect = null;
 let teleportSpaceHeld = false;
+// Hold M to measure: held now, and whether holding it turned the tool on (it goes off again on release).
+let mHeld = false;
+let mTurnedOn = false;
 
 export function dragMovementKind(event) {
   return teleportSpaceHeld ? 'teleport' : event.ctrlKey ? 'forced' : event.shiftKey ? 'shift' : 'walk';
@@ -213,12 +216,16 @@ export function mountDragRuler() {
       else toggleMeasureMode(state, false);
       return;
     }
-    // M turns the Measure tool on and off (Brandon, October 2026). Not while typing, nor with Ctrl, Alt or Cmd.
-    if ((event.key === 'm' || event.key === 'M') && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
+    // Hold M to measure, let go to stop (Brandon, November 4, 2026; it was press on, press off). Not while typing,
+    // nor with Ctrl, Alt or Cmd, nor while a token is being dragged.
+    if (event.code === 'KeyM' && mHeld) { event.preventDefault(); return; }
+    if (event.code === 'KeyM' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
       && !event.target?.closest?.('input,textarea,select,[contenteditable],dialog,[role="dialog"]')
       && mapSurface.getClientRects().length && state.mode !== 'external') {
       event.preventDefault();
-      toggleMeasureMode(state, !state.active);
+      mHeld = true;
+      mTurnedOn = !state.active;
+      toggleMeasureMode(state, true);
       return;
     }
 
@@ -230,9 +237,21 @@ export function mountDragRuler() {
     }
   });
 
+  // M let go (anywhere, even over a text box), or the window left while it was held: the measuring stops. The tool
+  // goes away again unless the Measure button had it on before.
+  const releaseM = () => {
+    if (!mHeld) return;
+    mHeld = false;
+    if (mTurnedOn) toggleMeasureMode(state, false);
+    else clearMeasurement(state);
+  };
+  document.addEventListener('keyup', (event) => { if (event.code === 'KeyM') releaseM(); }, true);
+  window.addEventListener('blur', releaseM);
+
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       teleportSpaceHeld = false;
+      releaseM();
       clearMeasurement(state);
     }
   });
