@@ -20844,7 +20844,25 @@ export function mountBoardInteractions(store, routes = {}) {
       agility:Number(sheet?.hero?.stats?.agility??traits.agility??monster.attributes?.agility??monster.characteristics?.agility??monster.stats?.agility??monster.agility??0)||0,
       might:Number(sheet?.hero?.stats?.might??traits.might??monster.attributes?.might??monster.characteristics?.might??monster.stats?.might??monster.might??0)||0,
       stability: stabilityWithBonus,
+      // Squares a feature takes off every fall (passive { "kind": "fall", "reduce": 5 }: Inertial Sink).
+      ...automationFallReduction(sheet, placement),
     };
+  }
+
+  function automationFallReduction(sheet, placement) {
+    const passives = placement?.monster ? monsterPassivesOfKind(placement.monster, 'fall') : [];
+    (Array.isArray(sheet?.features) ? sheet.features : []).forEach((feature) => {
+      (Array.isArray(feature?.automation?.passives) ? feature.automation.passives : []).forEach((passive) => {
+        if (String(passive?.kind || '').toLowerCase() === 'fall') passives.push({ ...passive, label: passive.label || feature.title || '' });
+      });
+    });
+    let fallReduction = 0, fallReductionLabel = '';
+    passives.forEach((passive) => {
+      const value = Math.max(0, Number.parseInt(passive.reduce ?? passive.amount, 10) || 0);
+      fallReduction += value;
+      if (value && !fallReductionLabel) fallReductionLabel = passive.label || 'Shorter fall';
+    });
+    return fallReduction ? { fallReduction, fallReductionLabel } : {};
   }
 
   async function resolveStandFirmForPlacement(placementId, options = {}) {

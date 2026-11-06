@@ -6,7 +6,7 @@ How to add: on her sheet **✎ Edit → ⇪ Import JSON**, one block at a time (
 
 Sheet numbers (no automation needed): Speed +3 and Disengage +3 (Null Speed), Disengage +1 more (Graceful Retreat), Stamina +12 and Stability +1 (Density Augmentation), Nimblestep: ignores difficult terrain (a movement passive on the feature, `{ "kind": "movement", "ignoreDifficultTerrain": true }`).
 
-Manual (Director text): Enhanced Null Field's supernatural terrain, Psionic Leap, Shadowmeld, Small!, Danger Sense, Specialist, Inertial Sink's effective size and falls.
+Manual (Director text): Enhanced Null Field's supernatural terrain, Psionic Leap, Shadowmeld, Small!, Danger Sense, Specialist, Inertial Sink's effective size (falls and slam damage are automated).
 
 ## Discipline (Resource automation)
 
@@ -1451,6 +1451,11 @@ You add your Intuition score to your effective size for interacting with creatur
       {
         "kind": "forcedMovementDamage",
         "reduce": "level",
+        "label": "Inertial Sink"
+      },
+      {
+        "kind": "fall",
+        "reduce": 5,
         "label": "Inertial Sink"
       }
     ]

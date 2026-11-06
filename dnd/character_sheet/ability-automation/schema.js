@@ -2552,6 +2552,10 @@
     if (key === "conditionrule") return normalizeConditionRulePassive(input, warnings, path);
     // Damage the creature takes from being force moved is cut (the Null's Inertial Sink: "reduce that damage by an
     // amount equal to your level"): reduce "level" or a number. Read by the board's slam damage (forcedMovementDamageReduction).
+    // Every fall counts as that many squares shorter (Inertial Sink: 5), forced down or not. Read by the fall review.
+    if (key === "fall") {
+      return { kind: "fall", reduce: asNonNegInt(input.reduce ?? input.amount, 0), label: asTrimmedString(input.label || input.name) || "Shorter fall" };
+    }
     if (key === "forcedmovementdamage") {
       const level = asTrimmedString(input.reduce ?? input.amount).toLowerCase() === "level";
       return { kind: "forcedMovementDamage", reduce: level ? "level" : asNonNegInt(input.reduce ?? input.amount, 0), label: asTrimmedString(input.label || input.name) || "Forced movement damage" };

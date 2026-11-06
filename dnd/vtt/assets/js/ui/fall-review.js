@@ -3,10 +3,12 @@ import {playTokenFallAnimation} from './token-fall-animation.js';
 // Brandon's ruling (October 2026): a fall counts only when it is 3 squares or more after Agility is taken off.
 // Shorter, it is no fall: no damage, not prone, and (with nothing else to settle) no pop-up.
 export const FALL_MIN_SQUARES=3;
-export function fallDamage(squares,agility=0,forcedDown=false){
- const effective=Math.max(0,squares-(forcedDown?0:Math.max(0,agility)));return effective<FALL_MIN_SQUARES?0:Math.min(50,2*effective);
+// `shorter`: squares a feature takes off every fall, forced down or not (Inertial Sink: 5, "in addition to any other
+// reductions").
+export function fallDamage(squares,agility=0,forcedDown=false,shorter=0){
+ const effective=Math.max(0,squares-(forcedDown?0:Math.max(0,agility))-Math.max(0,Number(shorter)||0));return effective<FALL_MIN_SQUARES?0:Math.min(50,2*effective);
 }
-export function fallerLandsProne(details,agility=0){return !!details.collidedIds?.length||fallDamage(details.squares,agility,details.forcedDown)>0;}
+export function fallerLandsProne(details,agility=0,shorter=0){return !!details.collidedIds?.length||fallDamage(details.squares,agility,details.forcedDown,shorter)>0;}
 export function landingTargetProne(fallerSize,targetMight){return (Number.parseFloat(fallerSize)||1)>Number(targetMight||0);}
 export function ownsFall(record,user,scene){return record.kind==='fall'&&record.status==='pending'&&record.actorId.toLowerCase()===String(user).toLowerCase()&&record.sceneId===scene;}
 export function nextReviewableFall(records,user,scene,placement){
@@ -49,7 +51,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&climbing.free(record,faller)){
     try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,0);}catch{}return;}catch{}
    }
-   const stats=await traits(faller),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
+   const stats=await traits(faller),shorter=Math.max(0,Number(stats.fallReduction)||0),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown,shorter),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0,shorter)}];
    for(const id of details.collidedIds||[]){const p=placement(id);if(!p)throw Error('Fall target is unavailable; GM review is required.');const t=await traits(p);targets.push({id,name:p.name||'Creature',prone:landingTargetProne(stats.size,t.might)});}
    if(disposed||document.hidden||context()?.sceneId!==record.sceneId||String(context()?.userId).toLowerCase()!==String(c.userId).toLowerCase())return;
    const token=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);
@@ -68,7 +70,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    panel.className='vtt-fall-review';
    const title=document.createElement('strong');title.className='vtt-fall-review__title';title.textContent='Fall';
    const summary=document.createElement('div');summary.className='vtt-fall-review__summary';
-   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`],...(breaks?[['Lands on and breaks',breaks]]:[])]){
+   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`],...(shorter?[[stats.fallReductionLabel||'Shorter fall',`−${shorter}`]]:[]),...(breaks?[['Lands on and breaks',breaks]]:[])]){
     const row=document.createElement('div'),key=document.createElement('span'),amount=document.createElement('strong');key.textContent=name;amount.textContent=value;row.append(key,amount);summary.append(row);
    }
    const affected=document.createElement('div');affected.className='vtt-fall-review__targets';
