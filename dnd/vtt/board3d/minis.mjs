@@ -35,8 +35,11 @@ export function createMinis(scene){
  function update(records,profiles,visible,camera,dt=0){
   loadConfig();time+=dt;const seen=new Set();
   const noBase=new Set(),tops=new Map();
-  // Most hero tokens carry only their name ("Cal"); like the 2D board, a hero's sheet id as a whole word of it is that hero.
-  const heroByName=n=>String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' ').find(w=>Object.hasOwn(config.heroes||{},w));
+  // Most hero tokens carry only their name ("Cal"); like the 2D board, a hero's sheet id as a whole word of it is that hero,
+  // and so is the player's name from the players page (a token "Pippa" is sheet player6).
+  const heroByName=n=>{const text=String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(),has=id=>Object.hasOwn(config.heroes||{},id);
+   const word=text.split(' ').find(has);if(word)return word;const aliases=globalThis.vttConfig?.playerAliases||{};
+   return Object.keys(aliases).find(id=>has(id)&&(aliases[id]||[]).some(a=>a&&` ${text} `.includes(` ${a} `)));};
   if(config)for(const r of records){const who=profiles.get(r.id)||{},monster=who.mini||config.monsters?.[who.monster]||config.names?.[String(who.name||'').trim().toLowerCase()],name=monster?.model||config.heroes?.[who.hero]||config.heroes?.[heroByName(who.name)];if(!name)continue;if(monster?.noBase)noBase.add(r.id);const entry=model(name);if(!entry.template)continue;
    let mini=standing.get(r.id);if(!mini||mini.userData.model!==name){if(mini)root.remove(mini);mini=entry.template.clone();mini.userData={model:name,extras:entry.extras};standing.set(r.id,mini);root.add(mini);changed=true;}
    const scale=monster?(monster.scale??1):(config.scale||1)*Math.max(r.width,r.height),x=r.x,z=r.y,y=r.z+(monster?.noBase?0:BASE_TOP),yaw=Math.atan2(camera.position.x-x,camera.position.z-z),show=visible(r);
