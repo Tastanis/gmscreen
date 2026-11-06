@@ -339,6 +339,11 @@ function rollPassiveAppliesToRoll(passive, context) {
 function rollPassiveGatePasses(when, self, other, placements, getTeam, mapLevels) {
   const gate = when && typeof when === 'object' ? when : {};
   if (gate.winded && !isWindedPlacement(self)) return false;
+  // "With N or more" of the hero's heroic resource, the most it was this turn (the Null's Discipline Mastery).
+  if (gate.resourceMin != null) {
+    const level = typeof globalThis.vttResourceLevelForPlacement === 'function' ? globalThis.vttResourceLevelForPlacement(self?.id) : null;
+    if (!(Number(level) >= Number(gate.resourceMin))) return false;
+  }
   if (gate.notWinded && isWindedPlacement(self)) return false;
   if (gate.targetWinded && !isWindedPlacement(other)) return false;
   if (gate.selfCondition && !hasAnyCondition(self, gate.selfCondition)) return false;

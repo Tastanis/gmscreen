@@ -320,7 +320,7 @@
         });
     }
 
-    async function ensureMalice(monster, ability, category) {
+    async function ensureMalice(monster, ability, category, placement) {
         var cost = parseMaliceCost(ability.resource_cost, category);
         if (cost <= 0) {
             return { proceed: true, cost: 0 };
@@ -338,7 +338,8 @@
             );
             if (!ok) return { proceed: false, cost: cost };
         }
-        var debit = tracker.spend(cost);
+        // Said with the ability it pays for: the Null's Discipline comes from the Director using an ability that costs Malice.
+        var debit = tracker.spend(cost, { sourceId: (placement && placement.id) || '', abilityName: ability.name || '' });
         // Spending below zero is explicitly allowed by the GM, but a later
         // cancellation must restore only the amount that was actually debited.
         var spent = debit && Number.isFinite(Number(debit.spent))
@@ -369,7 +370,7 @@
 
         var maliceResult = { proceed: true, cost: 0 };
         if (category !== VILLAIN_CATEGORY) {
-            maliceResult = await ensureMalice(monster, ability, category);
+            maliceResult = await ensureMalice(monster, ability, category, placement);
             if (!maliceResult.proceed) {
                 return { aborted: true, reason: 'malice-cancelled' };
             }

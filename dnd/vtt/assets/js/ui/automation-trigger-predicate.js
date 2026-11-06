@@ -109,6 +109,20 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
           : payloadTokenId;
       if (otherId && env.hasLineOfEffect(casterId, otherId) === false) return false;
     }
+    // Only when the caster or a creature in its aura has an effect it could end (Reorder).
+    if (filter.endableConditionIn && typeof env.hasEndableCondition === 'function' && !env.hasEndableCondition(casterId, filter.endableConditionIn)) return false;
+    // A push all taken by Stability counts only with includeResisted ("even if you resist").
+    if (payload?.resisted === true && filter.includeResisted !== true) return false;
+    // "You have N or more" of your heroic resource (the most it was this turn: the Null's Discipline Mastery).
+    if (filter.resourceMin != null && typeof env.getResourceLevel === 'function') {
+      const level = env.getResourceLevel(casterId);
+      if (!(Number(level) >= Number(filter.resourceMin))) return false;
+    }
+    // The creature in the event is inside one of the caster's auras (true), or the named one ("Null Field").
+    if (filter.insideAura && typeof env.isInsideAura === 'function') {
+      const otherId = payloadPrimaryTokenId(event, payload) === casterId ? (payloadTargetIds(payload)[0] || payload.sourceId || '') : payloadPrimaryTokenId(event, payload);
+      if (!env.isInsideAura(casterId, otherId, filter.insideAura)) return false;
+    }
     if ((filter.withinSquares != null || filter.minSquares != null) && typeof env.getSquareDistance === 'function') {
       const otherDistanceId = payload.sourceId || payloadTokenId;
       const squares = env.getSquareDistance(casterId, otherDistanceId);

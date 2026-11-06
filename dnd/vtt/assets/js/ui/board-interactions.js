@@ -141,6 +141,7 @@ import { mountConnectionStatus } from './connection-status.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { movementAdjacencyChanges } from './movement-adjacency.js';
 import { normalMovementDetail } from '../sync-v2/confirmed-movement.js';
+import { setResourceTurn, noteResourceLevel, resourceLevelOf } from './resource-levels.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -1259,6 +1260,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (type === 'combat.start') {
       startNewFightCleanSlate(getActiveSceneId());
+      clearResourceLimitsForScene();
+      setTimeout(() => autoOnAurasAtCombatStart().catch((error) => console.warn('[VTT] auras at combat start', error)), 1500);
       resetPlayerSurgesToZero('combat-start').finally(() => {
         fireTimingBoundary('combatStart', { round: 1 });
         fireTimingBoundary('roundStart', { round: 1 });
@@ -1696,7 +1699,19 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         }
 
-        if(movementKind==='forced')await settleCollisionEffects(results[0]?.event?.operationId,applyAutomationCollisionDamage);
+        if(movementKind==='forced')await settleCollisionEffects(results[0]?.event?.operationId,(id,amount,type)=>applyAutomationCollisionDamage(id,amount,type,{movedId:moves[0].placementId}));
+        // A push made by hand (Ctrl-drag) is a forced move like an ability's: rules and triggers that wait for one hear it
+        // (Brandon, November 2026: Indigo's Clarity never came from a hand-made push). The pusher is whoever's turn it is.
+        if (source === 'drag' && movementKind === 'forced') {
+          const id = moves[0].placementId, before = canonical[id], after = getPlacementFromStore(id);
+          const moved = before && after ? Math.max(Math.abs((after.column || 0) - (before.column || 0)), Math.abs((after.row || 0) - (before.row || 0))) : 0;
+          const pusher = activeCombatantId && activeCombatantId !== id ? activeCombatantId : '';
+          if (moved > 0) {
+            const pushed = { placementId: id, targetId: id, targetName: tokenLabel(after) || '', sourceId: pusher, actorId: pusher, distance: moved, movedDistance: moved, requestedDistance: moved, verb: 'push', abilityName: 'Forced move by hand', manual: true };
+            triggerFire('forcedMovement', pushed);
+            triggerFire('forcedMovementDealt', pushed);
+          }
+        }
         clearSyncFailure();
         const movedIds = moves.map((move) => move.placementId);
         const fallenIds = source === 'drag'
@@ -3334,6 +3349,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
   document.addEventListener('vtt:automation-clear-scoped-flag', handleAutomationClearScopedFlagRequest);
   document.addEventListener('vtt:automation-set-aura', handleAutomationSetAuraRequest);
+  document.addEventListener('vtt:automation-aura-size', handleAutomationAuraSizeRequest);
   document.addEventListener('vtt:automation-floating-text', handleAutomationFloatingTextRequest);
   document.addEventListener('vtt:automation-start-turn', handleAutomationStartTurnRequest);
   document.addEventListener('vtt:automation-consume-triggered-action', handleAutomationConsumeTriggeredActionRequest);
@@ -3543,7 +3559,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const scopeValue = scope === 'round'
       ? combatRound
       : scope === 'turn'
-        ? activeCombatantId || ''
+        ? `${combatRound}.${activeCombatantId || ''}`
         : 'encounter';
     return `${scope}:${scopeValue}:${sourceId}:${targetId}:${key}`;
   }
@@ -3811,6 +3827,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function triggerFire(eventType, payload) {
     try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
+    if (eventType === 'staminaChange') fireWindedAndDying(payload);
     if (eventType === 'damage') noteMaintainedDamage(payload).catch((err) => console.warn('[VTT] persistent damage check failed', err));
     const list = [...(triggerRegistry.byEvent.get(eventType) || [])];
     for (const entry of list) {
@@ -3858,6 +3875,18 @@ export function mountBoardInteractions(store, routes = {}) {
     processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
       console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
     });
+  }
+
+  // A creature's Stamina first reaches half or less (winded) or 0 or less (dying).
+  function fireWindedAndDying(change = {}) {
+    const placementId = change.placementId || change.targetId;
+    const before = Number(change.before), after = Number(change.after);
+    if (!placementId || !Number.isFinite(before) || !Number.isFinite(after) || after >= before) return;
+    const placement = getPlacementFromStore(placementId);
+    const max = Number.parseInt(ensurePlacementHitPoints(placement?.hp).max, 10);
+    const detail = { placementId, targetId: placementId, before, after };
+    if (Number.isFinite(max) && max > 0 && before > max / 2 && after <= max / 2) triggerFire('winded', detail);
+    if (before > 0 && after <= 0) triggerFire('dying', detail);
   }
 
   function resolveAutoTriggerPlacements(entry, payload = {}) {
@@ -4102,6 +4131,90 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // The most heroic resource the hero on this token has had this turn (resource-levels.js), or null when unknown.
+  function resourceLevelForPlacement(placementId) {
+    setResourceTurn(combatActive && activeCombatantId ? `${combatRound}:${activeCombatantId}` : '');
+    const profileId = placementId ? getAutomationProfileIdForPlacement(placementId) : '';
+    return profileId ? resourceLevelOf(profileId) : null;
+  }
+  if (typeof window !== 'undefined') window.vttResourceLevelForPlacement = resourceLevelForPlacement;
+
+  // Is that creature inside an aura of the owner's (any of them, or the one whose ability name holds `name`), at its
+  // size now? The Null Field: "an enemy in the area of your Null Field ability".
+  function isInsideAuraOf(ownerId, otherId, name = true, { anyCreature = false } = {}) {
+    const owner = ownerId ? getPlacementFromStore(ownerId) : null;
+    const other = otherId ? getPlacementFromStore(otherId) : null;
+    if (!owner || !other || owner.id === other.id) return false;
+    const wanted = typeof name === 'string' ? name.trim().toLowerCase() : '';
+    return getAutomationAuraRecords(owner).some((aura) => {
+      if (wanted && !String(aura?.automation?.abilityName || aura?.name || '').toLowerCase().includes(wanted)) return false;
+      return isPlacementInsideAutomationAura(owner, aura, other, null, { anyCreature });
+    });
+  }
+
+  // Effects that may be ended (Reorder: "one effect ... ended by a saving throw or that ends at the end of your turn")
+  // on the caster and on the creatures in one of its auras ("aura": "Null Field"): { placementId, name, condition,
+  // label }. `whose`: "ally" (default, the caster's side) or "any".
+  function endableConditionsFor(casterId, spec = {}) {
+    const caster = casterId ? getPlacementFromStore(casterId) : null;
+    if (!caster) return [];
+    const durations = (Array.isArray(spec.durations) && spec.durations.length ? spec.durations : ['save-ends', 'end-of-turn']).map((value) => normalizeConditionDurationValue(value));
+    const casterTeam = getTeamForPlacementId(caster.id);
+    const others = spec.aura
+      ? getPlacementsForActiveScene().filter((placement) => placement?.id && placement.id !== caster.id
+        && isInsideAuraOf(caster.id, placement.id, spec.aura === true ? true : String(spec.aura), { anyCreature: true })
+        && (String(spec.whose || 'ally') === 'any' || (casterTeam && getTeamForPlacementId(placement.id) === casterTeam)))
+      : [];
+    const everyone = [...(spec.includeSelf === false ? [] : [caster]), ...others];
+    const list = [];
+    everyone.forEach((placement) => {
+      ensurePlacementConditions(placement.conditions ?? placement.condition ?? null).forEach((condition) => {
+        if (!condition || condition.name === 'hiddenEffect') return;
+        if (!durations.includes(getConditionDurationType(condition))) return;
+        const duration = getConditionDurationType(condition) === 'save-ends' ? 'save ends' : 'end of turn';
+        list.push({ placementId: placement.id, name: tokenLabel(placement) || 'Creature', condition, label: `${condition.label || condition.name} (${duration})` });
+      });
+    });
+    return list;
+  }
+
+  // Pick one of those to end: a popup with each creature's effects, End it / Skip.
+  function chooseConditionToEnd(payload = {}) {
+    const list = endableConditionsFor(payload.sourceId, payload.among || {});
+    if (!list.length) return Promise.resolve({ ended: false, reason: 'none' });
+    return new Promise((resolve) => {
+      const host = document.createElement('div');
+      host.className = 'heroic-resource-prompt';
+      host.innerHTML = `
+        <div class="heroic-resource-prompt__modal heroic-resource-prompt--maintain" role="dialog" aria-modal="true">
+          <header class="heroic-resource-prompt__header"><h2>${escapeHtml(payload.title || 'End an effect')}</h2></header>
+          <div class="heroic-resource-prompt__body">
+            <p>${escapeHtml(payload.message || 'Choose one effect to end.')}</p>
+            <div class="maintain-list">
+              ${list.map((item, index) => `<label class="maintain-row"><span><input type="radio" name="end-one" value="${index}"${index === 0 ? ' checked' : ''}> <b>${escapeHtml(item.name)}</b>: ${escapeHtml(item.label)}</span></label>`).join('')}
+            </div>
+          </div>
+          <div class="heroic-resource-prompt__actions">
+            <button type="button" class="btn btn--ghost" data-heroic-resource-dismiss>Skip</button>
+            <button type="button" class="btn" data-heroic-resource-apply>End it</button>
+          </div>
+        </div>`;
+      const done = (end) => {
+        const picked = list[Number(host.querySelector('input[name="end-one"]:checked')?.value)];
+        host.remove();
+        if (!end || !picked) { resolve({ ended: false, reason: 'skipped' }); return; }
+        const removed = removeConditionFromPlacementByCondition(picked.placementId, picked.condition);
+        if (removed) showConditionBanner(`${formatPossessiveName(picked.name)} ${picked.condition.label || picked.condition.name} has ended.`, { tone: 'reminder' });
+        resolve({ ended: Boolean(removed), name: picked.name, condition: picked.condition.label || picked.condition.name });
+      };
+      host.querySelector('[data-heroic-resource-dismiss]')?.addEventListener('click', () => done(false));
+      host.querySelector('[data-heroic-resource-apply]')?.addEventListener('click', () => done(true));
+      document.body.appendChild(host);
+      makeHeroicResourcePromptDraggable(host);
+      positionAutomationPopup(host.querySelector('.heroic-resource-prompt__modal'));
+    });
+  }
+
   function getHeroicResourceRuleEnv(placementId) {
     return {
       casterId: placementId,
@@ -4110,6 +4223,7 @@ export function mountBoardInteractions(store, routes = {}) {
       getJudgedTargetForSource,
       getPlacementMark,
       getPlacementFromStore,
+      isInsideAura: isInsideAuraOf,
       getSquareDistance(idA, idB) {
         const a = idA ? getPlacementFromStore(idA) : null;
         const b = idB ? getPlacementFromStore(idB) : null;
@@ -4156,28 +4270,86 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  // A heroic-resource rule's limit (once per round, turn or fight): kept on the hero's token as resourceLimits
+  // {key: true}, so every page sees it and a reload keeps it, and cleared when a fight starts or ends. Marked when the
+  // gain is taken (unless the rule says markOn "offered"). While a popup for it is open, the same gain is not offered
+  // again on this page (an area attack used to open one popup per creature hit).
+  const pendingResourceLimitKeys = new Set();
+  function heroicResourceLimitKey(rule, placementId, appliedTargetId = '') {
+    if (!rule?.limit?.key || !placementId) return '';
+    const scope = String(rule.limit.scope || 'round').toLowerCase();
+    const scopeValue = scope === 'round' ? combatRound : scope === 'turn' ? `${combatRound}:${activeCombatantId || ''}` : 'fight';
+    const target = String(rule.limit.target || '').toLowerCase() === 'eventtarget' ? appliedTargetId || placementId : 'self';
+    // The fight is part of it: a mark from an earlier fight never counts (that token may be on a map no fight-start reset reaches).
+    return `${scope}:${combatEncounterId || 'fight'}:${scopeValue}:${rule.limit.key}:${target}`;
+  }
+
   function markHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
-    if (!rule?.limit) return false;
-    const key = scopedFlagKey({
-      scope: rule.limit.scope,
-      key: rule.limit.key,
-      sourceId: placementId,
-      targetId: rule.limit.target === 'eventTarget' ? appliedTargetId || placementId : placementId,
-    });
+    const key = heroicResourceLimitKey(rule, placementId, appliedTargetId);
     if (!key) return false;
-    automationScopedFlags.add(key);
+    updatePlacementById(placementId, (target) => {
+      // Marks of earlier fights are let go as this one is written.
+      const fight = `:${combatEncounterId || 'fight'}:`;
+      const kept = Object.fromEntries(Object.entries(target.resourceLimits && typeof target.resourceLimits === 'object' ? target.resourceLimits : {}).filter(([name]) => name.includes(fight)));
+      target.resourceLimits = { ...kept, [key]: true };
+    });
     return true;
   }
 
-  function hasHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
-    if (!rule?.limit) return false;
-    const key = scopedFlagKey({
-      scope: rule.limit.scope,
-      key: rule.limit.key,
-      sourceId: placementId,
-      targetId: rule.limit.target === 'eventTarget' ? appliedTargetId || placementId : placementId,
+  function unmarkHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
+    const key = heroicResourceLimitKey(rule, placementId, appliedTargetId);
+    if (!key) return;
+    updatePlacementById(placementId, (target) => {
+      if (!target.resourceLimits?.[key]) return;
+      const next = { ...target.resourceLimits };
+      delete next[key];
+      target.resourceLimits = Object.keys(next).length ? next : null;
     });
-    return Boolean(key && automationScopedFlags.has(key));
+  }
+
+  function hasHeroicResourceRuleLimit(rule, placementId, appliedTargetId = '') {
+    const key = heroicResourceLimitKey(rule, placementId, appliedTargetId);
+    if (!key) return false;
+    if (pendingResourceLimitKeys.has(`${placementId}|${key}`)) return true;
+    return Boolean(getPlacementFromStore(placementId)?.resourceLimits?.[key]);
+  }
+
+  // The fight starts or ends: every rule may be used again.
+  function clearResourceLimitsForScene() {
+    getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => {
+      if (placement?.resourceLimits) updatePlacementById(placement.id, (target) => { target.resourceLimits = null; });
+    });
+  }
+
+  // A gain filed with the action that caused it, so one Ctrl+Z takes back the hit and what it gave.
+  async function inCausingUndoGroup(groupId, label, fn) {
+    if (!groupId) return fn();
+    const previous = globalThis.vttUndoGroup;
+    globalThis.vttUndoGroup = { id: groupId, label: label || previous?.label || '' };
+    try {
+      return await fn();
+    } finally {
+      if (globalThis.vttUndoGroup?.id === groupId) globalThis.vttUndoGroup = previous && previous.id !== groupId ? previous : null;
+    }
+  }
+
+  // What happened, in words, for a popup: "Goblin was force moved."
+  function heroicResourceEventSentence(eventType, payload = {}, placement = null) {
+    const nameOf = (id) => (id ? tokenLabel(getPlacementFromStore(id)) || '' : '');
+    const target = nameOf(payload.targetId || payload.placementId);
+    const source = nameOf(payload.sourceId || payload.actorId);
+    switch (eventType) {
+      case 'forcedMovement': return target ? `${target} was force moved${source && source !== target ? ` by ${source}` : ''}.` : '';
+      case 'forcedMovementDealt': return source ? `${source} force moved ${target || 'a creature'}.` : '';
+      case 'damage': return target ? `${target} took ${payload.amount ? `${payload.amount} ` : ''}${payload.damageType ? `${payload.damageType} ` : ''}damage${source && source !== target ? ` from ${source}` : ''}.` : '';
+      case 'damageDealt': return source ? `${source} dealt damage to ${target || 'a creature'}.` : '';
+      case 'actionUsed': return source ? `${source} used ${payload.actionName || 'an ability'}.` : '';
+      case 'maliceSpent': return `The Director spent ${payload.amount || ''} Malice${source ? ` (${source})` : ''}.`.replace('  ', ' ');
+      case 'winded': return target ? `${target} is winded.` : '';
+      case 'dying': return target ? `${target} is dying.` : '';
+      case 'turnStart': return `${tokenLabel(placement) || 'Your'} turn starts.`.replace("'s turn", "'s turn");
+      default: return '';
+    }
   }
 
   // ---------------------------------------------------------------- persistent abilities (Elementalist)
@@ -4368,8 +4540,8 @@ export function mountBoardInteractions(store, routes = {}) {
     title = 'Heroic Resource',
     message = '',
     detail = '',
-    applyLabel = 'Apply',
-    dismissLabel = 'Dismiss',
+    applyLabel = 'Yes',
+    dismissLabel = 'Cancel',
   } = {}) {
     return new Promise((resolve) => {
       const host = document.createElement('div');
@@ -4448,18 +4620,18 @@ export function mountBoardInteractions(store, routes = {}) {
   //   client being open.
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
     if (!eventType) return;
+    // The action that caused this (read before anything waits): a gain it gives is undone with it.
+    const undoGroup = globalThis.vttUndoGroup?.id || '';
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
     const currentUserId = normalizeProfileId(getCurrentUserId());
-    const isTurnBoundary = eventType === 'turnStart' || eventType === 'turnEnd';
     for (const placement of placements) {
       const profileId = getAutomationProfileIdForPlacement(placement.id);
       if (!profileId) continue;
-      const controllerId = isTurnBoundary
-        ? currentUserId
-        : getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+      // The hero's player is asked, the start of their turn too (it was whoever started the turn); the Director
+      // when the hero has no player, or when the player's page does not take it up (runPendingHeroResourcePrompt).
+      const controllerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
       const isController = Boolean(controllerId) && controllerId === currentUserId;
-      if (!isController && isTurnBoundary) continue;
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
@@ -4479,6 +4651,7 @@ export function mountBoardInteractions(store, routes = {}) {
             resource,
             rule,
             eventTargetId,
+            undoGroup,
           });
         } else {
           routeHeroicResourcePromptToOwner({
@@ -4489,6 +4662,7 @@ export function mountBoardInteractions(store, routes = {}) {
             recipientUserId: controllerId,
             rule,
             eventTargetId,
+            undoGroup,
           });
         }
       }
@@ -4521,7 +4695,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return trimmed;
   }
 
-  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId }) {
+  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '' }) {
     const rulePayload = cloneJsonSafe(rule);
     if (!rulePayload) return false;
     pendingHeroResourcePromptCounter += 1;
@@ -4536,6 +4710,10 @@ export function mountBoardInteractions(store, routes = {}) {
       eventTargetId: typeof eventTargetId === 'string' ? eventTargetId : '',
       rule: rulePayload,
       payload: cloneJsonSafe(trimHeroResourceEventPayload(payload)) ?? {},
+      // What happened, worded on this page (the other page may not know the creatures' names yet).
+      sentence: heroicResourceEventSentence(eventType, payload, placement),
+      undoGroup: typeof undoGroup === 'string' ? undoGroup : '',
+      round: combatRound,
       createdAt: Date.now(),
     };
     // Mark offered-limits on the routing client — it is the only client that
@@ -4556,6 +4734,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // applications don't re-show the same prompt.
   const handledHeroResourcePromptIds = new Set();
 
+  const HERO_PROMPT_DIRECTOR_AFTER_MS = 25000;
   function processPendingHeroResourcePrompts(state = {}) {
     const currentUserId = normalizeProfileId(getCurrentUserId());
     if (!currentUserId) return;
@@ -4568,14 +4747,29 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!record || typeof record !== 'object') continue;
         if (typeof record.id !== 'string' || !record.id) continue;
         const recipient = normalizeProfileId(record.recipientUserId) ?? normalizeProfileId(record.profileId);
-        if (recipient !== currentUserId) continue;
+        const mine = recipient === currentUserId;
+        // Nobody took it up (the player is not on): the Director is asked instead.
+        const unclaimed = !mine && isGmUser() && Date.now() - (Number(record.createdAt) || 0) > HERO_PROMPT_DIRECTOR_AFTER_MS;
+        if (!mine && !unclaimed) continue;
         if (handledHeroResourcePromptIds.has(record.id)) continue;
         handledHeroResourcePromptIds.add(record.id);
+        removePendingHeroResourcePromptRecord(placement.id, record.id);
         runPendingHeroResourcePrompt(placement.id, record).catch((err) => {
           console.warn('[VTT] pending heroic resource prompt failed', err);
         });
       }
     }
+  }
+  // The Director's page looks again now and then for records nobody took up.
+  if (typeof window !== 'undefined') {
+    window.setInterval(() => {
+      try {
+        if (isGmUser()) {
+          processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
+          getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => { if (placement?.readyTriggerPayloads && !placement.monster) maybePromptHeroTriggerPopups(placement); });
+        }
+      } catch (error) { /* not ready */ }
+    }, 6000);
   }
 
   async function runPendingHeroResourcePrompt(placementId, record) {
@@ -4589,6 +4783,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const rule = record.rule && typeof record.rule === 'object' ? record.rule : null;
       if (!rule || !rule.effect || typeof rule.effect !== 'object') return;
+      // An offer from an earlier round (or after the fight) is not made any more.
+      if (rule.limit?.scope === 'round' && Number.isFinite(Number(record.round)) && Number(record.round) !== combatRound) return;
       const sheet = await getAutomationSheetForPlacement(placementId);
       const resource = sheet?.hero?.resource;
       if (!sheet || !resource) return;
@@ -4601,6 +4797,8 @@ export function mountBoardInteractions(store, routes = {}) {
         resource,
         rule,
         eventTargetId: record.eventTargetId || placementId,
+        undoGroup: record.undoGroup || '',
+        sentence: record.sentence || '',
       });
     } finally {
       removePendingHeroResourcePromptRecord(placementId, record.id);
@@ -4618,7 +4816,21 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup = '', sentence = '' }) {
+    // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
+    const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
+    const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
+    if (limitKey && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
+    if (lockKey) pendingResourceLimitKeys.add(lockKey);
+    const roundAtOffer = combatRound;
+    try {
+      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer });
+    } finally {
+      if (lockKey) pendingResourceLimitKeys.delete(lockKey);
+    }
+  }
+
+  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer }) {
     // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
     // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
     // the gain itself was right, being an amount).
@@ -4628,6 +4840,7 @@ export function mountBoardInteractions(store, routes = {}) {
       sheet = latest;
       resource = latest.hero.resource;
     }
+    noteResourceLevel(profileId, resource?.value);
     const context = getSheetHeroicResourceContext(sheet, resource);
     const preview = previewHeroicResourceAmount(rule.effect.amount, context);
     const shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
@@ -4654,7 +4867,12 @@ export function mountBoardInteractions(store, routes = {}) {
       current: change.current,
       next: shouldRollAfterPrompt ? `${change.current} + ${preview.label || 'dice'}` : change.next,
       round: combatRound,
+      target: tokenLabel(getPlacementFromStore(payload?.targetId || payload?.placementId)) || '',
+      source: tokenLabel(getPlacementFromStore(payload?.sourceId || payload?.actorId)) || '',
     }) || `${action} ${amount} ${resourceName}: ${ruleReason}.`;
+    // "Goblin was force moved. Gain 2 Clarity?" (Brandon: "Someone got pushed. Do you want to gain a x. Yes cancel.")
+    const happened = sentence || heroicResourceEventSentence(eventType, payload, placement);
+    const question = `${happened && !/\{(target|source)\}/.test(rule.prompt || '') && eventType !== 'turnStart' ? `${happened} ` : ''}${message.replace(/[.!]\s*$/, '')}?`;
     if (rule.limit?.markOn === 'offered') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
@@ -4674,18 +4892,29 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
     } else if (!rule.autoApply) {
+      // Saying Cancel leaves the once-per-round free (it is only used when the gain is taken).
       const promptResult = await queueHeroicResourcePrompt({
         title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
-        message,
+        message: question,
         detail: rule.effect.kind === 'damage'
           ? `${tokenLabel(placement) || 'Hero'} will take ${shouldRollAfterPrompt ? (preview.label || 'dice') : amount} damage.`
           : shouldRollAfterPrompt
             ? `${change.current} + ${preview.label || 'dice'}`
             : `${change.current} -> ${change.next}`,
-        applyLabel: rule.effect.kind === 'damage' ? 'Apply Damage' : 'Apply',
+        applyLabel: rule.applyLabel || (rule.effect.kind === 'damage' ? 'Take the damage' : 'Yes'),
+        dismissLabel: rule.cancelLabel || 'Cancel',
       });
       if (!promptResult?.applied) return;
+      // Answered late: the round it was for is over, or the fight is.
+      if (rule.limit?.scope === 'round' && combatRound !== roundAtOffer) { updateStatus('That gain was for an earlier round.'); return; }
+      if (!['combatStart', 'combatEnd'].includes(eventType) && !combatActive && rule.limit) { updateStatus('That gain was for a fight that is over.'); return; }
     }
+    return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }));
+  }
+
+  // The gain (or loss, or damage) taken: the limit used now, then the write, all under the causing action's undo.
+  async function takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }) {
+    if (rule.limit) markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     if (shouldRollAfterPrompt) {
       const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
       amount = Math.max(0, Number.parseInt(resolved.amount, 10) || 0);
@@ -4693,7 +4922,6 @@ export function mountBoardInteractions(store, routes = {}) {
       change = normalizeHeroicResourceChange(rule, sheet, amount);
     }
     if (rule.effect.kind === 'damage') {
-      if (rule.limit?.markOn === 'applied') markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
       applyDamageHealToPlacement(placement.id, 'damage', amount);
       return;
     }
@@ -4705,11 +4933,9 @@ export function mountBoardInteractions(store, routes = {}) {
       rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet);
     if (!saved) {
       characterSummaryCache.delete(profileId);
+      if (rule.limit) unmarkHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
       updateStatus('Resource save was not confirmed. Review the current character resource before trying again.');
       return;
-    }
-    if (rule.limit?.markOn === 'applied') {
-      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
     const subject = tokenLabel(placement) || sheet?.hero?.name || 'Hero';
     updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (now ${saved.resource ?? change.next}).`);
@@ -4732,6 +4958,7 @@ export function mountBoardInteractions(store, routes = {}) {
           : { value: String(Math.trunc(Number(write?.value) || 0)) }),
       });
       const saved = { resource: Number.isFinite(Number(answer?.resource)) ? Number(answer.resource) : null };
+      if (saved.resource !== null) noteResourceLevel(profileId, saved.resource);
       if (saved) {
         if (saved.resource !== null && sheetForCache?.hero?.resource && typeof sheetForCache.hero.resource === 'object') {
           sheetForCache.hero.resource.value = saved.resource;
@@ -4974,7 +5201,11 @@ export function mountBoardInteractions(store, routes = {}) {
           }))
           .filter((trigger) => trigger.event)
       : [];
-    if (!effects.length || !triggers.length) return null;
+    const potency = payload.potency && typeof payload.potency === 'object'
+      ? { occupants: Number.parseInt(payload.potency.occupants, 10) || 0, against: Number.parseInt(payload.potency.against, 10) || 0 }
+      : null;
+    const hasPotency = Boolean(potency && (potency.occupants || potency.against));
+    if ((!effects.length || !triggers.length) && !hasPotency) return null;
     const expires = payload.expires && typeof payload.expires === 'object'
       ? JSON.parse(JSON.stringify(payload.expires))
       : null;
@@ -4999,7 +5230,49 @@ export function mountBoardInteractions(store, routes = {}) {
       requires: payload.requires && typeof payload.requires === 'object'
         ? JSON.parse(JSON.stringify(payload.requires))
         : null,
+      potency: hasPotency ? potency : null,
+      followsAura: typeof payload.followsAura === 'string' && payload.followsAura.trim() ? payload.followsAura.trim() : null,
+      autoOn: typeof payload.autoOn === 'string' && payload.autoOn.trim() ? payload.autoOn.trim() : null,
     };
+  }
+
+  // Potency changed by auras (the Null Field): `occupants` changes the potencies of the creatures inside it that it
+  // affects (Null Field: enemies, -1); `against` changes potencies used by the owner or the owner's allies against a
+  // creature inside it that it affects (Synaptic Break: +1). Returns the total and a line for each.
+  function automationAuraPotencyChange(sourceId, targetId) {
+    const source = sourceId ? getPlacementFromStore(sourceId) : null;
+    const target = targetId ? getPlacementFromStore(targetId) : null;
+    let change = 0;
+    const notes = [];
+    for (const { owner, aura, automation } of getActiveAutomationAuras()) {
+      const potency = automation?.potency;
+      if (!potency) continue;
+      // An aura that ends while its owner is dying does nothing then (the Null Field).
+      if (automation.requires?.notDying && (parseHitPointNumber(ensurePlacementHitPoints(owner.hp).current) ?? 1) <= 0) continue;
+      const ownerTeam = getTeamForPlacementId(owner.id);
+      const affects = (placement) => {
+        if (!placement || placement.id === owner.id) return false;
+        const team = getTeamForPlacementId(placement.id);
+        const mode = String(automation.affects || 'creature').toLowerCase();
+        if (mode === 'enemy') return Boolean(ownerTeam && team && team !== ownerTeam);
+        if (mode.includes('ally')) return Boolean(ownerTeam && team && team === ownerTeam);
+        return true;
+      };
+      const own = Number(potency.occupants) || 0;
+      if (own && source && affects(source) && isPlacementInsideAutomationAura(owner, aura, source)) {
+        change += own;
+        notes.push(`${automation.abilityName || 'Aura'}: ${tokenLabel(source)}'s potency ${own > 0 ? '+' : ''}${own}`);
+      }
+      const against = Number(potency.against) || 0;
+      if (against && source && target && affects(target) && isPlacementInsideAutomationAura(owner, aura, target)) {
+        const sourceTeam = getTeamForPlacementId(source.id);
+        if (source.id === owner.id || (ownerTeam && sourceTeam === ownerTeam)) {
+          change += against;
+          notes.push(`${automation.abilityName || 'Aura'}: potency ${against > 0 ? '+' : ''}${against} against ${tokenLabel(target)}`);
+        }
+      }
+    }
+    return { change, notes };
   }
 
   function getActiveAutomationAuras() {
@@ -5028,13 +5301,30 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  function isPlacementInsideAutomationAura(owner, aura, placement, ownerOverride = null) {
+  // The aura an aura goes along with (followsAura: "Null Field"), when it is on; null for one standing alone.
+  function automationAuraLeader(owner, aura) {
+    const name = String(aura?.automation?.followsAura || '').trim().toLowerCase();
+    if (!name || !owner) return null;
+    return getAutomationAuraRecords(owner).find((record) => record !== aura && !record.automation?.followsAura
+      && String(record.automation?.abilityName || '').toLowerCase().includes(name)) || null;
+  }
+
+  // An aura's size now: its own, or (followsAura) the size of the aura it goes along with, grown or not.
+  function automationAuraRadius(owner, aura) {
+    const leader = aura?.automation?.followsAura ? automationAuraLeader(owner, aura) : null;
+    if (aura?.automation?.followsAura && !leader) return 0;
+    return Math.max(1, Math.min(20, Number.parseInt((leader || aura).radius, 10) || 1));
+  }
+
+  function isPlacementInsideAutomationAura(owner, aura, placement, ownerOverride = null, { anyCreature = false } = {}) {
     if (!owner?.id || !aura || !placement?.id) return false;
+    const radius = automationAuraRadius(owner, aura);
+    if (!radius) return false;
     if (!canReachFloor(ownerOverride ? { ...owner, ...ownerOverride } : owner, placement,
-      Math.max(1, Math.min(20, Number.parseInt(aura.radius, 10) || 1)), getActiveSceneTokenLevelState())) return false;
+      radius, getActiveSceneTokenLevelState())) return false;
     const automation = aura.automation && typeof aura.automation === 'object' ? aura.automation : {};
-    if (!doesAutomationTargetFilterMatch(placement, automation.affects || 'creature', owner)) return false;
-    return doesAutomationAreaAffectPlacement(getAuraAreaForPlacement(owner, aura.radius, ownerOverride), placement);
+    if (!anyCreature && !doesAutomationTargetFilterMatch(placement, automation.affects || 'creature', owner)) return false;
+    return doesAutomationAreaAffectPlacement(getAuraAreaForPlacement(owner, radius, ownerOverride), placement);
   }
 
   function getPlacementsInsideAutomationAura(owner, aura) {
@@ -5078,6 +5368,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function automationAuraEventFilterMatches(trigger, payload = {}) {
     const filter = trigger?.filter && typeof trigger.filter === 'object' ? trigger.filter : {};
+    // Damage from a power roll only (Synapse Field: "takes rolled damage"); an aura's own damage never is.
+    if (filter.rolledOnly && payload.rolled !== true) return false;
     if (filter.actionKind) {
       const actual = String(payload.actionKind || payload.actionType || '').trim().toLowerCase();
       if (actual !== String(filter.actionKind).trim().toLowerCase()) return false;
@@ -5652,6 +5944,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function endPersistentZonesAtCombatEnd() {
     clearMaintainedAbilitiesAtCombatEnd();
+    clearResourceLimitsForScene();
+    endAuraGrowthAtCombatEnd();
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     Object.keys(state.boardState?.placements || {}).forEach((sceneId) => {
@@ -6282,6 +6576,79 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // An aura of the user's grows (or shrinks) by `by` (Synapse Field: "the size of your Null Field ability increases by
+  // 1" until the end of the encounter). Kept as growth on the aura, so its own size comes back when it ends.
+  async function handleAutomationAuraSizeRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const placement = payload.placementId ? getPlacementFromStore(payload.placementId) : null;
+    const name = String(payload.aura || '').trim().toLowerCase();
+    const by = Number.parseInt(payload.by, 10) || 0;
+    if (!placement || !name || !by) { resolve?.({ applied: false, reason: 'missing' }); return; }
+    const record = getAutomationAuraRecords(placement, { includeDisabled: true })
+      .find((aura) => !aura.automation?.followsAura && String(aura.automation?.abilityName || '').toLowerCase().includes(name));
+    if (!record) { resolve?.({ applied: false, reason: 'no-aura' }); return; }
+    const key = String(payload.key || payload.abilityName || 'growth');
+    const until = String(payload.until || 'combatEnd');
+    let radius = record.radius;
+    const update = updatePlacementById(placement.id, (target) => {
+      const list = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+      target.automationAuras = list.map((aura) => {
+        if (aura?.id !== record.id) return aura;
+        const baseRadius = Number.parseInt(aura.baseRadius ?? aura.radius, 10) || 1;
+        const growth = [...(Array.isArray(aura.growth) ? aura.growth.filter((item) => item?.key !== key) : []), { key, by, until }];
+        radius = Math.max(1, Math.min(20, baseRadius + growth.reduce((sum, item) => sum + (Number(item.by) || 0), 0)));
+        return { ...aura, baseRadius, growth, radius };
+      });
+    }, { returnSavePromise: true });
+    try { if (update?.updated) await awaitSuccessfulPlacementSave(update); } catch (error) { resolve?.({ applied: false, reason: 'save' }); return; }
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+    resolve?.({ applied: true, radius, name: record.automation?.abilityName || payload.aura });
+  }
+
+  // The fight is over: growth that lasts "until the end of the encounter" goes, and each aura is its own size again.
+  function endAuraGrowthAtCombatEnd() {
+    getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => {
+      const list = Array.isArray(placement?.automationAuras) ? placement.automationAuras : [];
+      if (!list.some((aura) => Array.isArray(aura?.growth) && aura.growth.length)) return;
+      updatePlacementById(placement.id, (target) => {
+        target.automationAuras = (Array.isArray(target.automationAuras) ? target.automationAuras : []).map((aura) => {
+          if (!Array.isArray(aura?.growth) || !aura.growth.length) return aura;
+          const growth = aura.growth.filter((item) => item?.until !== 'combatEnd');
+          const baseRadius = Number.parseInt(aura.baseRadius ?? aura.radius, 10) || 1;
+          return { ...aura, growth, radius: Math.max(1, Math.min(20, baseRadius + growth.reduce((sum, item) => sum + (Number(item.by) || 0), 0))) };
+        });
+      });
+    });
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+  }
+
+  // A fight starts: a hero's aura that says autoOn "combatStart" (the Null Field) is switched on if it is not, by
+  // running its ability for free (no action used). Done once, on the Director's page.
+  async function autoOnAurasAtCombatStart() {
+    if (!isGmUser() || !window.VTTCharacterAbilities?.run) return;
+    const heroes = getActiveScenePlacements(boardApi.getState?.() ?? {}).filter((placement) => placement?.id && !placement.monster && getAutomationProfileIdForPlacement(placement.id));
+    for (const hero of heroes) {
+      const sheet = await getAutomationSheetForPlacement(hero.id).catch(() => null);
+      const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
+      for (const list of Object.values(actions)) {
+        for (const action of Array.isArray(list) ? list : []) {
+          let auto = false;
+          const walk = (value) => { if (!value || typeof value !== 'object' || auto) return; if (Array.isArray(value)) { value.forEach(walk); return; } if (value.kind === 'aura' && String(value.autoOn || '').toLowerCase() === 'combatstart') auto = true; else Object.values(value).forEach(walk); };
+          walk(action?.automation);
+          if (!auto) continue;
+          const name = String(action.name || '').toLowerCase();
+          const on = getAutomationAuraRecords(getPlacementFromStore(hero.id) || hero).some((aura) => String(aura.automation?.abilityName || '').toLowerCase() === name);
+          if (on) continue;
+          for (let waited = 0; document.getElementById('ability-automation-runner') && waited < 120; waited += 1) await new Promise((wake) => setTimeout(wake, 250));
+          await window.VTTCharacterAbilities.run({ characterId: getAutomationProfileIdForPlacement(hero.id), sourceToken: cloneJsonSafe(getPlacementFromStore(hero.id) || hero), abilityId: action.id || '', name: action.name, free: true, ensureAuraOn: true }).catch((error) => console.warn('[VTT] aura could not switch on', error));
+          await new Promise((wake) => setTimeout(wake, 600));
+        }
+      }
+    }
+  }
+
   async function handleAutomationSetAuraRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -6516,6 +6883,9 @@ export function mountBoardInteractions(store, routes = {}) {
       getJudgedTargetForSource,
       getPlacementMark,
       getPlacementFromStore,
+      getResourceLevel: resourceLevelForPlacement,
+      isInsideAura: isInsideAuraOf,
+      hasEndableCondition: (casterId, spec) => endableConditionsFor(casterId, spec).length > 0,
       isTriggerActionAvailable(casterId) {
         const casterPlacement = getPlacementFromStore(casterId);
         return !(casterPlacement?.triggeredActionReady === false || casterPlacement?.triggeredActionUsedThisRound === true);
@@ -14612,11 +14982,18 @@ export function mountBoardInteractions(store, routes = {}) {
   // the same setMaliceCount path (and therefore the same sync hook).
   window.MaliceTracker = {
     get: function () { return maliceCount; },
-    spend: function (amount) {
+    // `info`: {sourceId, abilityName} of the monster ability it pays for. Spent for an ability, it is an event
+    // ("maliceSpent": the Null's "the Director uses an ability that costs Malice").
+    spend: function (amount, info = {}) {
       const n = Math.max(0, Math.trunc(Number(amount) || 0));
       if (n <= 0) return { spent: 0, remaining: maliceCount };
       const spent = Math.min(n, maliceCount);
       if (spent > 0) setMaliceCount(maliceCount - spent);
+      if (n > 0) {
+        try {
+          triggerFire('maliceSpent', { amount: n, spent, sourceId: info?.sourceId || '', placementId: info?.sourceId || '', actorId: info?.sourceId || '', abilityName: info?.abilityName || '' });
+        } catch (error) { console.warn('[VTT] malice event failed', error); }
+      }
       return { spent, remaining: maliceCount };
     },
     add: function (amount) {
@@ -14776,6 +15153,8 @@ export function mountBoardInteractions(store, routes = {}) {
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
     clearScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-clear-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
+    resizeAura: function (payload) { return dispatchBoardCustom('vtt:automation-aura-size', 'payload', payload); },
+    chooseConditionToEnd: function (payload) { return chooseConditionToEnd(payload || {}); },
     showFloatingText: function (payload) { return dispatchBoardCustom('vtt:automation-floating-text', 'payload', payload); },
     startTurn: function (payload) { return dispatchBoardCustom('vtt:automation-start-turn', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
@@ -16925,7 +17304,9 @@ export function mountBoardInteractions(store, routes = {}) {
   // Yes runs the ability as the abilities list would (with its pickers); No lets it go.
   const promptedTriggerPopups = new Set();
   function maybePromptTriggerPopups(placement) {
-    if (!placement?.id || !isGmUser() || !placement.monster) return;
+    if (!placement?.id) return;
+    if (!placement.monster) { maybePromptHeroTriggerPopups(placement); return; }
+    if (!isGmUser()) return;
     const payloads = placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object' ? placement.readyTriggerPayloads : {};
     Object.keys(payloads).forEach((abilityId) => {
       const snapshot = payloads[abilityId];
@@ -16935,6 +17316,41 @@ export function mountBoardInteractions(store, routes = {}) {
       promptedTriggerPopups.add(key);
       promptTriggerPopup(placement.id, abilityId, snapshot).catch((error) => console.warn('[VTT] trigger popup failed', error));
     });
+  }
+
+  // A hero's trigger that asks (resolve "popup"): the hero's player is asked "Use it now?", the Director when the
+  // player's page has not taken it up within a while; yes runs it as the ready trigger it is.
+  const HERO_TRIGGER_DIRECTOR_AFTER_MS = 25000;
+  function maybePromptHeroTriggerPopups(placement) {
+    const payloads = placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object' ? placement.readyTriggerPayloads : {};
+    const profileId = getAutomationProfileIdForPlacement(placement.id);
+    if (!profileId) return;
+    const ownerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+    const me = normalizeProfileId(getCurrentUserId());
+    Object.keys(payloads).forEach((abilityId) => {
+      const snapshot = payloads[abilityId];
+      if (!snapshot || snapshot.popup !== true) return;
+      const mine = ownerId === me || (isGmUser() && Date.now() - (Number(snapshot.at) || 0) > HERO_TRIGGER_DIRECTOR_AFTER_MS);
+      if (!mine) return;
+      const key = `${placement.id}|${abilityId}|${snapshot.at || ''}`;
+      if (promptedTriggerPopups.has(key)) return;
+      promptedTriggerPopups.add(key);
+      promptHeroTriggerPopup(placement.id, abilityId, snapshot, profileId).catch((error) => console.warn('[VTT] hero trigger popup failed', error));
+    });
+  }
+
+  async function promptHeroTriggerPopup(placementId, abilityId, snapshot, profileId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) return;
+    const entry = (triggerRegistry.byToken.get(placementId) || []).find((item) => item.abilityId === abilityId);
+    const name = entry?.abilityName || 'Triggered ability';
+    const clear = () => document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId, abilityId } }));
+    const happened = heroicResourceEventSentence(snapshot?.eventType, snapshot?.payload || {}, placement);
+    const yes = await confirmBoardAction(`${tokenLabel(placement) || 'Hero'}: ${name}${entry?.condition ? ` (${entry.condition})` : ''}.${happened ? ` ${happened}` : ''} Use it now?`, { title: name, confirmText: 'Use it', cancelText: 'Skip' });
+    clear();
+    if (!yes) return;
+    const result = await window.VTTCharacterAbilities?.run?.({ characterId: profileId, sourceToken: cloneJsonSafe(getPlacementFromStore(placementId) || placement), abilityId, name, triggerPayload: snapshot }).catch(() => null);
+    if (!result?.ran) showConditionBanner(`${name}: ${result?.reason === 'no-automation' ? 'it has no automation, use it by hand' : 'not found on the sheet, use it by hand'}.`, { tone: 'reminder' });
   }
 
   async function promptTriggerPopup(placementId, abilityId, snapshot) {
@@ -19348,7 +19764,9 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationAreaOverlay();
     if (message) {
       updateStatus(message);
-      request.reject?.(new Error(message));
+      // Escape or the Cancel button: the ability is cancelled (and refunded when nothing happened yet).
+      if (/cancel/i.test(message) && request.resolve) request.resolve({ canceled: true });
+      else request.reject?.(new Error(message));
     }
   }
 
@@ -19416,8 +19834,11 @@ export function mountBoardInteractions(store, routes = {}) {
         includesSurge: Boolean(payload.includesSurge || payload.surgeSpent || payload.surgeCount),
         surgeSpent: Number.parseInt(payload.surgeSpent ?? payload.surgeCount ?? 0, 10) || 0,
         surgeDamage: Number.parseInt(payload.surgeDamage ?? 0, 10) || 0,
+        // From an ability's power roll ("rolled damage").
+        rolled: payload.rolled === true,
       };
-      triggerFire('damage', {
+      // A hit for nothing (all of it stopped by immunity) is not damage: no rule or trigger hears it.
+      if (adjustedAmount > 0) triggerFire('damage', {
         placementId: payload.placementId,
         targetId: payload.placementId,
         sourceId: payload.sourceId || '',
@@ -19431,7 +19852,7 @@ export function mountBoardInteractions(store, routes = {}) {
         keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
         ...surgeEventFields,
       });
-      triggerFire('damageDealt', {
+      if (adjustedAmount > 0) triggerFire('damageDealt', {
         placementId: payload.placementId,
         targetId: payload.placementId,
         sourceId: payload.sourceId || '',
@@ -19722,10 +20143,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const sourceStats = payload.sourceStats && typeof payload.sourceStats === 'object' ? payload.sourceStats : {};
     const targetStats = await getAutomationStatsForPlacement(placement);
-    // +potency from a buff ticked in the roll window.
-    const threshold = computeAutomationPotencyThreshold(sourceStats, payload.threshold) + (Number.parseInt(payload.thresholdBonus, 10) || 0);
+    // +potency from a buff ticked in the roll window; auras (the Null Field) change it too.
+    const aura = automationAuraPotencyChange(payload.sourceId || '', placementId);
+    const threshold = computeAutomationPotencyThreshold(sourceStats, payload.threshold) + (Number.parseInt(payload.thresholdBonus, 10) || 0) + aura.change;
     const attributeValue = getAutomationStatValue(targetStats, payload.attribute);
+    if (aura.notes.length) sayInChat(`${aura.notes.join('; ')}.`);
     resolve?.({
+      auraPotency: aura.change,
       passes: attributeValue < threshold,
       threshold,
       attributeValue,
@@ -20327,6 +20751,16 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     const effectiveDistance = movementResolution.distance;
 
+    // All of it taken by Stability: nothing to pick. Reported as resisted ("even if you resist": the Metakinetic Null).
+    const resistedVerb = getAutomationMoveBaseVerb(verb);
+    if (requestedDistance + sizeBonus > 0 && effectiveDistance <= 0 && ['push', 'pull', 'slide'].includes(resistedVerb)) {
+      const name = tokenLabel(targetPlacement);
+      const stability = Number.parseInt(targetTraits.stability, 10) || 0;
+      updateStatus(`${name} resists the ${String(verbLabel).toLowerCase()} (Stability ${stability}).`);
+      resolve?.({ skipped: false, resisted: true, name, movedDistance: 0, requestedDistance: requestedDistance + sizeBonus, effectiveDistance: 0, stability, collision: null });
+      return;
+    }
+
     closeDamageHealWidget();
     closeHealOverflowPopup();
     // A restrained creature normally can't be force moved. Only a reminder: the move picker still works.
@@ -20874,7 +21308,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if(forcedIntent){
       try {
         const saved=await moveResult.savePromise;
-        await settleCollisionEffects(saved?.event?.operationId,applyAutomationCollisionDamage);
+        await settleCollisionEffects(saved?.event?.operationId,(id,amount,type)=>applyAutomationCollisionDamage(id,amount,type,{movedId:request.targetSnapshot.id}));
         if(forcedCollision.damage>0)collision={targetName:request.targetSnapshot.name,collidedName:forcedCollision.collidedIds.map(id=>tokenLabel(getPlacementFromStore(id))).join(', ')||(forcedCollision.brokeThrough?'a wall, and broke through':'Obstacle'),damage:forcedCollision.damage};
       } catch(error){
         renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState,{skipTracker:true});
@@ -20887,11 +21321,22 @@ export function mountBoardInteractions(store, routes = {}) {
     announceOwnAbilityMove(request);
     flashAutomationTargetToken(request.targetSnapshot.id);
     clearAutomationMoveOverlay();
+    // Counted from where it stands now (the server may have stopped it short of what was asked).
+    const landedAt = getPlacementFromStore(request.targetSnapshot.id);
+    const actualMoved = landedAt ? automationChebyshevDistance(request.targetSnapshot, landedAt) : movedDistance;
     request.resolve?.({
       skipped: false,
       name: request.targetSnapshot.name,
-      movedDistance,
+      movedDistance: actualMoved,
       collision,
+      requestedDistance: Number(request.requestedDistance) || 0,
+      effectiveDistance: Number(request.effectiveDistance) || 0,
+      squaresLeft: Math.max(0, (Number(request.effectiveDistance) || 0) - actualMoved),
+      stoppedBy: forcedCollision?.wall ? 'wall' : forcedCollision?.collidedIds?.length ? 'creature' : null,
+      collidedIds: Array.isArray(forcedCollision?.collidedIds) ? [...forcedCollision.collidedIds] : [],
+      slamDamage: Number(forcedCollision?.damage) || 0,
+      brokeThrough: Boolean(forcedCollision?.brokeThrough),
+      verb: request.baseVerb || '',
     });
     return true;
   }
@@ -20916,7 +21361,38 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  async function applyAutomationCollisionDamage(placementId, amount, damageType) {
+  // Damage taken from being force moved is cut by a passive `{ "kind": "forcedMovementDamage", "reduce": n | "level" }`
+  // (the Null's Inertial Sink: "you reduce that damage by an amount equal to your level"), hero feature or stat block.
+  async function forcedMovementDamageReduction(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) return { amount: 0, label: '' };
+    const passives = placement.monster ? monsterPassivesOfKind(placement.monster, 'forcedMovementDamage') : [];
+    const sheet = placement.monster ? null : await getAutomationSheetForPlacement(placementId).catch(() => null);
+    (Array.isArray(sheet?.features) ? sheet.features : []).forEach((feature) => {
+      (Array.isArray(feature?.automation?.passives) ? feature.automation.passives : []).forEach((passive) => {
+        if (String(passive?.kind || '').toLowerCase() === 'forcedmovementdamage') passives.push({ ...passive, label: passive.label || feature.title || '' });
+      });
+    });
+    let amount = 0, label = '';
+    passives.forEach((passive) => {
+      const value = String(passive.reduce ?? passive.amount ?? '').trim().toLowerCase() === 'level'
+        ? Number.parseInt(sheet?.hero?.level ?? placement.monster?.level ?? 0, 10) || 0
+        : Number.parseInt(passive.reduce ?? passive.amount, 10) || 0;
+      if (value > amount) { amount = value; label = passive.label || 'Forced movement damage'; }
+    });
+    return { amount, label };
+  }
+
+  async function applyAutomationCollisionDamage(placementId, amount, damageType, { movedId = '' } = {}) {
+    if (movedId && placementId === movedId) {
+      const cut = await forcedMovementDamageReduction(placementId);
+      if (cut.amount > 0 && amount > 0) {
+        const left = Math.max(0, amount - cut.amount);
+        sayInChat(`${tokenLabel(getPlacementFromStore(placementId))}: ${cut.label} takes ${Math.min(amount, cut.amount)} off the slam damage (${amount} -> ${left}).`);
+        amount = left;
+        if (amount <= 0) return getZeroDamageResult(placementId);
+      }
+    }
     const adjustment = await getAutomationDamageAdjustment(placementId, damageType || '');
     const resolution = resolveAutomationDamageAmount({ amount, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity });
     const adjustedAmount = resolution.amount;
@@ -20985,6 +21461,7 @@ export function mountBoardInteractions(store, routes = {}) {
     let landing = clampPlacementToBounds(destination.column, destination.row, target.width, target.height);
     let collided = [];
     let wall = false;
+    let slam = 0;
     if (kind === 'forced') {
       const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[request.sceneId] || {};
       const origin = canonical[target.id];
@@ -20998,11 +21475,12 @@ export function mountBoardInteractions(store, routes = {}) {
           landing = { column: drag.destination.column, row: drag.destination.row };
           collided = drag.collidedIds || [];
           wall = Boolean(drag.wall);
+          slam = Number(drag.damage) || 0;
         } catch (error) { /* the preview only; the move itself checks again */ }
       }
     }
     const moved = automationChebyshevDistance(target, landing);
-    return { column: landing.column, row: landing.row, moved, collidedIds: collided.map(String), wall };
+    return { column: landing.column, row: landing.row, moved, collidedIds: collided.map(String), wall, damage: slam };
   }
 
   function updateAutomationMovePreview(cell) {

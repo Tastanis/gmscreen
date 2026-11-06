@@ -428,7 +428,8 @@ async function mount(){
    if(target&&land){const w=target.width||1,h=target.height||1,from=world(target),x=land.column+w/2,y=land.row+h/2,z=ground(x,y);
     if(land.column!==target.column||land.row!==target.row)guideHeld={id:target.id,x,y,z};
     const verb=String(guide.verb||(guide.movementKind==='teleport'?'teleport':'move'));
-    const text=`${verb[0].toUpperCase()}${verb.slice(1)} ${land.moved}${land.wall?' · hits a wall':land.collidedIds?.length?' · hits a creature':''}`;
+    const hit=land.wall?'a wall':land.collidedIds?.length?'a creature':'';
+    const text=`${verb[0].toUpperCase()}${verb.slice(1)} ${land.moved}${hit?` · hits ${hit}${land.damage>0?` for ${land.damage}`:''}`:''}`;
     guideRoute=land.moved?{pieces:[{points:[{x:from.x,y:from.y,z:from.z},{x,y,z}],color:'#f59e0b'}],total:{text,at:{x,y,z:z+1.6}}}:null;}
   }
   else if(guide.kind==='area'){view.setReachable([]);view.setPath([]);paintAreaPreview(guide,height);return;}

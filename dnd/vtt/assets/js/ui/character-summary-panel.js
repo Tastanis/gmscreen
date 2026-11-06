@@ -8,6 +8,7 @@ import {statusHtml, traitsHtml, featuresHtml, recordHtml, tabsHtml, themeToggleH
 import {normalizeSheetConditions, durationShort} from '../../../../character_sheet/parts/conditions.js';
 import {editHeroCondition, CONDITION_SYNC_CHANNEL} from '../../../../character_sheet/parts/condition-edits.js';
 import {createSheetLive} from '../../../../character_sheet/parts/sheet-live.js';
+import {noteResourceLevel} from './resource-levels.js';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
 const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -121,6 +122,25 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   // A maintained persistent ability used again for free, from the start-of-turn question (board-interactions.js
   // runMaintainedAgain). Found on the hero's sheet by its id or its name.
   window.VTTCharacterAbilities = {
+    // free: no cost; ensureAuraOn: an aura it makes is switched on (never off); triggerPayload: it resolves a trigger.
+    async run({ characterId, sourceToken = null, abilityId = '', name = '', free = false, ensureAuraOn = false, triggerPayload = null } = {}) {
+      if (!characterId) return { ran: false, reason: 'no-character' };
+      const sheet = await fetchCharacterSummary(routes, characterId);
+      const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
+      const wantName = String(name || '').trim().toLowerCase();
+      for (const [category, list] of Object.entries(actions)) {
+        if (!Array.isArray(list)) continue;
+        const index = list.findIndex((action, i) => action && (
+          (abilityId && (action.id === abilityId || (action._stableActionId || getStableActionId(action, category, i)) === abilityId))
+          || (wantName && String(action.name || '').trim().toLowerCase() === wantName)));
+        if (index < 0) continue;
+        const action = { ...list[index], _stableActionId: list[index]._stableActionId || getStableActionId(list[index], category, index), ...(free ? { _maintainRerun: true } : {}), ...(ensureAuraOn ? { _ensureAuraOn: true } : {}) };
+        if (!hasAbilityAutomation(action.automation)) return { ran: false, reason: 'no-automation', name: action.name };
+        startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, ...(free ? { free: true } : {}), ...(triggerPayload ? { triggerPayload } : {}) });
+        return { ran: true, name: action.name };
+      }
+      return { ran: false, reason: 'not-found' };
+    },
     async runFree({ characterId, sourceToken = null, abilityId = '', name = '' } = {}) {
       if (!characterId) return { ran: false, reason: 'no-character' };
       const sheet = await fetchCharacterSummary(routes, characterId);
@@ -2120,6 +2140,7 @@ async function fetchCharacterSummary(routes, characterId) {
     throw new Error(payload?.error || 'Sheet summary response was empty');
   }
 
+  noteResourceLevel(characterId, payload.data?.hero?.resource?.value);
   return payload.data;
 }
 
@@ -2957,6 +2978,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     getAttributeBonus: (attribute) => getAttributeBonus(sheet, attribute),
     getStrongestAttribute: () => getStrongestAttribute(sheet),
     getSkillBonus: (skill) => getSkillBonus(sheet, skill),
+    // The most heroic resource this hero has had this turn (a branch's "resource" condition: Discipline Mastery).
+    getResourceLevel: () => {
+      const level = sourceToken?.id ? window.vttResourceLevelForPlacement?.(sourceToken.id) : null;
+      return Number.isFinite(Number(level)) && level !== null ? Number(level) : (Number.parseInt(sheet?.hero?.resource?.value ?? 0, 10) || 0);
+    },
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
     selectAreaTarget: requestAutomationAreaTarget,
@@ -3005,6 +3031,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     setScopedFlag: requestAutomationSetScopedFlag,
     clearScopedFlag: requestAutomationClearScopedFlag,
     setAura: requestAutomationSetAura,
+    resizeAura: (payload) => window.VTTBoardCallbacks?.resizeAura?.(payload) ?? Promise.resolve({ applied: false }),
     showFloatingText: requestAutomationFloatingText,
     startTurn: requestAutomationStartTurn,
     getPowerRollSuggestions: (payload) => (
@@ -3773,7 +3800,8 @@ async function spendAbilityResource(sheet, ability, options = {}) {
       detail: { characterId: options.characterId, change: 'resource' },
     }));
   }
-  return { spent: cost.amount, resource: title, remaining: resource.value };
+  // What was taken off (a floor can take less than the cost): that is what a refund gives back.
+  return { spent: Math.max(0, current - resource.value), resource: title, remaining: resource.value };
 }
 
 // The floor a resource can drop to when paying a cost. `allowNegative`
@@ -3912,6 +3940,8 @@ async function saveCharacterHeroicResource(sheet, options = {}) {
   const characterId = typeof options.characterId === 'string' ? options.characterId : '';
   const resource = sheet?.hero?.resource;
   if (!characterId || !resource || typeof resource !== 'object') return false;
+  // The number before a spend counts toward this turn's most (Discipline Mastery lasts the turn).
+  noteResourceLevel(characterId, resource.value, { before: options.before });
   const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
   const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet
     ? routeConfig.sheet

@@ -56,24 +56,27 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | Field | Notes |
 |---|---|
 | `id` | Stable rule key. Also used as the default once-per-round flag key. |
-| `event` | `combatStart`, `combatEnd`, `roundStart`, `roundEnd`, `turnStart`, `turnEnd`, `damage`, `damageDealt`, `forcedMovement`, `forcedMovementDealt`, `actionUsed`, `powerRoll`, `abilityTest`, or `abilityRoll`. |
+| `event` | `combatStart`, `combatEnd`, `roundStart`, `roundEnd`, `turnStart`, `turnEnd`, `damage`, `damageDealt`, `forcedMovement`, `forcedMovementDealt`, `actionUsed`, `powerRoll`, `abilityTest`, `abilityRoll`, `winded` (Stamina first drops to half or less), `dying` (to 0 or less), or `maliceSpent` (the Director spends Malice on a monster ability: the Null). A push made by hand (Ctrl-drag) is a `forcedMovement` too, pushed by whoever's turn it is. |
 | `filter.whose` | Matches the primary event actor: `self`, `ally`, `enemy`, `judgedTarget`, `markSource`, or `any`. |
 | `filter.sourceWhose` | Matches `payload.sourceId`, useful for "a creature judged by you damages you." |
 | `filter.targetWhose` | Matches event targets, useful for "you damage a creature judged by you." |
 | `filter.withinSquares` | Chebyshev distance from the resource owner to the event target. |
+| `filter.insideAura` | `true`, or an ability name such as `"Null Field"`: the creature in the event stands inside that aura of the hero's, at its size now ("an enemy in the area of your Null Field"). |
 | `filter.damageTypeNot` | Excludes damage types such as `["holy", "untyped"]`. |
 | `filter.damageTypeAny` | Allows only listed damage types. |
 | `filter.includesSurge` | Requires a damage payload to include `includesSurge`, `surgeSpent`, or `surgeCount`. Power-roll surge spends set this automatically. |
 | `filter.minAmount` / `maxAmount` | Damage amount band. |
 | `filter.minDistance` / `maxDistance` | Forced movement distance band. |
 | `filter.actionKind`, `costIncludes`, `keywordsAny`, `verb` | Additional event filters. |
-| `limit.scope` | `round`, `turn`, or `encounter`. |
+| `limit.scope` | `round`, `turn`, or `encounter` (one fight). Marks are kept on the hero's token (every page sees them, a reload keeps them) and belong to the fight they were made in. While a popup for the rule is open no second one opens for it. |
 | `limit.key` | Scoped flag key. |
-| `limit.markOn` | `offered` by default, or `applied`. |
+| `limit.markOn` | `applied` by default: the limit is used when the gain is taken, so Cancel leaves it free (Brandon, November 2026). `offered` uses it when the popup shows. |
 | `effect.kind` | `gain`, `lose`, `set`, or `damage`. |
 | `effect.amount` | Number, dice string like `1d3`, `{ "from": "victories" }`, `{ "from": "negativeResource" }`, or level-based objects. |
-| `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, and `{round}`. |
-| `autoApply` | Optional boolean. `true` skips the confirmation popup and applies the rule immediately. |
+| `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, `{round}`, `{target}` and `{source}` (creature names). The popup puts what happened first ("Goblin was force moved.") unless the prompt names {target} or {source}, and asks it as a question. Buttons are Yes / Cancel (`applyLabel`, `cancelLabel` change them). |
+| `autoApply` | Optional boolean. `true` skips the confirmation popup and applies the rule immediately (keep it for combat start and end). |
+
+Who is asked: the hero's player, the start of their turn too; when the player's page does not take the popup up within about 25 seconds (not on), the Director is asked instead. A gain is undone with the action that caused it (one Ctrl+Z), and its limit with it.
 
 ## Amount Examples
 

@@ -51,10 +51,20 @@ test('mechanical effect attempts retain one action-use mark after a partial unce
  assert.equal(writes,2);assert.equal(result.calls.fireTriggerEvent.filter(e=>e.eventType==='actionUsed').length,1);
  }finally{h.close();}
 });
-test('a confirmed positive resource cost marks once even if later target picking is canceled',async()=>{
+// Brandon (November 2026): cancelled before anything was picked or happened, the cost comes back and no action is used.
+test('a paid cost is given back, and no action used, when target picking is canceled before anything happened',async()=>{
  const h=await createAbilityAutomationHarness();try{
  const result=await h.runAutomation({...options,targetSelections:[{canceled:true}],spendResourceResults:[{spent:3,remaining:4,resource:'Essence'}]});
- assert.equal(result.calls.fireTriggerEvent.filter(e=>e.eventType==='actionUsed').length,1);assert.equal(result.calls.applyDamage?.length||0,0);
+ assert.equal(result.calls.fireTriggerEvent?.filter(e=>e.eventType==='actionUsed').length||0,0);assert.equal(result.calls.applyDamage?.length||0,0);
+ const refunds=result.calls.refundAbility||[];assert.equal(refunds.length,1);assert.equal(refunds[0].resourceSpend.spent,3);assert.equal(refunds[0].canceled,true);
+ }finally{h.close();}
+});
+test('a cost is not given back once a target was picked',async()=>{
+ const h=await createAbilityAutomationHarness();try{
+ const two={...automation,cards:[{...automation.cards[0],count:{value:2,mode:'exact'}},...automation.cards.slice(1)]};
+ const result=await h.runAutomation({...options,automation:two,targetSelections:[{id:'goblin',name:'Goblin'},{canceled:true}],spendResourceResults:[{spent:3,remaining:4,resource:'Essence'}]});
+ assert.equal(result.calls.refundAbility?.length||0,0);
+ assert.equal(result.calls.fireTriggerEvent.filter(e=>e.eventType==='actionUsed').length,1);
  }finally{h.close();}
 });
 test('successful manual note and other abilities still use their main action once',async()=>{

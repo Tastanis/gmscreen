@@ -198,7 +198,11 @@
         var categoryKey = abilityItem.getAttribute('data-ability-category');
         if (isNaN(index) || !categoryKey) return;
         var ability = abilitiesFor(state.monster, categoryKey)[index];
-        if (!hasAutomation(ability)) return;
+        if (!ability) return;
+        if (!hasAutomation(ability)) {
+            useUnautomatedAbility(categoryKey, index, ability);
+            return;
+        }
         state.activeCategory = null;
         hidePreview();
         render();
@@ -338,6 +342,30 @@
         }
         if (ability && ability.range) parts.push('Range ' + ability.range);
         return parts.filter(Boolean).join(' - ');
+    }
+
+    // An ability with no automation, used (Brandon, November 2026): its card goes to chat, it counts as the monster
+    // using it ("an enemy in your Null Field uses a main action"), and its Malice is spent ("the Director uses an
+    // ability that costs Malice"), as an automated one's is.
+    function useUnautomatedAbility(categoryKey, index, ability) {
+        state.activeCategory = null;
+        hidePreview();
+        render();
+        postAbilityToChat(categoryKey, index);
+        var placementId = state.placement && state.placement.id ? state.placement.id : '';
+        var kinds = { action: 'main', maneuver: 'maneuver', triggered_action: 'triggered', villain_action: 'villain', malice: 'malice' };
+        var cost = String(ability.resource_cost || '');
+        try {
+            if (window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.fireTriggerEvent === 'function' && placementId) {
+                window.VTTBoardCallbacks.fireTriggerEvent({ eventType: 'actionUsed', payload: { actorId: placementId, actionId: '', actionName: ability.name || 'Ability', actionKind: kinds[categoryKey] || categoryKey || '', cost: cost, keywords: [] } });
+            }
+            var malice = cost.match(/(\d+)\s*malice/i);
+            if (malice && categoryKey !== 'villain_action' && window.MaliceTracker && typeof window.MaliceTracker.spend === 'function') {
+                window.MaliceTracker.spend(Number(malice[1]), { sourceId: placementId, abilityName: ability.name || '' });
+            }
+        } catch (error) {
+            console.warn('[MonsterAbilityTray] ability use events failed', error);
+        }
     }
 
     function postAbilityToChat(categoryKey, index) {

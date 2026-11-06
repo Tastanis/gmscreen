@@ -482,6 +482,12 @@
     if (!amountFrom || typeof amountFrom !== "object") return 0;
     if (amountFrom.source === "damageDealt") return scaleTriggerValue(asInt(state.damageDealt, 0), amountFrom);
     if (amountFrom.source === "count") return asInt(state.countValue, 0);
+    // The squares this ability force moved the creature (Impart Force: "for each square you push the target, they
+    // take 1 psychic damage"): the last forced movement's, or the target's when the caller says which.
+    if (amountFrom.source === "pushedSquares") {
+      const moved = state.currentEffectTargetId && state.forcedMoved ? state.forcedMoved[state.currentEffectTargetId] : state.lastForcedMoved;
+      return scaleTriggerValue(asInt(moved, 0), amountFrom);
+    }
     const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
       ? state.triggerPayload.payload
       : state.triggerPayload || null;
@@ -850,6 +856,7 @@
           return;
         }
         const tokens = Array.isArray(result?.targets) ? result.targets : [];
+        markCommitted(state);
         setTargetGroup(state, block.name, tokens);
         fireTargetedEvents(state, tokens);
         // Persist the placed template area so a later `persistent` block in
@@ -937,6 +944,7 @@
         if (result?.id && !seen.has(result.id) && !excludedIds.has(result.id)) {
           seen.add(result.id);
           selected.push(result);
+          markCommitted(state);
         }
         // Count "all"/"each": picking goes on until Done.
       }
@@ -1612,6 +1620,7 @@
       if (target.closest("[data-power-roll-roll]")) {
         refreshPowerRollSuggestions(state, block);
         state.roll = rollFormula(block.rollFormula || "2d10");
+        markCommitted(state);
         const { total, attributeBonus, skill, skillBonus, bonus, edgeState } = getPowerRollTotal(state, block);
         state.baseTier = P.tierFromTotal(total);
         state.selectedTier = P.shiftTierKey(state.baseTier, edgeState.tierShift);
@@ -2110,6 +2119,8 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
+    // A chat note is not the ability going off; anything else is.
+    if (!["note", "other", "spend"].includes(effect.kind)) markCommitted(state);
     if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries","buff","counter"].includes(effect.kind)) {
       fireActionUsedEvent(state);
     }
@@ -2178,6 +2189,10 @@
         return applyStartTurnEffect(state, effect, targets);
       case "aura":
         return applyAuraEffect(state, effect, targets, ctx);
+      case "auraSize":
+        return applyAuraSizeEffect(state, effect);
+      case "endConditionChoice":
+        return applyEndConditionChoiceEffect(state, effect);
       case "heal":
         return applyHealEffect(state, effect, targets, ctx, false);
       case "temporaryStamina":
@@ -2424,8 +2439,8 @@
       }
       const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue + reachBonus + (counted ? counted.extra : 0));
       const amount = Math.max(0, amountBeforeSurge + surgeBonus.damage);
-      // Nobody counted and nothing else: no hit of 0.
-      if (counted && amount <= 0) continue;
+      // Nobody counted (or nothing pushed, nothing to scale) and nothing else: no hit of 0.
+      if ((counted || effect.amountFrom) && amount <= 0) continue;
       const damagePayload = {
         placementId: target.id,
         sourceId: state.sourcePlacement?.id || "",
@@ -2438,6 +2453,8 @@
         keywords: getAbilityKeywords(state),
       };
       if (effect.ignoreImmunity !== undefined) damagePayload.ignoreImmunity = effect.ignoreImmunity;
+      // Damage from a power roll's tier is "rolled damage" (Synapse Field).
+      if (ctx?.powerRollSurges) damagePayload.rolled = true;
       // This chat line shows weakness and immunity itself.
       damagePayload.chatBreakdown = true;
       if (surgeBonus.spent > 0) {
@@ -2849,12 +2866,26 @@
         continue;
       }
       const moved = result.movedDistance ?? distance;
-      if (moved <= 0 && !result.collision) {
+      // Squares this ability moved each creature ("for each square you push the target": amountFrom pushedSquares).
+      (state.forcedMoved ||= {})[target.id] = (state.forcedMoved[target.id] || 0) + Math.max(0, moved);
+      state.lastForcedMoved = Math.max(0, moved);
+      const tags = {
+        effectiveDistance: Number(result.effectiveDistance ?? distance) || 0,
+        squaresLeft: Number(result.squaresLeft) || 0,
+        stoppedBy: result.stoppedBy || null,
+        collidedIds: Array.isArray(result.collidedIds) ? result.collidedIds : [],
+        slamDamage: Number(result.slamDamage) || 0,
+        resisted: Boolean(result.resisted),
+      };
+      if (result.resisted) {
+        lines.push(`${result.name || target.name || "Target"} resists the ${verb.replace(/^vertical/, "").toLowerCase()}${result.stability ? ` (Stability ${result.stability})` : ""}.`);
+      } else if (moved <= 0 && !result.collision) {
         lines.push(`${result.name || target.name || "Target"} is not moved: there is nowhere to ${verb.replace(/^vertical/, "").toLowerCase()} them.`);
         continue;
       }
       if (typeof state.context.fireTriggerEvent === "function") {
         const eventPayload = {
+          ...tags,
           placementId: target.id,
           targetId: target.id,
           targetName: result.name || target.name || "",
@@ -2875,6 +2906,7 @@
         state.context.fireTriggerEvent({ eventType: "forcedMovement", payload: eventPayload });
         state.context.fireTriggerEvent({ eventType: "forcedMovementDealt", payload: eventPayload });
       }
+      if (result.resisted) continue;
       const pastVerb = ({ push: "pushed", pull: "pulled", slide: "slid", verticalPush: "vertically pushed", verticalPull: "vertically pulled", verticalSlide: "vertically slid" })[verb] || "moved";
       lines.push(`${result.name || target.name || "Target"} is ${pastVerb} ${moved} square${moved === 1 ? "" : "s"}.`);
       if (result.collision) {
@@ -3008,6 +3040,8 @@
               ? Number(effect.threshold)
               : effect.level,
             sourceStats: state.hero?.stats || {},
+            // Whose potency it is: auras the user stands in may change it (the Null Field).
+            sourceId: state.sourcePlacement?.id || "",
             ...(asInt(state.rollPotencyBonus, 0) ? { thresholdBonus: asInt(state.rollPotencyBonus, 0) } : {}),
             })
           : { passes: true };
@@ -3516,7 +3550,7 @@
           if (answer?.canceled) { state.context.cancelTargetSelection?.(); state.aborted = true; return; }
           if (answer?.skipped || answer?.done || !answer?.id) { state.context.cancelTargetSelection?.(); break; }
           if (selected.has(answer.id)) selected.delete(answer.id);
-          else selected.set(answer.id, answer);
+          else { selected.set(answer.id, answer); markCommitted(state); }
         }
         picked = [...selected.values()];
       }
@@ -3993,6 +4027,42 @@
 
   // A refused ability never ran, so what was paid for it goes back: a monster's
   // Malice is taken before the runner opens, a hero's resource just after.
+  // The ability has gone off: something was picked, rolled or applied. From here a cancel gives nothing back.
+  function markCommitted(state) {
+    if (state) state.committed = true;
+  }
+
+  // Cancelled before anything happened: everything it cost comes back (once).
+  async function refundCanceledAbility(state) {
+    if (!state || state.committed || state.canceledRefunded) return;
+    state.canceledRefunded = true;
+    const spends = [state.abilityResourceSpend, ...(state.uncommittedSpends || [])].filter((spend) => Number(spend?.spent) > 0);
+    const triggered = state.triggeredActionSpend?.consumed ? state.triggeredActionSpend : null;
+    if (typeof state.context.refundAbility === "function" && (spends.length || triggered)) {
+      const list = spends.length ? spends : [null];
+      for (let index = 0; index < list.length; index += 1) {
+        try {
+          await state.context.refundAbility({
+            resourceSpend: list[index],
+            triggeredActionSpend: index === 0 ? triggered : null,
+            action: state.action,
+            sourcePlacementId: state.sourcePlacement?.id || "",
+            canceled: true,
+          });
+        } catch (error) {
+          console.warn("[AbilityAutomationRunner] refund failed", error);
+        }
+      }
+    }
+    try { await clearUsageLimit(state); } catch (error) { /* nothing was marked */ }
+    if (spends.length) {
+      const total = spends.map((spend) => `${spend.spent} ${spend.resource || "resource"}`).join(", ");
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: canceled before anything happened, ${total} given back.`,
+      });
+    }
+  }
+
   async function refundRefusedAbility(state) {
     if (typeof state.context.refundAbility !== "function") return;
     await state.context.refundAbility({
@@ -4018,6 +4088,37 @@
       key: limit.key,
       sourceId: ids.sourceId,
       targetId: ids.targetId,
+    });
+  }
+
+  // Choose one effect to end on the user or a creature in its aura (Reorder).
+  async function applyEndConditionChoiceEffect(state, effect) {
+    const choose = state.context.chooseConditionToEnd || global.VTTBoardCallbacks?.chooseConditionToEnd;
+    if (typeof choose !== "function" || !state.sourcePlacement?.id) {
+      await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: end one save-ends or end-of-turn effect by hand.` });
+      return;
+    }
+    const result = await choose({ sourceId: state.sourcePlacement.id, among: effect.among || {}, title: state.action.name || "End an effect", message: "Choose one effect to end." });
+    await postChat(state.context, {
+      message: result?.ended
+        ? `${state.heroName} - ${state.action.name || "Ability"}: ${result.name}'s ${result.condition} ends.`
+        : `${state.heroName} - ${state.action.name || "Ability"}: ${result?.reason === "none" ? "nothing to end" : "nothing ended"}.`,
+    });
+  }
+
+  // A named aura of the user's grows or shrinks (Synapse Field: "the size of your Null Field increases by 1").
+  async function applyAuraSizeEffect(state, effect) {
+    const resize = state.context.resizeAura || global.VTTBoardCallbacks?.resizeAura;
+    if (typeof resize !== "function" || !state.sourcePlacement?.id) {
+      await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${effect.aura || "the aura"} ${effect.by > 0 ? "+" : ""}${effect.by} size, apply by hand.` });
+      return;
+    }
+    const result = await resize({ placementId: state.sourcePlacement.id, aura: effect.aura, by: effect.by, until: effect.until || "combatEnd", key: state.action.name || "growth" });
+    const until = (effect.until || "combatEnd") === "combatEnd" ? " until the end of the encounter" : "";
+    await postChat(state.context, {
+      message: result?.applied
+        ? `${state.heroName} - ${state.action.name || "Ability"}: ${result.name || effect.aura} is now ${result.radius} square${result.radius === 1 ? "" : "s"}${until}.`
+        : `${state.heroName} - ${state.action.name || "Ability"}: ${effect.aura} is not on, nothing to grow (switch it on first).`,
     });
   }
 
@@ -4047,17 +4148,21 @@
           attributeBonuses[attr] = state.context.getAttributeBonus(attr) || 0;
         }
       }
-      const automation = Array.isArray(effect.triggers) && effect.triggers.length && Array.isArray(effect.effects) && effect.effects.length
+      const timed = Array.isArray(effect.triggers) && effect.triggers.length && Array.isArray(effect.effects) && effect.effects.length;
+      const automation = timed || effect.potency
         ? {
             abilityId: state.action?.id || "",
             abilityName: state.action?.name || "Aura",
             sourceId: state.sourcePlacement?.id || "",
             sourceName: state.heroName || "",
             affects: effect.affects || "creature",
-            triggers: effect.triggers,
-            effects: effect.effects,
+            triggers: timed ? effect.triggers : [],
+            effects: timed ? effect.effects : [],
+            potency: effect.potency || null,
             expires: effect.expires || null,
             requires: effect.requires || null,
+            followsAura: effect.followsAura || null,
+            autoOn: effect.autoOn || null,
             attributeBonuses,
           }
         : null;
@@ -4069,7 +4174,8 @@
           radius,
           color: effect.color || "",
           automation,
-          toggle: effect.toggle === true,
+          // Switched on by itself at a fight's start: never toggled off.
+          toggle: effect.toggle === true && !state.action?._ensureAuraOn,
         });
         if (typeof answer?.enabled === "boolean") nowEnabled = answer.enabled;
       }
@@ -4159,8 +4265,9 @@
       }
     }
     const spent = spendResult?.spent || effect.amount || 1;
-    if (spent > 0) fireActionUsedEvent(state);
     const resource = spendResult?.resource || effect.resource || "resource";
+    if (spent > 0 && state.committed) fireActionUsedEvent(state);
+    else if (spent > 0) (state.uncommittedSpends ||= []).push({ spent, resource });
     await postChat(state.context, {
       message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}${when}.`,
     });
@@ -4439,6 +4546,7 @@
       });
       return;
     }
+    markCommitted(state);
     setTargetGroup(state, groupName, [result]);
     const block = {
       type: "powerRoll",
@@ -4524,6 +4632,10 @@
         return isCasterStrained(state);
       case "winded":
         return isActorWinded(state);
+      case "resource": {
+        const level = typeof state.context.getResourceLevel === "function" ? await state.context.getResourceLevel() : null;
+        return Number(level) >= (Number(c.min) || 0);
+      }
       case "keyword":
         return P.keywordsMatch
           ? P.keywordsMatch(getAbilityKeywords(state), { all: c.all, any: c.any, none: c.none })
@@ -4795,8 +4907,10 @@
   }
 
   function getActionKind(state) {
+    // Switched on by itself at a fight's start (an aura's autoOn): no action used.
+    if (state.action?._ensureAuraOn) return "free";
     // "No action required" (Mantle of Essence switched on or off): it uses neither the main action nor the maneuver.
-    if (/no action/i.test(String(state.action?.actionLabel || ""))) return "free";
+    if (/no action|free maneuver|free triggered/i.test(String(state.action?.actionLabel || ""))) return "free";
     const text = String(
       state.action?.actionKind ||
         state.action?.kind ||
@@ -5320,7 +5434,6 @@
           return;
         }
         state.abilityResourceSpend = spendResult || null;
-        if (Number(spendResult?.spent) > 0) fireActionUsedEvent(state);
       }
 
       if (isArmingOnly) {
@@ -5361,9 +5474,11 @@
       // Earlier concrete attempts reserve this once; canceled selection does not.
       if (!state.aborted) fireActionUsedEvent(state, defersActionUsed);
       if (state.aborted) {
+        if (state.committed) fireActionUsedEvent(state, defersActionUsed);
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"} automation canceled.`,
         });
+        await refundCanceledAbility(state);
       }
     } catch (error) {
       closeRunner();

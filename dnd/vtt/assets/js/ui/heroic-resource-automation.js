@@ -15,6 +15,11 @@ const SUPPORTED_EVENTS = new Set([
   'powerRoll',
   'abilityTest',
   'abilityRoll',
+  // A creature's Stamina first drops to half or less (winded), or to 0 or less (dying): the Fury's Ferocity.
+  'winded',
+  'dying',
+  // The Director spends Malice (the Null's Discipline): payload {amount, sourceId (the monster, when known)}.
+  'maliceSpent',
 ]);
 
 const LIMIT_SCOPES = new Set(['round', 'turn', 'encounter']);
@@ -80,7 +85,12 @@ function normalizeAmountSpec(input) {
   if (!source) return { amount: 0 };
   const out = {};
   if (source.from) out.from = asTrimmedString(source.from);
-  if (source.dice) out.dice = asTrimmedString(source.dice).toLowerCase();
+  if (source.dice) {
+    // {dice: "1d3+1"}: the bonus inside the dice is a bonus (it rolled 0 before).
+    const [, dice, inner] = asTrimmedString(source.dice).replace(/\s+/g, '').toLowerCase().match(/^(\d+d\d+)([+-]\d+)?$/) || [];
+    out.dice = dice || asTrimmedString(source.dice).toLowerCase();
+    if (inner && source.bonus == null) out.bonus = asInt(inner, 0);
+  }
   if (source.amount != null) out.amount = asInt(source.amount, 0);
   if (source.bonus != null) out.bonus = asInt(source.bonus, 0);
   if (Array.isArray(source.amountByLevel)) {
@@ -129,6 +139,10 @@ function normalizeFilter(input) {
   if (source.includesSurge != null) filter.includesSurge = Boolean(source.includesSurge);
   if (source.actionKind) filter.actionKind = asTrimmedString(source.actionKind).toLowerCase();
   if (source.costIncludes) filter.costIncludes = asTrimmedString(source.costIncludes).toLowerCase();
+  // A push all taken by Stability counts only with includeResisted ("even if you resist").
+  if (source.includeResisted === true) filter.includeResisted = true;
+  // The creature in the event stands inside one of the hero's auras (true), or the one named ("Null Field"), at its size now.
+  if (source.insideAura) filter.insideAura = source.insideAura === true ? true : asTrimmedString(source.insideAura).toLowerCase();
   if (source.verb) filter.verb = asTrimmedString(source.verb).toLowerCase();
   if (source.distanceTo) filter.distanceTo = asTrimmedString(source.distanceTo).toLowerCase();
   const keywordsAny = normalizeStringList(source.keywordsAny);
@@ -151,7 +165,8 @@ function normalizeLimit(input, ruleId) {
     scope,
     key,
     target: asTrimmedString(source.target || 'self').toLowerCase() || 'self',
-    markOn: asTrimmedString(source.markOn || 'offered').toLowerCase() === 'applied' ? 'applied' : 'offered',
+    // Used up when the gain is taken (Brandon: "if they say no that doesn't count"); "offered" only when a rule says so.
+    markOn: asTrimmedString(source.markOn || 'applied').toLowerCase() === 'offered' ? 'offered' : 'applied',
   };
 }
 
@@ -183,6 +198,9 @@ function normalizeRule(input, index, warnings) {
     limit: normalizeLimit(source.limit || source.oncePer, id),
     effect,
     prompt: asTrimmedString(source.prompt),
+    // The popup's buttons (default Yes / Cancel).
+    ...(asTrimmedString(source.applyLabel) ? { applyLabel: asTrimmedString(source.applyLabel) } : {}),
+    ...(asTrimmedString(source.cancelLabel) ? { cancelLabel: asTrimmedString(source.cancelLabel) } : {}),
     autoApply: source.autoApply === true,
     enabled: source.enabled !== false,
   };
@@ -367,6 +385,7 @@ function resolveDistanceTargetId(filter, event, payload) {
 export function ruleMatchesHeroicResourceEvent(rule, eventType, payload = {}, env = {}) {
   if (!rule?.enabled || rule.event !== eventType) return false;
   const filter = rule.filter || {};
+  if (payload?.resisted === true && !filter.includeResisted) return false;
   const primaryId = payloadPrimaryTokenId(eventType, payload);
   if (!matchesWhose(filter.whose || 'any', primaryId, env)) return false;
   if (filter.sourceWhose) {
@@ -381,6 +400,10 @@ export function ruleMatchesHeroicResourceEvent(rule, eventType, payload = {}, en
     const otherId = resolveDistanceTargetId(filter, eventType, payload);
     const distance = env.getSquareDistance(env.casterId, otherId);
     if (!Number.isFinite(distance) || distance > filter.withinSquares) return false;
+  }
+  if (filter.insideAura) {
+    const otherId = resolveDistanceTargetId(filter, eventType, payload);
+    if (typeof env.isInsideAura !== 'function' || !env.isInsideAura(env.casterId, otherId, filter.insideAura)) return false;
   }
   const amount = asInt(payload.amount, 0);
   if (filter.minAmount != null && amount < filter.minAmount) return false;

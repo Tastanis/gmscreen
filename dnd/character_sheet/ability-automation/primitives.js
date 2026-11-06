@@ -10,6 +10,8 @@
   const BLOCK_TYPES = ["target", "powerRoll", "requestedTest", "effect", "trigger", "persistent", "branch", "choice"];
 
   const EFFECT_KINDS = [
+    "auraSize",
+    "endConditionChoice",
     "damage",
     "heal",
     "temporaryStamina",
@@ -65,7 +67,7 @@
   // reactions because both payloads expose the same distance field.
   // `damageDealt` is not from a trigger: it is the damage this ability has dealt so far (after immunity and
   // weakness), for "heals equal to the damage dealt".
-  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement", "damageDealt", "count"];
+  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement", "damageDealt", "count", "pushedSquares"];
 
   // Standard Draw Steel ability keywords. Authors can use any string, but the
   // ones below are recognized for canonical casing and as the registry seed.

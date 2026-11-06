@@ -1124,7 +1124,7 @@
         // Switches the caster's token aura on (or off) when the ability runs.
         // Token auras are a VTT placement feature; the runner forwards this to
         // the board via the setAura context hook. radius is clamped 1-20.
-        const known = new Set(["kind", "enabled", "radius", "radiusAttribute", "color", "target", "text", "affects", "triggers", "trigger", "effects", "expires", "lifetime", "requires", "toggle"]);
+        const known = new Set(["kind", "enabled", "radius", "radiusAttribute", "color", "target", "text", "affects", "triggers", "trigger", "effects", "expires", "lifetime", "requires", "toggle", "potency", "followsAura", "autoOn"]);
         const enabled = input.enabled !== false;
         // radius: a number of squares, or a characteristic ("Reason": Mantle of Essence's "distance equal to your Reason").
         const ATTRIBUTES = { m: "Might", might: "Might", a: "Agility", agility: "Agility", r: "Reason", reason: "Reason", i: "Intuition", intuition: "Intuition", p: "Presence", presence: "Presence" };
@@ -1137,11 +1137,24 @@
           target: pickKnown(input.target, ["self", "target"], "self"),
         };
         if (radiusAttribute) effect.radiusAttribute = radiusAttribute;
+        // followsAura: inside = inside that aura of the user's at its size now (no ring of its own). autoOn: "combatStart".
+        if (asTrimmedString(input.followsAura)) effect.followsAura = asTrimmedString(input.followsAura);
+        if (asTrimmedString(input.autoOn).toLowerCase() === "combatstart") effect.autoOn = "combatStart";
+        // potency: {occupants: -1} the potencies of creatures inside that it affects (Null Field); {against: 1} potencies
+        // used by the owner and allies against creatures inside (Synaptic Break).
+        if (input.potency && typeof input.potency === "object") {
+          const potency = {};
+          const occupants = Number.parseInt(input.potency.occupants, 10);
+          const against = Number.parseInt(input.potency.against, 10);
+          if (Number.isFinite(occupants) && occupants) potency.occupants = occupants;
+          if (Number.isFinite(against) && against) potency.against = against;
+          if (Object.keys(potency).length) effect.potency = potency;
+        }
         if (input.toggle === true) effect.toggle = true;
         // requires: the aura does nothing while it is not met (checked each time it would act).
         if (input.requires && typeof input.requires === "object") {
           const requires = {};
-          const resourceMin = asPosInt(input.requires.resourceMin, 0);
+          const resourceMin = asNonNegInt(input.requires.resourceMin, 0);
           if (resourceMin) requires.resourceMin = resourceMin;
           if (input.requires.notDying === true) requires.notDying = true;
           if (Object.keys(requires).length) effect.requires = requires;
@@ -1161,6 +1174,18 @@
         if (expires) effect.expires = expires;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "endConditionChoice": {
+        // Choose one effect to end, a save-ends or end-of-turn one, on the user or a creature in its aura (Reorder).
+        const among = input.among && typeof input.among === "object" ? input.among : {};
+        return { kind: "endConditionChoice", among: { includeSelf: among.includeSelf !== false, whose: asTrimmedString(among.whose) === "any" ? "any" : "ally", ...(among.aura ? { aura: among.aura === true ? true : asTrimmedString(among.aura) } : {}) } };
+      }
+      case "auraSize": {
+        // A named aura of the user's grows (or shrinks) by `by`, until "combatEnd" (the end of the encounter).
+        const effect = { kind: "auraSize", aura: asTrimmedString(input.aura || input.name), by: Number.parseInt(input.by ?? input.amount, 10) || 0, until: asTrimmedString(input.until) || "combatEnd" };
+        if (!effect.aura) warnings.push(`${path}: auraSize needs the aura's ability name ("aura": "Null Field").`);
+        if (!effect.by) warnings.push(`${path}: auraSize needs "by" (e.g. 1).`);
         return effect;
       }
       case "other": {
@@ -1537,6 +1562,21 @@
     if (filterInput.minSquares != null && filterInput.minSquares !== "") {
       filter.minSquares = asNonNegInt(filterInput.minSquares, 0);
     }
+    if (filterInput.includeResisted === true) filter.includeResisted = true;
+    // Only when the caster (includeSelf) or a creature in its aura ("aura": "Null Field") has an effect a save ends or
+    // that ends at the end of its turn (Reorder).
+    if (filterInput.endableConditionIn && typeof filterInput.endableConditionIn === "object") {
+      const spec = filterInput.endableConditionIn;
+      filter.endableConditionIn = { includeSelf: spec.includeSelf !== false, whose: asTrimmedString(spec.whose) === "any" ? "any" : "ally", ...(spec.aura ? { aura: spec.aura === true ? true : asTrimmedString(spec.aura) } : {}) };
+    }
+    // Only while the caster has N or more heroic resource (the most it was this turn).
+    if (filterInput.resourceMin != null && filterInput.resourceMin !== "") {
+      filter.resourceMin = asNonNegInt(filterInput.resourceMin, 0);
+    }
+    // The creature in the event is inside one of the caster's auras (true) or the named one ("Null Field").
+    if (filterInput.insideAura) {
+      filter.insideAura = filterInput.insideAura === true ? true : asTrimmedString(filterInput.insideAura);
+    }
     // Universal caster-state gates (any event). `excludeSelf` skips events the
     // caster themself caused ("another hero..." triggers — whose:"ally" is a
     // pure team check and includes self). `casterHasNotActed` only arms while
@@ -1745,6 +1785,7 @@
     if (damageTypes.length) filter.damageType = damageTypes;
     const verb = asTrimmedString(filterInput.verb);
     if (verb) filter.verb = verb;
+    if (filterInput.rolledOnly === true) filter.rolledOnly = true;
     if (Object.keys(filter).length) trigger.filter = filter;
     return trigger;
   }
@@ -1930,7 +1971,7 @@
     return block;
   }
 
-  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone", "target", "roll", "counter"];
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone", "target", "roll", "counter", "resource"];
 
   // ---------- target checks (ifTarget, branch "target") and roll checks (ifRoll, branch "roll") ----------
   const TARGET_STAMINA_STATES = ["winded", "notWinded", "full", "belowFull", "dying"];
@@ -2059,6 +2100,8 @@
     const rawKind = asTrimmedString(input.kind || input.type || input.if).toLowerCase().replace(/\s+/g, "");
     const kindMap = {
       strained: "strained",
+      resource: "resource",
+      resourcemin: "resource",
       ifstrained: "strained",
       heroicresourcebelowzero: "strained",
       winded: "winded",
@@ -2090,6 +2133,10 @@
     }
     if (kind === "strained" || kind === "winded") {
       return { kind };
+    }
+    // "You have N or more" of your heroic resource (the most it was this turn).
+    if (kind === "resource") {
+      return { kind, min: asNonNegInt(input.min ?? input.resourceMin ?? input.amount, 1) };
     }
     if (kind === "keyword") {
       const condition = {
@@ -2354,6 +2401,7 @@
     const raw = input.when && typeof input.when === "object" ? input.when : {};
     const when = {};
     for (const key of ["winded", "notWinded", "targetWinded", "adjacentAlly"]) if (raw[key] === true) when[key] = true;
+    if (raw.resourceMin != null && raw.resourceMin !== "") when.resourceMin = asNonNegInt(raw.resourceMin, 0);
     for (const key of ["selfCondition", "targetCondition"]) {
       const names = normalizeWordList(raw[key]);
       if (names.length) when[key] = names;

@@ -412,6 +412,10 @@ For `trigger.effects`, the default resolution target is `eventActor`. Add `effec
 | filter field | Meaning |
 |---|---|
 | `withinSquares` | Only fire when the other token is **N squares or closer**. `1` = adjacent. |
+| `includeResisted` | `true`: a push, pull or slide that Stability took all of (`resisted: true`, moved 0) also counts ("even if you resist"). Without it such a push does not set the trigger off. |
+| `endableConditionIn` | `{ "aura": "Null Field", "includeSelf": true, "whose": "ally" }`: only when the caster, or a creature on its side in that aura, has an effect a save ends or that ends at the end of the turn (Reorder). |
+| `resourceMin` | Only while the caster has **N or more** of their heroic resource, counting the most they had this turn (the Null's Discipline Mastery: "benefits ... last until the end of your turn"). |
+| `insideAura` | `true` or an ability name (`"Null Field"`): only when the creature in the event stands inside that aura of the caster's, at its size now. |
 | `minSquares` | Only fire when the other token is **N squares or farther**. |
 
 Both are optional and may be combined to form a band (e.g. `"minSquares": 2, "withinSquares": 5`). If either token has no placement on the board the distance check is skipped (does not block the trigger). Example — "when an enemy within 5 squares takes damage":
@@ -576,7 +580,7 @@ Chooses one nested card sequence or another before continuing with the rest of t
 
 | Field | Values | Notes |
 |---|---|---|
-| `condition` | object or string | The predicate to evaluate. A string such as `"strained"` is shorthand for `{ "kind": "strained" }`. |
+| `condition` | object or string | The predicate to evaluate. A string such as `"strained"` is shorthand for `{ "kind": "strained" }`. `{ "kind": "resource", "min": 4 }` passes when the hero has 4 or more of their heroic resource, counting the most they had this turn (Discipline Mastery). |
 | `then` | card array | Cards to run when the condition matches. |
 | `else` | card array | Cards to run when the condition does not match. Optional. |
 | `note` | string | Optional chat note when either branch runs. |
@@ -1680,6 +1684,9 @@ An aura can also carry automation that checks the aura's live occupants when a t
 | `radius` | `1`-`20` squares (clamped). Square area: a radius-3 aura reaches 3 squares out in every direction including diagonals. |
 | `radius` as a characteristic | `"Reason"` (or `"radiusAttribute": "Reason"`): the size is the hero's score, at least 1. Mantle of Essence: "distance equal to your Reason score". |
 | `toggle` | `true`: using the ability again switches the aura off, and again on (Mantle of Essence, "activate and deactivate at will"). The runner's chat says which. |
+| `autoOn` | `"combatStart"`: when a fight starts and the aura is not on, the Director's page switches it on by running the ability for free (no action used). It stays on after the fight (the Null Field). |
+| `followsAura` | an aura's ability name (`"Null Field"`): this aura has that one's size, grown or not, has no ring of its own, and does nothing while that one is off (the Field's options, Synapse Field). |
+| `potency` | `{ "occupants": -1 }`: creatures inside it that it `affects` have their potencies changed by that (the Null Field: enemies reduce their potencies by 1). `{ "against": 1 }`: potencies used by the owner or the owner's allies against creatures inside it that it affects (Synaptic Break). An aura with only `potency` needs no triggers or effects. Chat says when it changed a potency. |
 | `requires` | `{ "resourceMin": 3, "notDying": true }`: while the owner has less of their heroic resource, or is dying (Stamina 0 or below), the aura does nothing when it would act, and chat says why. The aura stays on. |
 | `color` | optional hex string; omit to keep the token's current aura color |
 | `target` | `"self"` (default — the caster's token) or `"target"` (each resolved target) |
@@ -2194,6 +2201,7 @@ Always-on traits that give edges or banes: "while winded, the demon has an edge 
 | `when.targetWinded` | `true` | The creature on the other side of the roll is winded. |
 | `when.selfCondition` / `when.targetCondition` | string or array | This creature / the other side has any of these conditions (custom ones by name). |
 | `when.adjacentAlly` | `true` | This creature is next to an ally. |
+| `when.resourceMin` | number | The hero has that much or more of their heroic resource (the most this turn): the Null's "6 Discipline: edge on Grab and Knockback". |
 | `when.note` | string | A gate the board can't read ("outdoors", "in darkness"). The trait shows ticked, with the note as its reason. |
 
 A trait only shows when the gates the board can read pass. It works on monster traits and abilities, and on hero features.
@@ -2402,3 +2410,14 @@ The runner forwards effective keywords for this check. No new authoring fields.
 Surge damage spends at most three surges, using the highest characteristic for each,
 and asks for one recipient when the first damage effect has multiple targets.
 The potency surge option remains manual.
+
+## Null support (November 2026)
+
+- **`auraSize`** effect: `{ "kind": "auraSize", "aura": "Null Field", "by": 1, "until": "combatEnd" }` grows a named aura of the user's (Synapse Field); at the fight's end it is its own size again.
+- **`endConditionChoice`** effect: `{ "kind": "endConditionChoice", "among": { "aura": "Null Field", "includeSelf": true, "whose": "ally" } }` asks which save-ends or end-of-turn effect to end, on the user or a creature in the aura (Reorder).
+- **Aura trigger filter `rolledOnly`**: only damage from a power roll's tier ("rolled damage"); an aura's own damage never is, so it cannot set itself off.
+- **`amountFrom: { "source": "pushedSquares" }`**: the squares this ability really force moved the creature (a wall or Stability can stop it short). Impart Force: 1 psychic damage per square. A scaled amount of 0 deals nothing.
+- **Forced movement events** now carry `movedDistance` (where it stands now), `requestedDistance`, `effectiveDistance` (after Stability), `squaresLeft`, `stoppedBy` (`wall` / `creature`), `collidedIds`, `slamDamage`, and `resisted` when Stability took all of it. A push all taken by Stability is said in chat and asks for no square.
+- **Passive `forcedMovementDamage`** on a hero feature or a stat block: `{ "kind": "forcedMovementDamage", "reduce": "level" }` (or a number) cuts the damage the creature being moved takes from slams (Inertial Sink).
+- **Hero triggers can ask**: a hero's trigger card with `"resolve": "popup"` asks the hero's player "Use it now?" (the Director when nobody takes it up within about 25 seconds); Use it runs it as the ready trigger. Add `"usesTriggeredAction": true` when it costs the triggered action (Inertial Shield).
+- **Action labels**: `No action`, `Free Maneuver` and `Free Triggered Action` use neither the main action nor the maneuver.

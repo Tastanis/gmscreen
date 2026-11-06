@@ -66,8 +66,14 @@ export function getRenderableAurasForPlacement(placement) {
       color: manualAura.color || '#3b82f6',
     });
   }
+  const current = Number.parseInt(placement.hp?.current ?? placement.hp, 10);
+  const dying = Number.isFinite(current) && current <= 0;
   getAutomationAuraRecords(placement).forEach((record) => {
     if (record.legacy && manualAura?.enabled) return;
+    // An aura that goes along with another (the Null Field's options) has no ring of its own; one that ends while its
+    // owner is dying is not drawn then.
+    if (record.automation?.followsAura) return;
+    if (record.automation?.requires?.notDying && dying) return;
     result.push({
       id: `automation:${record.id}`,
       radius: record.radius,
