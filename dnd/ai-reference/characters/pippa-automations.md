@@ -1,12 +1,10 @@
 # Pippa - VTT Automations
 
-Level 4 Polder **Null**, Metakinetic tradition, Density Augmentation (November 5, 2026). Characteristics at 4th level: Might 1, Agility 3, Reason -1, Intuition 3, Presence 1.
+Level 4 Polder **Null**, Metakinetic tradition, Density Augmentation (sheet player6; November 5, 2026). Might 1, Agility 3, Reason -1, Intuition 3, Presence 1. Stamina 60, Recoveries 8, Speed 8, Disengage 5, Stability 1, Size 1S, Save 6+.
 
-How to add: on her sheet **✎ Edit → ⇪ Import JSON**, one block at a time (it lands in the right list by its label). The Discipline block goes in **✎ Resource** (its automation field). The Inertial Sink block is a feature (Import JSON takes it too).
+How to add: her sheet **✎ Edit → ⇪ Import JSON** (each lands in its list by its label). The Discipline block goes in **✎ Resource**.
 
-Sheet numbers (no automation needed): Speed +3 and Disengage +3 (Null Speed), Disengage +1 more (Graceful Retreat), Stamina +12 and Stability +1 (Density Augmentation), Nimblestep: ignores difficult terrain (a movement passive on the feature, `{ "kind": "movement", "ignoreDifficultTerrain": true }`).
-
-Manual (Director text): Enhanced Null Field's supernatural terrain, Psionic Leap, Shadowmeld, Small!, Danger Sense, Specialist, Inertial Sink's effective size (falls and slam damage are automated).
+Manual (Director text): Enhanced Null Field's supernatural terrain, Psionic Leap, Shadowmeld, Danger Sense, Team Leader, Specialist, Phase Inversion Strike's opposite square, Kinetic Shield's bleeding, object size limits.
 
 ## Discipline (Resource automation)
 
@@ -537,7 +535,13 @@ Until the start of your next turn: whenever you or any ally uses an ability agai
           }
         ]
       }
-    ]
+    ],
+    "usageLimit": {
+      "scope": "turn",
+      "key": "null-field-option",
+      "warn": true,
+      "message": "A Null Field option was already used this turn (once per turn, one at a time)."
+    }
   }
 }
 ```
@@ -580,8 +584,10 @@ Until the start of your next turn: any target who starts their turn in the area 
             ],
             "effects": [
               {
-                "kind": "note",
-                "text": "Inertial Anchor: started its turn in the Null Field, can't shift this turn."
+                "kind": "condition",
+                "name": "other",
+                "duration": "endOfTurn",
+                "text": "Can't shift (Inertial Anchor)"
               }
             ],
             "expires": {
@@ -592,7 +598,13 @@ Until the start of your next turn: any target who starts their turn in the area 
           }
         ]
       }
-    ]
+    ],
+    "usageLimit": {
+      "scope": "turn",
+      "key": "null-field-option",
+      "warn": true,
+      "message": "A Null Field option was already used this turn (once per turn, one at a time)."
+    }
   }
 }
 ```
@@ -636,8 +648,9 @@ Until the start of your next turn: the first time on a turn that a target takes 
             ],
             "effects": [
               {
-                "kind": "note",
-                "text": "Gravitic Disruption: the first time this turn, Pippa can slide it up to 2 squares (Ctrl-drag)."
+                "kind": "forcedMovement",
+                "verb": "slide",
+                "distance": 2
               }
             ],
             "expires": {
@@ -648,7 +661,13 @@ Until the start of your next turn: the first time on a turn that a target takes 
           }
         ]
       }
-    ]
+    ],
+    "usageLimit": {
+      "scope": "turn",
+      "key": "null-field-option",
+      "warn": true,
+      "message": "A Null Field option was already used this turn (once per turn, one at a time)."
+    }
   }
 }
 ```
@@ -1195,6 +1214,24 @@ Psionic Martial Arts: Intuition instead of Might. Metakinetic: 6+ Discipline, an
 }
 ```
 
+### Shadowmeld
+
+Maneuver | Magic | Self | Self
+
+You become an actual shadow. Effect: You flatten yourself into a shadow against a wall or floor you are touching, and become hidden from any creature you have cover or concealment from or who isn't observing you. While in shadow form, you have full awareness of your surroundings, and strikes made against you and tests made to search for you take a bane. You can't move or be force moved, and you can't take main actions or maneuvers except to exit this form or to direct creatures under your control. Any ability or effect that targets more than 1 square affects you in this form only if it explicitly affects the surface you are flattened against. You can exit this form as a maneuver. If the surface you are flattened against is destroyed, this ability ends and you take 1d6 damage that can't be reduced in any way.
+
+```json
+{
+  "name": "Shadowmeld",
+  "actionLabel": "Maneuver",
+  "keywords": "Magic",
+  "range": "Self",
+  "target": "Self",
+  "cost": "",
+  "description": "You become an actual shadow. Effect: You flatten yourself into a shadow against a wall or floor you are touching, and become hidden from any creature you have cover or concealment from or who isn't observing you. While in shadow form, you have full awareness of your surroundings, and strikes made against you and tests made to search for you take a bane. You can't move or be force moved, and you can't take main actions or maneuvers except to exit this form or to direct creatures under your control. Any ability or effect that targets more than 1 square affects you in this form only if it explicitly affects the surface you are flattened against. You can exit this form as a maneuver. If the surface you are flattened against is destroyed, this ability ends and you take 1d6 damage that can't be reduced in any way."
+}
+```
+
 ## Triggered actions
 
 ### Inertial Shield
@@ -1238,7 +1275,21 @@ Trigger: You take damage. Effect: You take half the damage. Spend 1 Discipline: 
           },
           {
             "kind": "note",
-            "text": "Spend 1 Discipline: the potency of one effect that came with the damage is reduced by 1 for you (by hand). Metakinetic: you can use Knockback now as a free triggered action."
+            "text": "Spend 1 Discipline: the potency of one effect that came with the damage is reduced by 1 for you (by hand)."
+          },
+          {
+            "kind": "ifPrompt",
+            "question": "Metakinetic: use Knockback now as a free triggered action?",
+            "yesLabel": "Knockback",
+            "noLabel": "No",
+            "target": "self",
+            "then": [
+              {
+                "kind": "useAbility",
+                "ability": "Knockback"
+              }
+            ],
+            "else": []
           }
         ]
       }
@@ -1434,16 +1485,244 @@ Whenever you are force moved, you can use a free triggered action to shift 1 squ
 }
 ```
 
-## Features
+## Free strikes
 
-### Inertial Sink
+### Melee Weapon Free Strike
 
-You add your Intuition score to your effective size for interacting with creatures and objects (lifting, being affected by forced movement). When you fall, reduce the effective height by 5 more squares. Whenever you take damage from being force moved, you reduce that damage by an amount equal to your level.
+Free Strike | Charge, Melee, Strike, Weapon | Melee 1 | One creature or object
+
+Melee Weapon Free Strike: an unarmed strike or an improvised weapon. Power Roll + Might or Agility (Agility, her best).
 
 ```json
 {
+  "name": "Melee Weapon Free Strike",
+  "actionLabel": "Free Strike",
+  "keywords": "Charge, Melee, Strike, Weapon",
+  "range": "Melee 1",
+  "target": "One creature or object",
+  "cost": "",
+  "description": "Melee Weapon Free Strike: an unarmed strike or an improvised weapon. Power Roll + Might or Agility (Agility, her best).",
+  "automation": {
+    "schema": "ability-automation/v3",
+    "keywords": [
+      "Charge",
+      "Melee",
+      "Strike",
+      "Weapon"
+    ],
+    "cards": [
+      {
+        "type": "target",
+        "name": "target",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "count": {
+          "value": 1,
+          "mode": "exact"
+        },
+        "optional": false,
+        "distance": {
+          "form": "melee",
+          "value": 1
+        }
+      },
+      {
+        "type": "powerRoll",
+        "attribute": "Agility",
+        "bonus": 0,
+        "target": "target",
+        "rollFormula": "2d10",
+        "tiers": {
+          "tier1": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 2,
+                "attribute": "Agility"
+              }
+            ]
+          },
+          "tier2": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 5,
+                "attribute": "Agility"
+              }
+            ]
+          },
+          "tier3": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 7,
+                "attribute": "Agility"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+### Ranged Weapon Free Strike
+
+Free Strike | Ranged, Strike, Weapon | Ranged 5 | One creature or object
+
+Ranged Weapon Free Strike: an unarmed strike or an improvised weapon. Power Roll + Might or Agility (Agility, her best).
+
+```json
+{
+  "name": "Ranged Weapon Free Strike",
+  "actionLabel": "Free Strike",
+  "keywords": "Ranged, Strike, Weapon",
+  "range": "Ranged 5",
+  "target": "One creature or object",
+  "cost": "",
+  "description": "Ranged Weapon Free Strike: an unarmed strike or an improvised weapon. Power Roll + Might or Agility (Agility, her best).",
+  "automation": {
+    "schema": "ability-automation/v3",
+    "keywords": [
+      "Ranged",
+      "Strike",
+      "Weapon"
+    ],
+    "cards": [
+      {
+        "type": "target",
+        "name": "target",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "count": {
+          "value": 1,
+          "mode": "exact"
+        },
+        "optional": false,
+        "distance": {
+          "form": "ranged",
+          "value": 5
+        }
+      },
+      {
+        "type": "powerRoll",
+        "attribute": "Agility",
+        "bonus": 0,
+        "target": "target",
+        "rollFormula": "2d10",
+        "tiers": {
+          "tier1": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 2,
+                "attribute": "Agility"
+              }
+            ]
+          },
+          "tier2": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 4,
+                "attribute": "Agility"
+              }
+            ]
+          },
+          "tier3": {
+            "effects": [
+              {
+                "kind": "damage",
+                "amount": 6,
+                "attribute": "Agility"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+## Features
+
+### Metakinetic Mastery
+
+Whenever you use your Inertial Shield ability, you can then use the Knockback maneuver as a free triggered action. With 2+ discipline: whenever you use Knockback, the forced movement distance gains a bonus equal to your Intuition score. 4+: the first time in a combat round that you take damage or are force moved, you gain 1 surge, even if you resist the effect. 6+: you gain an edge on the Grab and Knockback maneuvers. 8+ (4th level): the first time in a combat round that you take damage or are force moved, you gain 2 surges, even if you resist the effect. Benefits based on discipline last until the end of your turn, even if you spend below the amount during your turn. (Automated in Knockback, Grab and "Metakinetic Mastery: surge".)
+
+```json
+{
+  "type": "feature",
+  "title": "Metakinetic Mastery",
+  "text": "Whenever you use your Inertial Shield ability, you can then use the Knockback maneuver as a free triggered action. With 2+ discipline: whenever you use Knockback, the forced movement distance gains a bonus equal to your Intuition score. 4+: the first time in a combat round that you take damage or are force moved, you gain 1 surge, even if you resist the effect. 6+: you gain an edge on the Grab and Knockback maneuvers. 8+ (4th level): the first time in a combat round that you take damage or are force moved, you gain 2 surges, even if you resist the effect. Benefits based on discipline last until the end of your turn, even if you spend below the amount during your turn. (Automated in Knockback, Grab and \"Metakinetic Mastery: surge\".)",
+  "tags": [
+    "Null",
+    "Tradition"
+  ]
+}
+```
+
+### Null Speed
+
+You gain a bonus to speed and to the number of squares you can shift when you take the Disengage move action equal to your Agility score (+3). Already in her Speed 8 and Disengage 5.
+
+```json
+{
+  "type": "feature",
+  "title": "Null Speed",
+  "text": "You gain a bonus to speed and to the number of squares you can shift when you take the Disengage move action equal to your Agility score (+3). Already in her Speed 8 and Disengage 5.",
+  "tags": [
+    "Null"
+  ]
+}
+```
+
+### Density Augmentation
+
+You gain a +6 bonus to Stamina, increasing by 6 at 4th, 7th and 10th levels (+12 now), and a +1 bonus to stability. Already in her Stamina 60 and Stability 1.
+
+```json
+{
+  "type": "feature",
+  "title": "Density Augmentation",
+  "text": "You gain a +6 bonus to Stamina, increasing by 6 at 4th, 7th and 10th levels (+12 now), and a +1 bonus to stability. Already in her Stamina 60 and Stability 1.",
+  "tags": [
+    "Null",
+    "Augmentation"
+  ]
+}
+```
+
+### Psionic Martial Arts
+
+Whenever you use the Knockback or Grab maneuver, you use Intuition instead of Might for the power roll and for determining if you can target creatures larger than you. Additionally, whenever you use the Knockback maneuver, you can choose to slide the target instead of pushing them.
+
+```json
+{
+  "type": "feature",
+  "title": "Psionic Martial Arts",
+  "text": "Whenever you use the Knockback or Grab maneuver, you use Intuition instead of Might for the power roll and for determining if you can target creatures larger than you. Additionally, whenever you use the Knockback maneuver, you can choose to slide the target instead of pushing them.",
+  "tags": [
+    "Null"
+  ]
+}
+```
+
+### Inertial Sink
+
+You add your Intuition score to your effective size for the purpose of interacting with creatures and objects, such as for determining whether you can lift an object, whether you are affected by forced movement, and so forth (automated for forced movement; her sheet and token still show 1S). This has no effect on whether you can be grabbed. When you fall, you reduce the effective height of the fall by 5 squares in addition to any other reductions (automated). Whenever you take damage from being force moved, you reduce that damage by an amount equal to your level (automated).
+
+```json
+{
+  "type": "feature",
   "title": "Inertial Sink",
-  "text": "You add your Intuition score to your effective size for interacting with creatures and objects (lifting, being affected by forced movement). When you fall, reduce the effective height by 5 more squares. Whenever you take damage from being force moved, you reduce that damage by an amount equal to your level.",
+  "text": "You add your Intuition score to your effective size for the purpose of interacting with creatures and objects, such as for determining whether you can lift an object, whether you are affected by forced movement, and so forth (automated for forced movement; her sheet and token still show 1S). This has no effect on whether you can be grabbed. When you fall, you reduce the effective height of the fall by 5 squares in addition to any other reductions (automated). Whenever you take damage from being force moved, you reduce that damage by an amount equal to your level (automated).",
+  "tags": [
+    "Null",
+    "Tradition"
+  ],
   "automation": {
     "schema": "ability-automation/v3",
     "cards": [],
@@ -1457,10 +1736,160 @@ You add your Intuition score to your effective size for interacting with creatur
         "kind": "fall",
         "reduce": 5,
         "label": "Inertial Sink"
+      },
+      {
+        "kind": "size",
+        "bonus": "Intuition",
+        "label": "Inertial Sink"
       }
     ]
-  },
-  "type": "feature"
+  }
+}
+```
+
+### Psionic Leap
+
+You can long jump and high jump a distance equal to twice your Agility score (6) without needing to make a test.
+
+```json
+{
+  "type": "feature",
+  "title": "Psionic Leap",
+  "text": "You can long jump and high jump a distance equal to twice your Agility score (6) without needing to make a test.",
+  "tags": [
+    "Null"
+  ]
+}
+```
+
+### Enhanced Null Field
+
+While using your Null Field ability, you disrupt magic and psionic power suffusing the area around you. During combat, any temporary supernatural terrain effects of your level or lower are removed when your aura partially or fully overlaps with their location. Permanent supernatural terrain effects of your level or lower are temporarily negated while your aura overlaps with their location, but return when the aura no longer overlaps with them.
+
+```json
+{
+  "type": "feature",
+  "title": "Enhanced Null Field",
+  "text": "While using your Null Field ability, you disrupt magic and psionic power suffusing the area around you. During combat, any temporary supernatural terrain effects of your level or lower are removed when your aura partially or fully overlaps with their location. Permanent supernatural terrain effects of your level or lower are temporarily negated while your aura overlaps with their location, but return when the aura no longer overlaps with them.",
+  "tags": [
+    "Null"
+  ]
+}
+```
+
+### Regenerative Field
+
+The first time each combat round that an enemy in the area of your Null Field ability uses a main action, you gain 2 discipline instead of 1. (In her Discipline automation.)
+
+```json
+{
+  "type": "feature",
+  "title": "Regenerative Field",
+  "text": "The first time each combat round that an enemy in the area of your Null Field ability uses a main action, you gain 2 discipline instead of 1. (In her Discipline automation.)",
+  "tags": [
+    "Null"
+  ]
+}
+```
+
+### Small!
+
+Polder: your size is 1S.
+
+```json
+{
+  "type": "feature",
+  "title": "Small!",
+  "text": "Polder: your size is 1S.",
+  "tags": [
+    "Polder"
+  ]
+}
+```
+
+### Nimblestep
+
+Polder: you ignore the effects of difficult terrain and can move at full speed while sneaking.
+
+```json
+{
+  "type": "feature",
+  "title": "Nimblestep",
+  "text": "Polder: you ignore the effects of difficult terrain and can move at full speed while sneaking.",
+  "tags": [
+    "Polder"
+  ],
+  "automation": {
+    "schema": "ability-automation/v3",
+    "cards": [],
+    "passives": [
+      {
+        "kind": "movement",
+        "ignoreDifficultTerrain": true,
+        "label": "Nimblestep"
+      }
+    ]
+  }
+}
+```
+
+### Graceful Retreat
+
+Polder: you gain a +1 bonus to the distance you can shift when you take the Disengage move action. Already in her Disengage 5.
+
+```json
+{
+  "type": "feature",
+  "title": "Graceful Retreat",
+  "text": "Polder: you gain a +1 bonus to the distance you can shift when you take the Disengage move action. Already in her Disengage 5.",
+  "tags": [
+    "Polder"
+  ]
+}
+```
+
+### Danger Sense
+
+Perk: whenever you are in a natural environment (but not in a settlement in that environment), you gain an edge on tests made using the Alertness skill, and you can't be surprised. Additionally, you have a connection to nature that warns you if any natural disaster is imminent within the next 72 hours, though you don't know exactly what it will entail (an earthquake, a wildfire, and so forth).
+
+```json
+{
+  "type": "feature",
+  "title": "Danger Sense",
+  "text": "Perk: whenever you are in a natural environment (but not in a settlement in that environment), you gain an edge on tests made using the Alertness skill, and you can't be surprised. Additionally, you have a connection to nature that warns you if any natural disaster is imminent within the next 72 hours, though you don't know exactly what it will entail (an earthquake, a wildfire, and so forth).",
+  "tags": [
+    "Perk"
+  ]
+}
+```
+
+### Team Leader
+
+Perk: at the start of a group test or montage test, you can spend a hero token. If you do, all participants make tests as if they also had any skill you have from the exploration group.
+
+```json
+{
+  "type": "feature",
+  "title": "Team Leader",
+  "text": "Perk: at the start of a group test or montage test, you can spend a hero token. If you do, all participants make tests as if they also had any skill you have from the exploration group.",
+  "tags": [
+    "Perk"
+  ]
+}
+```
+
+### Specialist
+
+Perk: choose one skill you have from the lore skill group. You always have a double edge on tests made to recall lore using this skill. Your specialist knowledge grants you notoriety in fields related to the chosen skill: you treat your Renown as 1 higher when negotiating with an NPC who knows your reputation, or 2 higher if they have the same skill you chose.
+
+```json
+{
+  "type": "feature",
+  "title": "Specialist",
+  "text": "Perk: choose one skill you have from the lore skill group. You always have a double edge on tests made to recall lore using this skill. Your specialist knowledge grants you notoriety in fields related to the chosen skill: you treat your Renown as 1 higher when negotiating with an NPC who knows your reputation, or 2 higher if they have the same skill you chose.",
+  "tags": [
+    "Perk"
+  ]
 }
 ```
 

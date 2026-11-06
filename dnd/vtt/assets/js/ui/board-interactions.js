@@ -1651,6 +1651,14 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     const collisions = new Map();
+    // "Can't shift" (Inertial Anchor): a warning, never a block (Brandon: "we need to be able to override that").
+    if (movementKind === 'shift') {
+      const stuck = moves.map((move) => getPlacementFromStore(move.placementId)).filter((placement) => placement && cannotShift(placement));
+      if (stuck.length) {
+        const anyway = await confirmBoardAction(`${stuck.map((placement) => tokenLabel(placement)).join(', ')} can't shift right now (${stuck.map((placement) => cannotShift(placement)).join(', ')}). Shift anyway?`, { title: "Can't shift", confirmText: 'Shift anyway', cancelText: 'Cancel' });
+        if (!anyway || sceneId !== getActiveSceneId()) { renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState); updateStatus('Did not shift.'); return; }
+      }
+    }
     if (movementKind === 'forced' && moves.length !== 1) {updateStatus('Force move one token at a time.');renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState);return;}
     // A push that ends at a wall it could break: ask before anything is sent. Nothing breaks on "no".
     let breakThrough = null;
@@ -4776,6 +4784,10 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const placement = getPlacementFromStore(placementId);
       if (!placement) return;
+      if (record.eventType === 'auraForcedMove') {
+        await askAuraForcedMove(placement, record.rule?.details || {});
+        return;
+      }
       if (record.eventType === 'persistentBreak') {
         // The numbers ride on the rule: an event's payload is cut down to its usual fields on the way.
         await askMaintainBreak(placement, record.rule?.details || {});
@@ -6222,6 +6234,11 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         continue;
       }
+      if (effect.kind === 'forcedMovement') {
+        targets.forEach((target) => offerAuraForcedMove({ ownerId: sourceId, abilityName, target, effect }));
+        detailLines.push(`${effect.verb || 'slide'} up to ${Number.parseInt(effect.distance, 10) || 0} offered`);
+        continue;
+      }
       if (effect.kind === 'damage') {
         for (const target of targets) {
           const amount = resolveOngoingEffectAmount(effect, attributeBonuses, {
@@ -6605,6 +6622,45 @@ export function mountBoardInteractions(store, routes = {}) {
     try { if (update?.updated) await awaitSuccessfulPlacementSave(update); } catch (error) { resolve?.({ applied: false, reason: 'save' }); return; }
     renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     resolve?.({ applied: true, radius, name: record.automation?.abilityName || payload.aura });
+  }
+
+  // An aura's forced movement (Gravitic Disruption: "the first time on a turn that a target takes damage, you can slide
+  // them up to 2 squares"): once per creature per turn, the aura's owner is asked (the hero's player; the Director when
+  // nobody takes it up) and yes opens the slide picker with the squares it may go to.
+  function offerAuraForcedMove({ ownerId, abilityName, target, effect }) {
+    const owner = ownerId ? getPlacementFromStore(ownerId) : null;
+    if (!owner || !target?.id) return;
+    const key = `${combatRound}:${activeCombatantId || ''}:${abilityName}:${target.id}`;
+    if (owner.auraMovesUsed?.[key]) return;
+    updatePlacementById(owner.id, (record) => {
+      const fight = `${combatRound}:${activeCombatantId || ''}:`;
+      const kept = Object.fromEntries(Object.entries(record.auraMovesUsed && typeof record.auraMovesUsed === 'object' ? record.auraMovesUsed : {}).filter(([name]) => name.startsWith(fight)));
+      record.auraMovesUsed = { ...kept, [key]: true };
+    });
+    const details = { abilityName, targetId: target.id, targetName: tokenLabel(target), verb: effect.verb || 'slide', distance: Number.parseInt(effect.distance, 10) || 0, ignoreStability: effect.ignoreStability === true, round: combatRound };
+    const profileId = getAutomationProfileIdForPlacement(owner.id);
+    const ownerUser = profileId ? (getLinkedProfileUserIdForPlacement(owner.id) || normalizeProfileId(profileId)) : null;
+    if (!ownerUser ? isGmUser() : ownerUser === normalizeProfileId(getCurrentUserId())) {
+      askAuraForcedMove(owner, details).catch((error) => console.warn('[VTT] aura forced move failed', error));
+      return;
+    }
+    if (!ownerUser) return;
+    routeHeroicResourcePromptToOwner({
+      eventType: 'auraForcedMove', payload: details, placement: owner, profileId, recipientUserId: ownerUser,
+      rule: { id: 'aura-forced-move', effect: { kind: 'note' }, details }, eventTargetId: owner.id,
+    });
+  }
+
+  async function askAuraForcedMove(owner, details = {}) {
+    const target = details.targetId ? getPlacementFromStore(details.targetId) : null;
+    if (!target || !details.distance) return;
+    const yes = await confirmBoardAction(`${details.abilityName}: ${details.targetName || tokenLabel(target)} took damage in the field. ${String(details.verb).replace(/^./, (c) => c.toUpperCase())} it up to ${details.distance} square${details.distance === 1 ? '' : 's'}?`, { title: details.abilityName || 'Aura', confirmText: `${String(details.verb).replace(/^./, (c) => c.toUpperCase())} it`, cancelText: 'Skip' });
+    if (!yes) return;
+    await dispatchAutomationBoardEvent('vtt:automation-force-move', {
+      verb: details.verb, distance: details.distance, upTo: true, targetId: target.id,
+      sourcePlacement: getPlacementFromStore(owner.id) || owner, abilityName: details.abilityName,
+      ...(details.ignoreStability ? { ignoreStability: true } : {}),
+    });
   }
 
   // The fight is over: growth that lasts "until the end of the encounter" goes, and each aura is its own size again.
@@ -15165,7 +15221,12 @@ export function mountBoardInteractions(store, routes = {}) {
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
     // An ability of a token by name, for useAbility. "signature": the one whose keywords or text say so, else its
     // first action. Monsters from their stat block; heroes from the sheet the VTT holds.
-    getAbility: function (payload) { return abilityForPlacement(payload?.placementId, payload?.name); },
+    getAbility: async function (payload) {
+      const found = abilityForPlacement(payload?.placementId, payload?.name);
+      if (found || !payload?.placementId) return found;
+      await getAutomationSheetForPlacement(payload.placementId).catch(() => null);
+      return abilityForPlacement(payload.placementId, payload?.name);
+    },
     getMovementRules: function (placementId) { return movementRulesFor(getPlacementFromStore(placementId)); },
     landToken: function (payload) { return landToken(payload?.placementId); },
     // Moving other creatures: is it a hero (it moves itself), its speed, and asking heroes to move.
@@ -17123,6 +17184,15 @@ export function mountBoardInteractions(store, routes = {}) {
         if (Object.keys(next).length) target.deathRuleUses = next; else delete target.deathRuleUses;
       });
     });
+  }
+
+  // A creature with an effect saying it can't shift (Inertial Anchor's reminder): what says so, or ''.
+  function cannotShift(placement) {
+    const said = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null).find((condition) => {
+      const words = [condition?.name, condition?.label, condition?.text, condition?.description, condition?.rider?.text].map((value) => String(value || '').toLowerCase()).join(' ');
+      return /can(?:'|’|no)?t shift|cannot shift/.test(words) || condition?.rider?.noShift === true;
+    });
+    return said ? String(said.description || said.label || said.text || said.name || "can't shift") : '';
   }
 
   // ---------- movement rules (movement passives and buffs) ----------
@@ -20737,8 +20807,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const sourceTraits = {
       ...(payload.sourceTraits && typeof payload.sourceTraits === 'object' ? payload.sourceTraits : {}),
     };
-    const sourceRank = getAutomationSizeRank(sourceTraits.size, sourcePlacement);
-    const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
+    const sourceRank = automationForcedMoveSizeRank(sourceTraits, sourcePlacement);
+    const targetRank = automationForcedMoveSizeRank(targetTraits, targetPlacement);
     const keywords = (Array.isArray(payload.keywords) ? payload.keywords : []).map((value) => String(value).trim().toLowerCase());
     const sizeBonus = sourceRank > targetRank && keywords.includes('melee') && keywords.includes('weapon') ? 1 : 0;
 
@@ -20846,7 +20916,26 @@ export function mountBoardInteractions(store, routes = {}) {
       stability: stabilityWithBonus,
       // Squares a feature takes off every fall (passive { "kind": "fall", "reduce": 5 }: Inertial Sink).
       ...automationFallReduction(sheet, placement),
+      // Bigger for forced movement only (passive { "kind": "size", "bonus": "Intuition" }: Inertial Sink).
+      ...automationSizeBonus(sheet, placement),
     };
+  }
+
+  function automationSizeBonus(sheet, placement) {
+    const passives = placement?.monster ? monsterPassivesOfKind(placement.monster, 'size') : [];
+    (Array.isArray(sheet?.features) ? sheet.features : []).forEach((feature) => {
+      (Array.isArray(feature?.automation?.passives) ? feature.automation.passives : []).forEach((passive) => {
+        if (String(passive?.kind || '').toLowerCase() === 'size') passives.push(passive);
+      });
+    });
+    const stats = sheet?.hero?.stats || placement?.monster?.attributes || {};
+    let sizeBonus = 0;
+    passives.forEach((passive) => {
+      const named = String(passive.bonus ?? '').toLowerCase();
+      const value = ['might', 'agility', 'reason', 'intuition', 'presence'].includes(named) ? Number(stats[named]) || 0 : Number.parseInt(passive.bonus, 10) || 0;
+      sizeBonus += Math.max(0, value);
+    });
+    return sizeBonus ? { sizeBonus } : {};
   }
 
   function automationFallReduction(sheet, placement) {
@@ -20963,6 +21052,16 @@ export function mountBoardInteractions(store, routes = {}) {
       presence: 'presence',
     };
     return Number.parseInt(stats[lookup[key] || key] ?? 0, 10) || 0;
+  }
+
+  // The size a creature counts as for forced movement: its own, or bigger by a passive { "kind": "size", "bonus": n |
+  // "Intuition" } (Inertial Sink). Only forced movement reads it; the sheet and the token keep the real size.
+  function automationForcedMoveSizeRank(traits, placement) {
+    const rank = getAutomationSizeRank(traits?.size, placement);
+    const bonus = Math.max(0, Number(traits?.sizeBonus) || 0);
+    if (!bonus) return rank;
+    const sizeNumber = rank <= 3 ? 1 : rank - 3;
+    return 3 + sizeNumber + bonus;
   }
 
   function getAutomationSizeRank(sizeValue, placement) {

@@ -95,7 +95,7 @@ test('forced movement applies Stability and only the larger melee-weapon bonus',
     getPlacementFromStore: () => ({id:'target'}), resolveAutomationSourcePlacement: value => value,
     getAutomationMoveVerb: () => 'push', getAutomationMoveVerbLabel: () => 'Push', getAutomationMoveBaseVerb: (verb) => verb,
     getAutomationTraitsForPlacement: async () => ({size:2,stability:1}),
-    getAutomationSizeRank: Number, resolveAutomationForcedMovementDistance,
+    getAutomationSizeRank: Number, automationForcedMoveSizeRank: (traits) => Number(traits?.size), resolveAutomationForcedMovementDistance,
     closeDamageHealWidget() {}, closeHealOverflowPopup() {}, startAutomationMoveSelection: value => selection=value,
   };
   const handler = new Function('deps', `with(deps) { ${section(board, '  async function handleAutomationForceMoveRequest(', '  function resolveAutomationSourcePlacement(')} return handleAutomationForceMoveRequest; }`)(deps);

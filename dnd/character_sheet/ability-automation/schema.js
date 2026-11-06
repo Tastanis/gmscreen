@@ -2553,6 +2553,13 @@
     // Damage the creature takes from being force moved is cut (the Null's Inertial Sink: "reduce that damage by an
     // amount equal to your level"): reduce "level" or a number. Read by the board's slam damage (forcedMovementDamageReduction).
     // Every fall counts as that many squares shorter (Inertial Sink: 5), forced down or not. Read by the fall review.
+    // An effective size for forced movement (Inertial Sink: "add your Intuition score to your effective size"): a number
+    // or a characteristic. The size shown on the sheet and the token stays as it is.
+    if (key === "size") {
+      const named = asTrimmedString(input.bonus ?? input.amount);
+      const attribute = { m: "Might", might: "Might", a: "Agility", agility: "Agility", r: "Reason", reason: "Reason", i: "Intuition", intuition: "Intuition", p: "Presence", presence: "Presence" }[named.toLowerCase()];
+      return { kind: "size", bonus: attribute || (Number.parseInt(named, 10) || 0), label: asTrimmedString(input.label || input.name) || "Effective size" };
+    }
     if (key === "fall") {
       return { kind: "fall", reduce: asNonNegInt(input.reduce ?? input.amount, 0), label: asTrimmedString(input.label || input.name) || "Shorter fall" };
     }
@@ -2711,8 +2718,10 @@
       target,
       message,
     };
+    // warn: used again, it asks ("Use it anyway?") instead of refusing.
+    if (input.warn === true) usageLimit.warn = true;
     const extras = pickExtras(input, new Set([
-      "scope", "per", "key", "id", "name", "source", "target", "message", "blockedMessage",
+      "scope", "per", "key", "id", "name", "source", "target", "message", "blockedMessage", "warn",
     ]));
     if (extras) usageLimit._extra = extras;
     return usageLimit;

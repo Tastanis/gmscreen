@@ -4017,10 +4017,15 @@
       targetId: ids.targetId,
     });
     if (result?.set) {
-      return {
-        allowed: false,
-        message: limit.message || `${state.action.name || "Ability"} has already been used this ${limit.scope || "round"}.`,
-      };
+      const message = limit.message || `${state.action.name || "Ability"} has already been used this ${limit.scope || "round"}.`;
+      // A warning, not a block: it can be used anyway.
+      if (limit.warn === true) {
+        const anyway = global.UIKit?.confirm
+          ? await global.UIKit.confirm({ title: state.action.name || "Ability", message: `${message} Use it anyway?`, confirmText: "Use it anyway", cancelText: "Cancel" })
+          : global.confirm(`${message} Use it anyway?`);
+        if (anyway) return { allowed: true, overridden: true };
+      }
+      return { allowed: false, message };
     }
     return { allowed: true };
   }
