@@ -20,6 +20,8 @@ foreach ($taxonomy as $b) if ($b['bucket_id'] === $bucketId) $bucket = $b;
 if (!$bucket && $taxonomy) { $bucket = $taxonomy[0]; $bucketId = $bucket['bucket_id']; }
 
 $standardId = $_GET['standard'] ?? 'all';
+// A competency kept from another level (or gone) is "all".
+if ($standardId !== 'all' && !in_array($standardId, array_map(fn($s0) => $s0['standard_id'], $bucket['standards'] ?? []), true)) $standardId = 'all';
 $standards = [];
 if ($bucket) {
     foreach ($bucket['standards'] as $s) {
@@ -31,7 +33,8 @@ if ($bucket) {
 }
 
 // Pinned skill columns (ids in ?pins=), from any competency or mode at this level. They sit at the front of the grid
-// and are left out of their usual place. Carried only by this page's own filters; refresh or leaving drops them.
+// and are left out of their usual place. They stay until unpinned: a refresh, another period or mode, and coming back
+// to the page later keep them (the board is remembered in this browser, below).
 $pinIds = [];
 foreach (explode(',', is_string($_GET['pins'] ?? null) ? $_GET['pins'] : '') as $raw) {
     $id = (int)$raw;
@@ -51,6 +54,10 @@ if ($pinIds) {
     $standards = array_values(array_filter($standards, fn($s0) => $s0['targets']));
 }
 $modeName = fn($t0) => $hasCompetencies ? (['E' => 'Expression', 'R' => 'Reception', 'S' => 'Other'][$t0['sub_code'] ?? ''] ?? '') : ($t0['target_code'] ?? '');
+// Pinned skills from another mode than the one being graded: kept, with a warning.
+$offModePins = $hasCompetencies
+    ? array_values(array_filter($pinned, fn($p0) => ($p0['target']['sub_code'] ?? '') !== ['expression' => 'E', 'reception' => 'R', 'other' => 'S'][$mode]))
+    : [];
 
 $filters = [
     'teacher' => $me['teacher'],
@@ -108,7 +115,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <input type="hidden" name="level" value="<?php echo $level; ?>">
         <div class="grading-modes" role="group" aria-label="ASL level">
         <?php for ($i=1; $i<=3; $i++): ?>
-            <button type="button" aria-pressed="<?php echo $level===$i?'true':'false'; ?>" onclick="this.form.level.value='<?php echo $i; ?>';this.form.standard.value='all';this.form.requestSubmit()">ASL <?php echo $i; ?></button>
+            <button type="button" aria-pressed="<?php echo $level===$i?'true':'false'; ?>" onclick="switchGradingLevel(<?php echo $i; ?>)">ASL <?php echo $i; ?></button>
         <?php endfor; ?>
         </div>
         <select name="standard" onchange="this.form.requestSubmit()">
@@ -122,7 +129,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <input type="hidden" name="mode" value="<?php echo aslhub_h($mode); ?>">
         <div class="grading-modes" role="group" aria-label="Assessment mode">
         <?php foreach (['expression'=>'Expression','reception'=>'Reception','other'=>'Other'] as $key=>$label): ?>
-            <button type="button" aria-pressed="<?php echo $mode === $key ? 'true' : 'false'; ?>" onclick="this.form.mode.value='<?php echo $key; ?>';this.form.standard.value='all';this.form.requestSubmit()"> <?php echo $label; ?> </button>
+            <button type="button" aria-pressed="<?php echo $mode === $key ? 'true' : 'false'; ?>" onclick="this.form.mode.value='<?php echo $key; ?>';this.form.requestSubmit()"> <?php echo $label; ?> </button>
         <?php endforeach; ?>
         </div>
         <?php endif; ?>
@@ -130,8 +137,12 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <input type="search" id="student-search" name="student_search" placeholder="Student name" autocomplete="off"
             value="<?php echo aslhub_h(is_string($_GET['student_search'] ?? '') ? ($_GET['student_search'] ?? '') : ''); ?>"></label>
         <span class="muted" style="font-size:.82rem;">Click a cell to cycle 1 → available levels → 1. Saves instantly. Right-click to cycle backward.
-            Click a skill header to see its rubric; its small pin keeps that skill at the front while you change competency. Click a student to zoom in.</span>
+            Click a skill header to see its rubric; its small pin keeps that skill at the front until you unpin it. Click a student to zoom in.</span>
     </form>
+    <?php if ($offModePins): ?>
+        <p class="grading-pin-warning" role="status" style="margin:6px 0;padding:6px 10px;border-radius:6px;background:#fff4d6;border:1px solid #e8b93e;color:#5c4400;font-size:.85rem;">&#9888; Pinned from another mode, still on the board while you grade <?php echo aslhub_h(ucfirst($mode)); ?>:
+            <?php echo aslhub_h(implode(', ', array_map(fn($p0) => $p0['target']['title'] . ' (' . $modeName($p0['target']) . ')', $offModePins))); ?></p>
+    <?php endif; ?>
 
     <?php if (!$students): ?>
         <div class="rubric-panel"><p class="muted">No ASL <?php echo $level; ?> students match these filters.</p></div>
@@ -154,7 +165,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                     <?php endforeach; ?>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t): ?>
                         <th class="skill-head" data-target="<?php echo (int)$t['id']; ?>"
-                            title="<?php echo aslhub_h($t['title'] . ' — click to see its rubric'); ?>"><button type="button" class="pin-btn" data-pin="<?php echo (int)$t['id']; ?>" title="Pin to the front (stays while you change competency; refresh unpins)" aria-label="Pin <?php echo aslhub_h($t['title']); ?>" aria-pressed="false">&#128204;</button><?php echo aslhub_h($t['title']); ?></th>
+                            title="<?php echo aslhub_h($t['title'] . ' — click to see its rubric'); ?>"><button type="button" class="pin-btn" data-pin="<?php echo (int)$t['id']; ?>" title="Pin to the front (stays until you unpin it)" aria-label="Pin <?php echo aslhub_h($t['title']); ?>" aria-pressed="false">&#128204;</button><?php echo aslhub_h($t['title']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
                 <tr class="grading-header-buffer" aria-hidden="true"><th colspan="<?php echo count($targetIds) + 1; ?>"></th></tr>
@@ -195,6 +206,42 @@ aslhub_teacher_header($me, 'Grading', 'grading');
     <?php endif; ?>
 
 <script>
+// The board as it was left (period, level, competency, mode, pins), kept in this browser for this teacher. Opened with
+// no filters (the Grading link), the page goes back to it; each ASL level keeps its own competency and pins.
+const BOARD_KEY = 'asl-grading-board:<?php echo (int)$me['id']; ?>';
+const BOARD_FIELDS = ['period', 'level', 'standard', 'mode', 'pins'];
+const readBoard = () => { try { return JSON.parse(localStorage.getItem(BOARD_KEY) || 'null') || {}; } catch (_) { return {}; } };
+(function restoreOrRememberBoard() {
+    const here = new URLSearchParams(location.search);
+    const board = readBoard();
+    if (!BOARD_FIELDS.some(field => here.has(field)) && board.current && Object.keys(board.current).length) {
+        const next = new URLSearchParams(board.current);
+        if (here.get('student_search')) next.set('student_search', here.get('student_search'));
+        location.replace(location.pathname + '?' + next.toString());
+        return;
+    }
+    const form = document.getElementById('filter-form');
+    if (!form) return;
+    const now = {
+        period: form.period?.value || 'all',
+        level: form.level?.value || '1',
+        standard: form.standard?.value || 'all',
+        mode: form.mode?.value || '',
+        pins: document.getElementById('pins-field')?.value || '',
+    };
+    const byLevel = { ...(board.byLevel || {}), [now.level]: { standard: now.standard, pins: now.pins } };
+    try { localStorage.setItem(BOARD_KEY, JSON.stringify({ current: now, byLevel })); } catch (_) { /* grading still works without storage */ }
+})();
+// Another ASL level: back to that level's own competency and pins (its skills are not this level's).
+function switchGradingLevel(level) {
+    const form = document.getElementById('filter-form');
+    const saved = readBoard().byLevel?.[String(level)] || {};
+    const params = new URLSearchParams(new FormData(form));
+    params.set('level', String(level));
+    params.set('standard', saved.standard || 'all');
+    params.set('pins', saved.pins || '');
+    location.assign(location.pathname + '?' + params.toString());
+}
 const CSRF = '<?php echo $csrf; ?>';
 // Missing and legacy zero scores display the level-one starting baseline.
 const COLORS = { 0: '#e05252', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
@@ -263,15 +310,6 @@ document.addEventListener('click', event => {
     event.stopPropagation();
     togglePin(btn.dataset.pin);
 }, true);
-// Pins live only while he works through this page's own filters: a refresh, or coming back to the page later, starts clean.
-try {
-    const nav = performance.getEntriesByType('navigation')[0];
-    if (currentPins().length && nav && (nav.type === 'reload' || nav.type === 'back_forward')) {
-        const clean = new URL(location.href);
-        clean.searchParams.delete('pins');
-        location.replace(clean.href);
-    }
-} catch (_) { /* old browsers keep the pins until the pin button is used */ }
 
 document.querySelectorAll('.grade-cell').forEach(cell => {
     cell.addEventListener('click', () => cycle(cell, +1));

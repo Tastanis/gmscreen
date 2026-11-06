@@ -1421,3 +1421,12 @@ closed because presence also changes SQLite. Unknown/MySQL hex storage, missing
 core stores, unresolved media and source mismatches block sandbox preparation.
 Use the isolated launcher, never a generic PHP server for these captures.
 Local fixture tests do not establish production coverage or gameplay equivalence.
+
+### ASL grading board memory - November 5, 2026
+
+The grading board stays as the teacher left it until he changes it. Pins are no longer dropped on refresh. Period and
+mode changes keep the competency and pins; pins from another mode stay with an amber warning line. Each ASL level keeps
+its own competency and pins. The board (period, level, competency, mode, pins) is kept in browser localStorage per
+teacher id; opening Grading with no filters restores it. A competency not in the current level falls back to All.
+Verify with asl/tests/grading-pins-browser.test.cjs (PW_CHANNEL=chrome works). The navigation browser test's
+"headings stay pinned" assertion fails identically on the earlier page.
