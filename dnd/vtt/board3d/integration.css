@@ -47,7 +47,8 @@
    from the side is not straight over the base (--vtt3d-head-dx, integration.mjs). */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__trigger-ready { top: auto; right: 0; bottom: calc(100% + var(--tok-unit) * 7); translate: calc(100% + var(--vtt3d-head-dx, 0px)) 0; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__hp-bar,
-.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { translate: var(--vtt3d-head-dx, 0px) 0; }
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition,
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__float-number { translate: var(--vtt3d-head-dx, 0px) 0; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini:not(:has(> .vtt-token__hp-bar)) .vtt-token__condition { bottom: calc(100% + var(--tok-unit) * 6); }
 
 /* Where the turn began (integration.mjs placeTurnGhost): a faint copy of the token, in a dashed gold ring. */

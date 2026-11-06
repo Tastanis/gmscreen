@@ -49,6 +49,49 @@ export function pickPortrait(candidates, base = '/dnd/') {
   for (const c of candidates || []) { const url = mediaUrl(c, base); if (url) return url; }
   return '';
 }
+/** A picture shown whole, as large as the screen allows, over everything. It is a plain picture of the file itself, so
+ *  it can be dragged to the desktop or into another program. A click off it, the ×, or Escape closes it. */
+export function showPortraitView(url, name = '', doc = document) {
+  if (!url) return;
+  doc.querySelector('[data-portrait-viewer]')?.remove();
+  const view = doc.createElement('div');
+  view.dataset.portraitViewer = '';
+  view.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(8,5,3,.8)';
+  const figure = doc.createElement('figure');
+  figure.style.cssText = 'position:relative;margin:0;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:92vw;max-height:92vh';
+  const img = doc.createElement('img');
+  img.src = url; img.alt = name || 'Portrait'; img.draggable = true;
+  img.style.cssText = 'max-width:92vw;max-height:calc(92vh - 32px);object-fit:contain;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.7);cursor:grab;-webkit-user-drag:element;user-select:auto;pointer-events:auto';
+  const caption = doc.createElement('figcaption');
+  caption.textContent = `${name ? name + ' · ' : ''}drag the picture to your desktop to save it`;
+  caption.style.cssText = 'color:#e8dcc6;font:600 13px/1.3 system-ui,sans-serif;text-shadow:0 1px 3px #000';
+  const close = doc.createElement('button');
+  close.type = 'button'; close.title = 'Close'; close.textContent = '×';
+  close.style.cssText = 'position:absolute;top:-14px;right:-14px;width:30px;height:30px;border-radius:50%;border:1px solid #8a6f4a;background:#241a12;color:#f1e4cc;font:700 18px/1 system-ui,sans-serif;cursor:pointer';
+  figure.append(img, caption, close);
+  view.append(figure);
+  const key = (e) => { if (e.key === 'Escape') shut(); };
+  const shut = () => { view.remove(); doc.removeEventListener('keydown', key, true); };
+  view.addEventListener('click', (e) => { if (e.target === view || e.target === close) shut(); });
+  view.addEventListener('pointerdown', (e) => e.stopPropagation());
+  doc.addEventListener('keydown', key, true);
+  doc.body.append(view);
+}
+/** One listener per page: a click on a header picture (data-portrait-view) shows it whole. */
+export function installPortraitViewer(doc = document) {
+  if (doc.__portraitViewer) return;
+  doc.__portraitViewer = true;
+  doc.addEventListener('click', (e) => {
+    const pic = e.target instanceof Element ? e.target.closest('[data-portrait-view]') : null;
+    if (!pic) return;
+    e.preventDefault();
+    // Over the whole page it is framed in (a sheet window on the Table), when that page is this site's.
+    let top = doc;
+    try { if (doc.defaultView?.top && doc.defaultView.top !== doc.defaultView && doc.defaultView.top.document?.body) top = doc.defaultView.top.document; } catch (_) { top = doc; }
+    showPortraitView(new URL(pic.dataset.portraitView, doc.baseURI).href, pic.getAttribute('aria-label') || '', top);
+  });
+}
+
 /** Up to two initials for a name ("Cal" -> "C", "Nora Ann Vu" -> "NV"). */
 export function initialsOf(name) {
   const bits = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -275,7 +318,7 @@ export function statusHtml(sheet, ctx = {}) {
   const trackLine = [h.level ? `L${esc(h.level)}` : '', esc(h.class || ''), h.classTrack ? esc(h.classTrack) : '', esc(h.ancestry || '')].filter(Boolean).join(' · ');
   return `<div class="sp-status" data-sp-status>
     ${ctx.headerExtra || ''}
-    <div class="sp-who"><div class="sp-pic${portrait ? '' : ' sp-pic--initials'}" style="${pic}" role="img" aria-label="${esc(h.name || ctx.fallbackName || 'Hero')}">${portrait ? '' : esc(initialsOf(h.name || ctx.fallbackName || 'Hero'))}</div>
+    <div class="sp-who"><div class="sp-pic${portrait ? '' : ' sp-pic--initials'}" style="${pic}${portrait ? ';cursor:zoom-in' : ''}" role="img" aria-label="${esc(h.name || ctx.fallbackName || 'Hero')}"${portrait ? ` data-portrait-view="${esc(portrait)}" title="Click: the whole picture"` : ''}>${portrait ? '' : esc(initialsOf(h.name || ctx.fallbackName || 'Hero'))}</div>
       <div class="sp-name"><b>${esc(h.name || ctx.fallbackName || 'Hero')}</b><span>${trackLine}</span>${ctx.openSheetHtml || ''}</div>
       <div class="sp-counters">
         <div class="sp-ctr" title="Hero tokens (the party's)"><small>Tokens</small><span class="sp-tokens">${tokens.map((spent, i) => `<button type="button" class="sp-token${spent ? ' is-spent' : ' is-ready'}" data-character-hero-token="${i}" aria-label="${spent ? 'Reset' : 'Spend'} hero token ${i + 1}" title="${spent ? 'Reset hero token' : 'Spend hero token'}"></button>`).join('')}</span></div>

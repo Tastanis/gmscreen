@@ -220,7 +220,11 @@
         var categoryKey = item.getAttribute('data-ability-category');
         if (isNaN(index) || !categoryKey) return;
         var ability = abilitiesFor(state.monster, categoryKey)[index];
-        if (ability) renderPreview(ability, categoryKey);
+        if (ability) {
+            renderPreview(ability, categoryKey);
+            // Beside the open list when the usual corner would cover it (character-summary-panel.js).
+            if (typeof window.vttPlaceAbilityPreview === 'function') window.vttPlaceAbilityPreview(document.getElementById(PREVIEW_ID), item);
+        }
     }
 
     function handleTrayPreviewClose(event) {

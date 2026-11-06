@@ -32,14 +32,14 @@ export function isForcedMovePathLegal(source, target, destination, baseVerb) {
     remainingDy -= stepY;
     const cell = { column, row, width: start.width, height: start.height };
     const nextDistance = chebyshev(sourceCenter, center(cell));
-    // Push: each step must be non-decreasing distance from source. Plateaus are allowed
-    // (diagonal moves that traverse parallel to source).
+    // Push: each step must take the target farther from the pusher than the one before (Brandon, November 6, 2026:
+    // "every square must be farther than the previous"); a step that only runs along the pusher's side is not.
     // Pull: each step must bring the target closer, as the book says ("must bring the target
     // closer to them"). A step that only runs along the puller's side is not closer, so the
     // squares beside the puller that are reached at a slant are not offered. The straight line
     // to one of those clips the puller's own square, which used to be scored as a collision.
     // Slide: any walk is fine.
-    if (baseVerb === 'push' && nextDistance < previousDistance) return false;
+    if (baseVerb === 'push' && nextDistance <= previousDistance) return false;
     if (baseVerb === 'pull' && nextDistance >= previousDistance) return false;
     previousDistance = nextDistance;
   }

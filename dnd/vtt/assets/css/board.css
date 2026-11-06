@@ -1254,25 +1254,20 @@
   text-shadow: 0 0.35rem 0.95rem rgba(10, 6, 4, 0.55);
 }
 
+/* Malice sits at the top centre of the board for everyone, the Director too, clear of the ability trays and the
+   pickers' buttons at the bottom (Brandon, November 6, 2026). */
 .vtt-board__malice {
   position: absolute;
-  bottom: 0.8rem;
+  top: 0.6rem;
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
   pointer-events: none;
-  transition: bottom 160ms ease;
 }
 
 .vtt-board__malice[hidden] {
   display: none !important;
-}
-
-/* When an ability tray is open at the bottom of the screen, slide the malice
-   pip up so it stays visible for both PC and monster turns. */
-body.vtt-monster-ability-tray-is-open .vtt-board__malice,
-body.vtt-character-ability-tray-is-open .vtt-board__malice {
-  bottom: 5rem;
 }
 
 .vtt-malice {
@@ -3465,14 +3460,15 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   animation: vtt-token-trigger-pulse 1.6s ease-in-out infinite;
 }
 
-/* Floating damage / heal numbers above tokens. */
+/* Floating damage / heal numbers above tokens: above the health bar, which covered them where they used to start
+   (Brandon, November 6, 2026: "the numbers for health being taken away arent popping up"). */
 .vtt-token__float-number {
   position: absolute;
-  top: calc(var(--tok-unit) * -2);
+  top: calc(var(--tok-unit) * -62);
   left: 50%;
   transform: translateX(calc(-50% + var(--float-stagger-x, 0px)));
   font-weight: 900;
-  font-size: calc(var(--tok-unit) * 18);
+  font-size: calc(var(--tok-unit) * 22);
   line-height: 1;
   pointer-events: none;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85), 0 0 4px rgba(0, 0, 0, 0.85);
@@ -3520,11 +3516,21 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.45);
   pointer-events: auto;
   cursor: help;
-  max-width: 96%;
   white-space: nowrap;
+  letter-spacing: 0.02em;
+  /* Each condition on its own line, stacked upward from the label's foot (Brandon, November 6, 2026: "stack on top
+     instead of showing just one"; they were one line cut short with an ellipsis). */
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: calc(var(--tok-unit) * 1);
+}
+
+.vtt-token__condition-line {
+  display: block;
+  max-width: calc(var(--tok-unit) * 140);
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.02em;
 }
 
 .vtt-token__hidden-effect {

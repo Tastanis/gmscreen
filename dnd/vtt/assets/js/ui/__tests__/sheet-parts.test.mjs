@@ -264,7 +264,9 @@ test('portraits: a stored path under dnd/ is resolved from the page; the first p
   assert.equal(initialsOf('Nora Ann Vu'), 'NV');
   const sheet = mergeWithDefaults({ hero: { name: 'Cal' } });
   const withPic = statusHtml(sheet, { portrait: '/dnd/portraits/cal.png' });
-  assert.match(withPic, /class="sp-pic" style="background-image:url\('\/dnd\/portraits\/cal\.png'\)"/);
+  assert.match(withPic, /class="sp-pic" style="background-image:url\('\/dnd\/portraits\/cal\.png'\);cursor:zoom-in"/);
+  // A click shows the whole picture (Brandon, November 6, 2026: draggable to the desktop).
+  assert.match(withPic, /data-portrait-view="\/dnd\/portraits\/cal\.png" title="Click: the whole picture"/);
   const none = statusHtml(sheet, { portrait: '' });
   assert.match(none, /class="sp-pic sp-pic--initials" style=""[^>]*>C<\/div>/, 'no picture anywhere: initials');
   const rec = recordHtml(sheet, { portrait: '/dnd/portraits/cal.png' }, {});

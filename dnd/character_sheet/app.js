@@ -18,7 +18,7 @@ import {
   mergeWithDefaults, deepClone, actionDefaults, normalizeAction, normalizeFeature, normalizeAutomationBlock, heroResourceFloor, resolveAutoResourceGain,
   formatActionForChat, formatFeatureForChat, formatSectionForChat, ACTION_TYPES, IMPORT_GROUP_LABELS, reorder,
 } from './parts/sheet-model.js';
-import { statusHtml, tabsHtml, traitsHtml, abilitiesHtml, featuresHtml, recordHtml, themeToggleHtml, readTheme, writeTheme, esc, toggleMore, mediaUrl, pickPortrait, wireConditionPicker } from './parts/sheet-parts.js';
+import { statusHtml, tabsHtml, traitsHtml, abilitiesHtml, featuresHtml, recordHtml, themeToggleHtml, readTheme, writeTheme, esc, toggleMore, mediaUrl, pickPortrait, wireConditionPicker, installPortraitViewer } from './parts/sheet-parts.js';
 import { normalizeSheetConditions } from './parts/conditions.js';
 import { editHeroCondition, readTokenConditions, CONDITION_SYNC_CHANNEL } from './parts/condition-edits.js';
 import * as Editor from './parts/sheet-editor.js';
@@ -748,6 +748,7 @@ function setEditing(on) {
   render();
 }
 
+installPortraitViewer();
 root.addEventListener('click', async (event) => {
   const t = event.target instanceof Element ? event.target : null;
   if (!t || !state.loaded) return;

@@ -3,7 +3,9 @@ import {recordSheetUndo} from '../services/undo-client.js';
 import {staminaState, damageStamina, healStamina, gainTempStamina} from '../../../../character_sheet/parts/stamina-math.js';
 // The panel draws the same sheet parts as the full sheet, at panel width (October 2026): the status, then Skills &
 // traits / Features / Record. No Abilities tab: the board's ability bar below has them.
-import {statusHtml, traitsHtml, featuresHtml, recordHtml, tabsHtml, themeToggleHtml, readTheme, writeTheme, toggleMore, mediaUrl, conditionChipsHtml, conditionPickerHtml, wireConditionPicker, sheetConditionChips} from '../../../../character_sheet/parts/sheet-parts.js';
+import {statusHtml, traitsHtml, featuresHtml, recordHtml, tabsHtml, themeToggleHtml, readTheme, writeTheme, toggleMore, mediaUrl, conditionChipsHtml, conditionPickerHtml, wireConditionPicker, sheetConditionChips, installPortraitViewer} from '../../../../character_sheet/parts/sheet-parts.js';
+// A click on the panel's header picture shows it whole (Brandon, November 6, 2026).
+if (typeof document !== 'undefined') installPortraitViewer(document);
 // Conditions: one list for the token, this panel and the sheet (October 2026; parts/conditions.js).
 import {normalizeSheetConditions, durationShort} from '../../../../character_sheet/parts/conditions.js';
 import {editHeroCondition, CONDITION_SYNC_CHANNEL} from '../../../../character_sheet/parts/condition-edits.js';
@@ -1290,6 +1292,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
       renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory, activeSheet);
+      placeAbilityPreview(abilityPreview, item);
     }
   });
 
@@ -1309,6 +1312,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const action = getAbilityAction(activeSheet, item.dataset.abilityCategory, item.dataset.abilityIndex, { activeToken });
     if (action) {
       renderAbilityPreview(abilityPreview, action, item.dataset.abilityCategory, activeSheet);
+      placeAbilityPreview(abilityPreview, item);
     }
   });
 
@@ -1789,6 +1793,25 @@ function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
   preview.setAttribute('aria-hidden', 'false');
   preview.classList.add('vtt-character-ability-preview--open');
 }
+
+// The hover card is pinned to the top right (character-summary.css). In a narrow window that spot is on top of the
+// open ability list, so then it goes beside the list (the side with more room), inside the window. Both trays use it
+// (monster-ability-tray.js calls window.vttPlaceAbilityPreview).
+function placeAbilityPreview(preview, item) {
+  if (!(preview instanceof HTMLElement)) return;
+  for (const key of ['left', 'right', 'top', 'width', 'maxHeight']) preview.style[key] = '';
+  const list = item instanceof Element ? (item.parentElement || item) : null;
+  if (!list) return;
+  const card = preview.getBoundingClientRect(), menu = list.getBoundingClientRect();
+  const covers = card.left < menu.right && card.right > menu.left && card.top < menu.bottom && card.bottom > menu.top;
+  if (!covers) return;
+  const gap = 12, edge = 8, roomRight = window.innerWidth - menu.right - gap - edge, roomLeft = menu.left - gap - edge;
+  const width = Math.min(card.width, Math.max(roomRight, roomLeft));
+  const left = roomRight >= roomLeft ? menu.right + gap : Math.max(edge, menu.left - gap - width);
+  const top = Math.max(edge, Math.min(menu.top, window.innerHeight - edge - Math.min(card.height, window.innerHeight - edge * 2)));
+  Object.assign(preview.style, { left: `${Math.round(left)}px`, right: 'auto', width: `${Math.round(Math.max(200, width))}px`, top: `${Math.round(top)}px`, maxHeight: `${Math.round(window.innerHeight - top - edge)}px` });
+}
+if (typeof window !== 'undefined') window.vttPlaceAbilityPreview = placeAbilityPreview;
 
 function hideAbilityPreview(preview) {
   if (!preview) {

@@ -81,12 +81,12 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
     }
   }
 
-  const text = visibleConditions
+  const names = visibleConditions
     .map((condition) => (condition?.shown === true && typeof condition.label === 'string' && condition.label.trim()
       ? condition.label.trim()
       : condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
-    .filter(Boolean)
-    .join(' • ');
+    .filter(Boolean);
+  const text = names.join(' • ');
 
   if (!text) {
     if (label) {
@@ -99,8 +99,11 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
     tokenElement.appendChild(label);
   }
 
-  if (label && text && label.textContent !== text) {
-    label.textContent = text;
+  // One line per condition, stacked (board.css .vtt-token__condition-line), not one line cut short.
+  const lineKey = names.join('|');
+  if (label && text && label.dataset.conditionLines !== lineKey) {
+    label.dataset.conditionLines = lineKey;
+    label.replaceChildren(...names.map((name) => { const line = document.createElement('span'); line.className = 'vtt-token__condition-line'; line.textContent = name; return line; }));
   }
   if (label && text) {
     label.setAttribute('aria-label', text);

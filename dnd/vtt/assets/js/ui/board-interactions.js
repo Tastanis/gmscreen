@@ -19390,7 +19390,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const coverSource = resolveAutomationSourcePlacement(targetRequest.targetConfig?.sourcePlacement);
     const sight = coverSource && coverSource.id !== placement.id ? coverBetween(getPlacementFromStore(coverSource.id) || coverSource, getPlacementFromStore(placement.id) || placement) : null;
     const sightNote = sight?.noLineOfEffect ? ' No line of effect: a wall blocks it.' : sight?.covered ? ' It has cover.' : '';
-    updateStatus(`${name} selected as target.${sightNote}`);
+    // Past the ability's range: picked all the same, with a warning (Brandon, November 6, 2026: warn, but allow).
+    const far = automationRangeShortfall(targetRequest.targetConfig, getPlacementFromStore(placement.id) || placement);
+    if (far) showConditionBanner(`${name} is ${far.distance} squares from ${tokenLabel(far.source) || 'the user'}: past the range of ${far.range}. Targeted anyway.`, { tone: 'reminder' });
+    updateStatus(`${name} selected as target.${sightNote}${far ? ` Past range (${far.distance} of ${far.range}).` : ''}`);
     if (sight?.noLineOfEffect) showConditionBanner(`${name}: no line of effect from ${tokenLabel(coverSource) || 'the user'} (a wall is in the way).`, { tone: 'reminder' });
     targetRequest.resolve?.({
       id: placement.id,
@@ -19688,6 +19691,13 @@ export function mountBoardInteractions(store, routes = {}) {
   function commitAutomationAreaBox(box) {
     const request = pendingAutomationArea;
     if (!request || !box) return false;
+    // Placed past its range: a warning that can be gone past, never a block (Brandon, November 6, 2026).
+    const far = !box.rangeChecked && !box.source ? automationRangeShortfall(request.targetConfig, box) : null;
+    if (far) {
+      confirmBoardAction(`That area is ${far.distance} squares from ${tokenLabel(far.source) || 'the user'}: past the range of ${far.range}. Place it there anyway?`, { title: 'Past range', confirmText: 'Place it anyway', cancelText: 'Pick again' })
+        .then((yes) => { if (yes && pendingAutomationArea === request) commitAutomationAreaBox({ ...box, rangeChecked: true }); });
+      return true;
+    }
     const { width, height } = box;
     const cell = { column: box.column, row: box.row };
     const dims = getAutomationAreaDimensions(request.targetConfig);
@@ -21161,6 +21171,14 @@ export function mountBoardInteractions(store, routes = {}) {
       updateStatus(`${request.verbLabel} ${mover.name}: choose a square to move to, or click Skip.`);
       return true;
     }
+    // Past the move's distance: a warning, never a block.
+    if (Number(request.effectiveDistance) > 0 && automationChebyshevDistance(mover, to) > Number(request.effectiveDistance)) {
+      request.committing = true;
+      const anyway = await confirmBoardAction(automationMoveWarning(request, to), { title: request.verbLabel || 'Move', confirmText: 'Move anyway', cancelText: 'Pick again' });
+      if (pendingAutomationMove !== request) return true;
+      request.committing = false;
+      if (!anyway) return true;
+    }
     request.committing = true;
     let made = false;
     try {
@@ -21328,11 +21346,17 @@ export function mountBoardInteractions(store, routes = {}) {
       collisionPlacement = null;
       destination = nearestAutomationPullCell(request) || {column: request.targetSnapshot.column, row: request.targetSnapshot.row};
     }
-    // A push or a pull ends on one of its offered squares (forced-move-cells.js: every square farther away, or closer):
-    // whatever is picked is taken as the offered square nearest to it. A creature picked is slammed into.
+    // An offered square goes where it is picked. Any other square is a warning that can be gone past, never a block
+    // (Brandon, November 6, 2026: "it cannot ever stop me from moving"). A creature picked is slammed into. A teleport
+    // warns in its own landing question.
     const lined = false, wholeLine = null;
-    if ((request.movementKind||'forced')==='forced' && (request.baseVerb==='push'||request.baseVerb==='pull') && request.legalCells.length>0 && !collisionPlacement) {
-      destination = closestCell(request.legalCells, clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id ? cell : destination) || destination;
+    if (!collisionPlacement && request.movementKind !== 'teleport'
+      && !request.legalCells.some((square) => square.column === destination.column && square.row === destination.row)) {
+      request.committing = true;
+      const anyway = await confirmBoardAction(automationMoveWarning(request, destination), { title: request.verbLabel || 'Move', confirmText: 'Move it anyway', cancelText: 'Pick again' });
+      if (pendingAutomationMove !== request || request.sceneId !== getActiveSceneId()) return true;
+      request.committing = false;
+      if (!anyway) { updateStatus(`${request.verbLabel} ${request.targetSnapshot.name}: choose a destination or click Skip.`); return true; }
     }
     let clamped = clampPlacementToBounds(
       destination.column,
@@ -21555,6 +21579,35 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  // Why a picked square is not one the move offers: too far, or (a push or a pull) not farther or closer every step.
+  function automationMoveWarning(request, destination) {
+    const name = request.targetSnapshot?.name || 'It';
+    const moved = automationChebyshevDistance(request.targetSnapshot, destination);
+    const allowed = Number(request.effectiveDistance) || 0;
+    const verb = String(request.verbLabel || 'move').toLowerCase();
+    const by = tokenLabel(getPlacementFromStore(request.sourceSnapshot?.id)) || 'the mover';
+    const why = moved > allowed
+      ? `that is ${moved} square${moved === 1 ? '' : 's'} away; the ${verb} is ${allowed}`
+      : request.baseVerb === 'push' ? `that square is not farther from ${by} with every step`
+        : request.baseVerb === 'pull' ? `that square is not closer to ${by} with every step`
+          : 'that square is not one the move offers';
+    return `${name}: ${why}. Move it there anyway?`;
+  }
+
+  // How far a creature or an area is past an ability's range: null when within it (or the ability has none). Range
+  // is counted from the user's space, as the range box is drawn (renderAutomationTargetRangeOverlay).
+  function automationRangeShortfall(targetConfig, box) {
+    const guide = resolveSelectionRangeGuide(targetConfig);
+    if (!guide || !box) return null;
+    const source = resolveAutomationSourcePlacement(guide.sourcePlacement) || resolveAutomationSourcePlacement(targetConfig?.sourcePlacement);
+    if (!source || (box.id && box.id === source.id)) return null;
+    const sw = Math.max(1, source.width || 1), sh = Math.max(1, source.height || 1), bw = Math.max(1, box.width || 1), bh = Math.max(1, box.height || 1);
+    const gapX = Math.max(0, box.column - (source.column + sw), source.column - (box.column + bw));
+    const gapY = Math.max(0, box.row - (source.row + sh), source.row - (box.row + bh));
+    const distance = Math.max(gapX, gapY) + 1;
+    return distance > guide.range ? { distance, range: guide.range, source } : null;
+  }
+
   // Where a forced move picked on this square would leave the creature: the offered square nearest to it, then
   // stopped by walls and creatures as the move itself is (handleAutomationMovePointerDown). For the 3D board's preview.
   function predictAutomationMoveLanding(request, cell) {
@@ -21567,13 +21620,9 @@ export function mountBoardInteractions(store, routes = {}) {
       && automationFootprintsOverlap({ ...destination, width: target.width, height: target.height }, request.sourceSnapshot)) {
       destination = nearestAutomationPullCell(request) || { column: target.column, row: target.row };
     }
-    // Only a push or a pull is held to its offered squares (its line, handleAutomationMovePointerDown). A teleport or
-    // a slide lands where it is picked, past its range too (Brandon, November 6, 2026: never block going beyond the
-    // range), so the preview shows that square, not the nearest offered one.
-    if (kind === 'forced' && (request.baseVerb === 'push' || request.baseVerb === 'pull')
-      && offered.length && !offered.some((square) => square.column === destination.column && square.row === destination.row)) {
-      destination = closestCell(offered, destination) || destination;
-    }
+    // Every move lands where it is picked, past its offered squares too after a warning (Brandon, November 6, 2026:
+    // never block going beyond), so the preview shows that square, not the nearest offered one.
+    void offered;
     let landing = clampPlacementToBounds(destination.column, destination.row, target.width, target.height);
     let collided = [];
     let wall = false;
