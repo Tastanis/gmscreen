@@ -21572,7 +21572,11 @@ export function mountBoardInteractions(store, routes = {}) {
       && automationFootprintsOverlap({ ...destination, width: target.width, height: target.height }, request.sourceSnapshot)) {
       destination = nearestAutomationPullCell(request) || { column: target.column, row: target.row };
     }
-    if (offered.length && !offered.some((square) => square.column === destination.column && square.row === destination.row)) {
+    // Only a push or a pull is held to its offered squares (its line, handleAutomationMovePointerDown). A teleport or
+    // a slide lands where it is picked, past its range too (Brandon, November 6, 2026: never block going beyond the
+    // range), so the preview shows that square, not the nearest offered one.
+    if (kind === 'forced' && (request.baseVerb === 'push' || request.baseVerb === 'pull')
+      && offered.length && !offered.some((square) => square.column === destination.column && square.row === destination.row)) {
       destination = closestCell(offered, destination) || destination;
     }
     let landing = clampPlacementToBounds(destination.column, destination.row, target.width, target.height);
@@ -21954,13 +21958,14 @@ export function mountBoardInteractions(store, routes = {}) {
     span.textContent = `${prefix}${Math.abs(amount)}${damageType ? ` ${formatDamageTypeLabel(damageType)}` : ''}`;
     // When it started: a redraw that puts the token back into the board restarts its CSS animation, which showed
     // the number twice (Brandon, October 2026); resumeFloatNumbers picks it up where it was instead.
-    span.dataset.floatStart = String(performance.now());
+    // Counted from when it is first drawn, and taken away when it has played: right after damage the page can be busy
+    // for a moment, and a number taken away on a clock from now was gone before it was ever seen (Brandon, November 6,
+    // 2026: "the damage gets dealt but it doesn't show"). A long fallback still clears one that never plays.
     token.appendChild(span);
-    window.setTimeout(() => {
-      if (span.parentNode === token) {
-        span.parentNode.removeChild(span);
-      }
-    }, STAMINA_FLOAT_ANIMATION_MS + 100);
+    span.addEventListener('animationstart', () => { if (!span.dataset.floatStart) span.dataset.floatStart = String(performance.now()); });
+    const remove = () => { if (span.parentNode) span.parentNode.removeChild(span); };
+    span.addEventListener('animationend', remove);
+    window.setTimeout(remove, STAMINA_FLOAT_ANIMATION_MS + 6000);
     return true;
   }
 
