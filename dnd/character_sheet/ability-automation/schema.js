@@ -2550,6 +2550,12 @@
     if (key === "soloturns") return normalizeSoloTurnsPassive(input, warnings, path);
     if (key === "movement") return normalizeMovementPassive(input, warnings, path);
     if (key === "conditionrule") return normalizeConditionRulePassive(input, warnings, path);
+    // Damage the creature takes from being force moved is cut (the Null's Inertial Sink: "reduce that damage by an
+    // amount equal to your level"): reduce "level" or a number. Read by the board's slam damage (forcedMovementDamageReduction).
+    if (key === "forcedmovementdamage") {
+      const level = asTrimmedString(input.reduce ?? input.amount).toLowerCase() === "level";
+      return { kind: "forcedMovementDamage", reduce: level ? "level" : asNonNegInt(input.reduce ?? input.amount, 0), label: asTrimmedString(input.label || input.name) || "Forced movement damage" };
+    }
     if (key === "object") {
       // A trap, hazard or siege engine (object-tokens.mjs). `inTracker: true` gives it turns; `object: false` says
       // a creature whose organization reads like an object is not one.
