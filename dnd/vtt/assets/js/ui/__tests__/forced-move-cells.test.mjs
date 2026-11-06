@@ -84,9 +84,9 @@ test('a pull offers only squares that bring the target closer, so none clips the
     for (const pull of pulls) {
       const cells = forcedMoveLegalCells(puller, target, pull, 'pull');
       const row = target.row;
-      // Until October 12, 2026 the three squares beside the puller on the target's side were offered. A pull now
-      // goes along its one straight line (Brandon: "Ability pushes go in a straight line, yes"): one square here.
-      assert.deepEqual(keys(cells), [`23,${row}`], `pull ${pull}: the square beside the puller, on the line to it`);
+      // Every square closer to the puller is offered again (Brandon, November 6, 2026: "potential squares"), the one
+      // beside it on the target's side among them; none of them runs into the puller.
+      assert.ok(keys(cells).includes(`23,${row}`), `pull ${pull}: the square beside the puller is offered`);
       for (const cell of cells) {
         const result = resolveForcedDrag(target, cell, [puller, target]);
         assert.deepEqual([result.destination.column, result.destination.row, result.damage, result.collidedIds], [cell.column, cell.row, 0, []], `pull ${pull} to ${cell.column},${cell.row}: arrives, no collision`);
@@ -98,13 +98,12 @@ test('a pull offers only squares that bring the target closer, so none clips the
 test('the two squares that used to slam the target into the puller, picked by hand, end beside the puller', () => {
   const drowner = token('drowner', 24, 22), cal = token('cal', 22, 22);
   const cells = forcedMoveLegalCells(drowner, cal, 3, 'pull');
-  // Since the straight-line ruling the nearest offered square is the one on the line, beside the puller.
-  for (const [picked, lands] of [[{ column: 24, row: 21 }, { column: 23, row: 22 }], [{ column: 24, row: 23 }, { column: 23, row: 22 }]]) {
-    // Why they are no longer offered: the straight line there runs into the puller.
+  for (const picked of [{ column: 24, row: 21 }, { column: 24, row: 23 }]) {
+    // Why they are not offered: the straight line there runs into the puller.
     assert.deepEqual(resolveForcedDrag(cal, picked, [drowner, cal]).collidedIds, ['drowner']);
     // What the picker does instead: the nearest offered square, which has no collision.
     const offered = closestCell(cells, picked);
-    assert.deepEqual(offered, lands);
+    assert.ok(offered && !(offered.column === 24), 'an offered square, not the column the puller stands in');
     assert.equal(resolveForcedDrag(cal, offered, [drowner, cal]).damage, 0);
   }
   assert.equal(closestCell([], { column: 1, row: 1 }), null);
@@ -137,33 +136,29 @@ test('a push or a pull has one straight line, and each square of it is where the
   assert.deepEqual(forcedLineCells(token('a', 10, 10), token('b', 11, 10), 3, 'push'), [{ column: 12, row: 10 }, { column: 13, row: 10 }, { column: 14, row: 10 }], 'nearest first');
 });
 
-test('a push offers only the squares of its line, a slide still offers any', () => {
+test('a push offers every square farther from the pusher, a slide still offers any (November 6, 2026)', () => {
   const pusher = token('warden', 10, 10);
-  assert.deepEqual(forcedMoveLegalCells(pusher, token('cal', 11, 10), 3, 'push'), [{ column: 12, row: 10 }, { column: 13, row: 10 }, { column: 14, row: 10 }], 'straight east, and nothing to either side of it');
-  assert.deepEqual(forcedMoveLegalCells(pusher, token('cal', 11, 11), 2, 'push'), [{ column: 12, row: 12 }, { column: 13, row: 13 }], 'a true diagonal');
-  assert.deepEqual(forcedMoveLegalCells(pusher, token('cal', 12, 9), 4, 'push'), [{ column: 13, row: 8 }, { column: 14, row: 8 }, { column: 15, row: 7 }, { column: 16, row: 7 }], 'at a slant it steps over as it goes');
-  // Every square offered is further from the pusher than the one before it.
+  const east = keys(forcedMoveLegalCells(pusher, token('cal', 11, 10), 3, 'push'));
+  for (const square of ['12,10', '13,10', '14,10', '12,9', '12,11', '14,7', '14,13']) assert.ok(east.includes(square), `${square} is offered`);
+  for (const square of ['10,10', '11,10', '9,10']) assert.ok(!east.includes(square), `${square} is not`);
+  // Every square offered is farther from the pusher than where the target started.
   for (const target of [token('t', 12, 9), token('t', 7, 4), token('t', 10, 13), token('t', 8, 11)]) {
-    let last = Math.max(Math.abs(target.column - 10), Math.abs(target.row - 10));
-    for (const cell of forcedMoveLegalCells(pusher, target, 6, 'push')) { const next = Math.max(Math.abs(cell.column - 10), Math.abs(cell.row - 10)); assert.ok(next > last, `from ${target.column},${target.row}: ${cell.column},${cell.row} is further away`); last = next; }
+    const start = Math.max(Math.abs(target.column - 10), Math.abs(target.row - 10));
+    for (const cell of forcedMoveLegalCells(pusher, target, 6, 'push')) assert.ok(Math.max(Math.abs(cell.column - 10), Math.abs(cell.row - 10)) > start, `from ${target.column},${target.row}: ${cell.column},${cell.row} is farther away`);
   }
-  assert.equal(forcedMoveLegalCells(pusher, token('cal', 11, 10), 2, 'slide').length, 24, 'a slide is not a line');
-  // Sharing a middle there is no line to take: the old fan is all there is to offer.
-  assert.ok(forcedMoveLegalCells(token('a', 5, 5), token('b', 5, 5), 1, 'push').length >= 0);
+  assert.equal(forcedMoveLegalCells(pusher, token('cal', 11, 10), 2, 'slide').length, 24, 'a slide offers any square');
 });
 
-test('a pull offers the squares of its line up to the one beside the puller', () => {
+test('a pull offers every square closer to the puller, never its own', () => {
   const puller = token('puller', 10, 10);
-  assert.deepEqual(forcedMoveLegalCells(puller, token('t', 15, 10), 3, 'pull'), [{ column: 14, row: 10 }, { column: 13, row: 10 }, { column: 12, row: 10 }]);
-  assert.deepEqual(forcedMoveLegalCells(puller, token('t', 13, 10), 6, 'pull'), [{ column: 12, row: 10 }, { column: 11, row: 10 }], 'it stops beside the puller however long the pull');
-  assert.deepEqual(forcedMoveLegalCells(puller, token('t', 14, 12), 6, 'pull'), [{ column: 13, row: 11 }, { column: 12, row: 11 }, { column: 11, row: 10 }], 'at a slant, to the square beside the puller that the line reaches');
-  assert.deepEqual(nearestPullCell(puller, token('t', 14, 12), forcedMoveLegalCells(puller, token('t', 14, 12), 6, 'pull')), { column: 11, row: 10 });
+  const cells = keys(forcedMoveLegalCells(puller, token('t', 15, 10), 3, 'pull'));
+  for (const square of ['14,10', '13,10', '12,10', '14,9', '14,11']) assert.ok(cells.includes(square), `${square} is offered`);
+  assert.ok(!keys(forcedMoveLegalCells(puller, token('t', 13, 10), 6, 'pull')).includes('10,10'), 'never the square the puller stands in');
+  assert.ok(nearestPullCell(puller, token('t', 14, 12), forcedMoveLegalCells(puller, token('t', 14, 12), 6, 'pull')));
 });
 
-test('the board takes what is picked as a square of the line, and says whose push it is', () => {
+test('the board takes what is picked as the nearest offered square, and does not hold it to a line', () => {
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
-  assert.match(board, /const lined = \(request\.movementKind\|\|'forced'\)==='forced' && \(request\.baseVerb==='push'\|\|request\.baseVerb==='pull'\) && request\.legalCells\.length>0;/, 'a push or a pull with squares on offer; a slide and a teleport are as they were');
-  assert.match(board, /if \(!collisionPlacement\) destination = closestCell\(request\.legalCells,/, 'a pick off the line is the offered square nearest to it');
-  assert.match(board, /if\(collisionPlacement&&lined&&wholeLine\.length\)\{\s*const last=wholeLine\[wholeLine\.length-1\];forcedIntent=\{column:last\.column,row:last\.row\};/, 'a creature on the line is slammed into along the line, with the whole distance');
-  assert.match(board, /forcedIntent=\{\.\.\.forcedIntent,by:\{id:request\.sourceSnapshot\.id,verb:request\.baseVerb\}\};/, 'the server is told whose push or pull it is');
+  assert.match(board, /destination = closestCell(request.legalCells, clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id ? cell : destination) || destination;/, 'a pick off the offered squares is the nearest of them');
+  assert.doesNotMatch(board, /forcedIntent={...forcedIntent,by:{id:request.sourceSnapshot.id,verb:request.baseVerb}};/, 'no line for the server to hold it to');
 });

@@ -21328,16 +21328,11 @@ export function mountBoardInteractions(store, routes = {}) {
       collisionPlacement = null;
       destination = nearestAutomationPullCell(request) || {column: request.targetSnapshot.column, row: request.targetSnapshot.row};
     }
-    // A push or a pull goes along its one straight line (forced-move-cells.js). Whatever is picked is taken as
-    // the offered square nearest to it. A creature picked on the line is slammed into with the whole distance; one
-    // that is off the line is only a place to aim at.
-    const lined = (request.movementKind||'forced')==='forced' && (request.baseVerb==='push'||request.baseVerb==='pull') && request.legalCells.length>0;
-    let wholeLine = null;
-    if (lined) {
-      wholeLine = cellsOnMap(forcedLineCells(request.sourceSnapshot, request.targetSnapshot, request.effectiveDistance, request.baseVerb), clampPlacementToBounds, request.targetSnapshot);
-      const struck = collisionPlacement ? getAutomationPlacementSnapshot(collisionPlacement) : null;
-      if (struck && !wholeLine.some((square) => automationFootprintsOverlap({...square, width: request.targetSnapshot.width, height: request.targetSnapshot.height}, struck))) collisionPlacement = null;
-      if (!collisionPlacement) destination = closestCell(request.legalCells, clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id ? cell : destination) || destination;
+    // A push or a pull ends on one of its offered squares (forced-move-cells.js: every square farther away, or closer):
+    // whatever is picked is taken as the offered square nearest to it. A creature picked is slammed into.
+    const lined = false, wholeLine = null;
+    if ((request.movementKind||'forced')==='forced' && (request.baseVerb==='push'||request.baseVerb==='pull') && request.legalCells.length>0 && !collisionPlacement) {
+      destination = closestCell(request.legalCells, clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id ? cell : destination) || destination;
     }
     let clamped = clampPlacementToBounds(
       destination.column,
@@ -21380,8 +21375,8 @@ export function mountBoardInteractions(store, routes = {}) {
         forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);
         if(forcedCollision.collidedIds.includes(request.sourceSnapshot.id)){forcedIntent={column:origin.column,row:origin.row};forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);}
       }
-      // Say whose push or pull this is, so the server holds it to that creature's line (ForcedMovement::assertLine).
-      if(lined&&canonical[request.sourceSnapshot.id]&&request.sourceSnapshot.id!==origin.id)forcedIntent={...forcedIntent,by:{id:request.sourceSnapshot.id,verb:request.baseVerb}};
+      // A push or a pull is no longer held to one straight line, so it does not name its pusher to the server's line
+      // check (ForcedMovement::assertLine), which now only applies to a move that does.
       clamped=forcedCollision.destination;
       // The push ends at a wall it could break: ask before anything is sent.
       const through=await askForcedBreakThrough(request.sceneId,origin,forcedIntent,Object.values(canonical),forcedCollision);

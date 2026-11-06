@@ -67,16 +67,9 @@ export function forcedMoveLegalCells(source, target, distance, baseVerb) {
       cells.push({ column, row });
     }
   }
-  if (baseVerb !== 'push' && baseVerb !== 'pull') return cells;
-  // A push or a pull goes along its one straight line, out to the first square on it that is not a legal one.
-  const line = forcedLineCells(source, target, distance, baseVerb);
-  if (!line.length) return cells;
-  const offered = [];
-  for (const cell of line) {
-    if (!cells.some((legal) => legal.column === cell.column && legal.row === cell.row)) break;
-    offered.push(cell);
-  }
-  return offered;
+  // Every square a push may end on, not one straight line (Brandon, November 6, 2026: "giving me potential squares";
+  // this replaces his October 12 straight-line ruling). forcedLineCells below is kept for what still draws a line.
+  return cells;
 }
 
 // The one straight line a push or a pull goes along. Brandon, October 12, 2026: "Ability pushes go in a straight

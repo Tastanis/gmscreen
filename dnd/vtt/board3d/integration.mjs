@@ -45,7 +45,7 @@ async function mount(){
  let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
  let guideHeld=null,guideRoute=null;
- let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
+ let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',reachSignature='',shownLevel=null;
 
  function pictureRect(){
   // Only the scene's own picture: just after a switch the map image still holds the old scene's until the new one loads.
@@ -237,7 +237,7 @@ async function mount(){
   if(!air)return walkerHit(e,p);
   const q=view?.pointOnPlane(e.clientX,e.clientY,air.z);if(!q)return null;
   const x=q.x+air.dx,y=q.y+air.dy;return {x,y,z:helpers.groundAt(x,y),levelId:null,surfaceId:null,rampId:null,air:air.z};}
- function clearGuides(){if(!view)return;view.setReachable([]);view.setPath([]);view.setMovementRoute(null);sayHeld(null);}
+ function clearGuides(){if(!view)return;(reachSignature='',view.setReachable([]));view.setPath([]);view.setMovementRoute(null);sayHeld(null);}
  // A short line by the pointer while a token is held over a square it cannot be put down on (or over no ground).
  let heldNote=null;
  function sayHeld(words,e=null){
@@ -279,13 +279,13 @@ async function mount(){
   if(!view||lift)return;
   if(Number.isFinite(e.clientX)&&Number.isFinite(e.clientY))hoverPointer={clientX:e.clientX,clientY:e.clientY,shiftKey:!!e.shiftKey,ctrlKey:!!e.ctrlKey,altKey:!!e.altKey,metaKey:!!e.metaKey};
   if(context.targetMode==='area'||context.targetMode==='move'){const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(hit){const cell={column:Math.floor(hit.x),row:Math.floor(hit.y)},key=`ability:${context.targetMode}:${cell.column}:${cell.row}`;if(key!==hoverSignature){hoverSignature=key;bridge.previewAbility?.(cell);context=bridge.getContext();paintAbilityGuide();}}return;}
-  if(!p||(!drag?.moved&&clickMoveTokenId!==p.id)||context.busy||context.targetMode){if(hoverSignature){view.setReachable([]);view.setPath([]);hoverSignature='';}return;}
+  if(!p||(!drag?.moved&&clickMoveTokenId!==p.id)||context.busy||context.targetMode){if(hoverSignature){(reachSignature='',view.setReachable([]));view.setPath([]);hoverSignature='';}return;}
   const hit=dragHit(e,p);if(!hit){bridge.endMovementPreview?.();clearGuides();hoverSignature='';held=null;sayHeld('No ground here: let go to put it back.',e);return;}
   const dest=destination(hit,p),key=[p.id,dest.column,dest.row,hit.rampId?'ramp':hit.z.toFixed(2),hit.levelId,hit.surfaceId,hit.rampId,movementKind(e),Boolean(drag?.moved)].join(':');if(key===hoverSignature)return;hoverSignature=key;
   const preview=bridge.previewMovement?.({placementId:p.id,...dest,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});
   sayHeld(preview?.blocked||null,e);
   const displayHeight=Number.isFinite(preview?.surfaceElevation)?preview.surfaceElevation:hit.z;
-  const cells=[];for(let x=0;x<(p.width||1);x++)for(let y=0;y<(p.height||1);y++)cells.push({x:dest.column+x+.5,y:dest.row+y+.5,z:displayHeight,level:hit.level});view.setReachable(cells);
+  const cells=[];for(let x=0;x<(p.width||1);x++)for(let y=0;y<(p.height||1);y++)cells.push({x:dest.column+x+.5,y:dest.row+y+.5,z:displayHeight,level:hit.level});reachSignature='';view.setReachable(cells);
   const source=world(p),airZ=Number.isFinite(hit.air)?hit.air:null;view.setMovementRoute(preview?.route??null);view.setPath(preview?.route?[]:[source,{x:dest.column+(p.width||1)/2,y:dest.row+(p.height||1)/2,z:airZ??displayHeight}]);
   // The held token stands where the move would leave it, so it follows the pointer square by square; a raised one keeps its height.
   const landing=airZ??(Number.isFinite(preview?.predictedLanding?.height)?preview.predictedLanding.height:displayHeight);held={id:p.id,x:dest.column+(p.width||1)/2,y:dest.row+(p.height||1)/2,z:landing};
@@ -296,7 +296,11 @@ async function mount(){
  const claims=()=>!!clickMoveTokenId||context.targetMode==='area'||context.targetMode==='move';
  let surfaceDown=null;
  mapSurface.addEventListener('pointermove',e=>{if(!e.buttons)showHover(e);});
- mapSurface.addEventListener('pointerleave',()=>{if(!drag&&!clickMoveTokenId){bridge.endMovementPreview?.();clearGuides();hoverSignature='';}});
+ // Aiming an ability: going over a mini (its box stands over the squares behind it) is not leaving the board, so
+ // the offered squares stay drawn and the aim follows the ground under the pointer.
+ const aiming=()=>context.targetMode==='area'||context.targetMode==='move';
+ tokenLayer.addEventListener('pointermove',e=>{if(!e.buttons&&aiming())showHover(e);});
+ mapSurface.addEventListener('pointerleave',()=>{if(!drag&&!clickMoveTokenId&&!aiming()){bridge.endMovementPreview?.();clearGuides();hoverSignature='';}});
  mapSurface.addEventListener('pointerdown',e=>{if(e.button!==0||e.altKey||!view||!claims())return;e.preventDefault();e.stopImmediatePropagation();surfaceDown={x:e.clientX,y:e.clientY};},true);
  mapSurface.addEventListener('pointerup',e=>{if(e.button!==0||!surfaceDown)return;const start=surfaceDown;surfaceDown=null;e.preventDefault();e.stopImmediatePropagation();
   // A held token is put down by this click whatever happens: a little movement of the hand, or a click off the map
@@ -309,6 +313,10 @@ async function mount(){
  // Tokens: select, drag or click-to-move, through the VTT bridge.
  tokenLayer.addEventListener('pointerdown',e=>{const node=e.target.closest('[data-placement-id]');if(!node||e.target.closest('[data-token-trigger-ready],[data-token-judgment-mark],[data-token-hidden-effect],button'))return;
   if(e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();if(lift)return;const id=node.dataset.placementId;
+  // A move or an area is aimed at the ground under the pointer, also through a mini standing in front of it; only a
+  // click on the creature's own squares picks the creature (a push aimed into it).
+  if(aiming()){const p=find(id),hit=pickAtClient(e.clientX,e.clientY,{tokens:false});
+   if(hit&&!(p&&hit.x>=p.column&&hit.x<p.column+(p.width||1)&&hit.y>=p.row&&hit.y<p.row+(p.height||1))){bridge.pickAbility?.({column:Math.floor(hit.x),row:Math.floor(hit.y)});return;}}
   if(context.targetMode){const p=find(id);if(p)bridge.pickAbility?.({column:p.column,row:p.row,placementId:id});return;}
   if(bridge.target(id,{clientX:e.clientX,clientY:e.clientY}))return;
   const p=find(id);
@@ -419,11 +427,12 @@ async function mount(){
  // ability's range box is not drawn for a move: it is the pusher's reach, not where the creature can go.
  function paintAbilityGuide(){if(!view)return;const guide=context.abilityGuide,signature=JSON.stringify(guide);if(signature===guideSignature)return;guideSignature=signature;
   paintAbilityRange(guide?.kind==='move'?null:guide);if(guide?.kind!=='area')paintAreaPreview(null);guideHeld=null;guideRoute=null;
-  if(!guide){view.setReachable([]);view.setPath([]);return;}
+  if(!guide){(reachSignature='',view.setReachable([]));view.setPath([]);return;}
   const level=context.levels?.find(l=>l.id===guide.levelId),height=Number(level?.elevationSquares)||0,onFloor=guide.levelId&&guide.levelId!=='level-0';
   const ground=(x,y)=>onFloor?height:(Number.isFinite(helpers.groundAt?.(x,y))?helpers.groundAt(x,y):height);
   const at=cell=>({x:cell.column+.5,y:cell.row+.5,z:Number.isFinite(cell.rawHeight)?cell.rawHeight:ground(cell.column+.5,cell.row+.5),level:-1});
-  if(guide.kind==='move'){view.setReachable((guide.legalCells||[]).map(at));view.setPath([]);
+  // The offered squares are drawn again only when they change, not on every move of the pointer.
+  if(guide.kind==='move'){const reach=JSON.stringify(guide.legalCells||[]);if(reach!==reachSignature){reachSignature=reach;view.setReachable((guide.legalCells||[]).map(at));}view.setPath([]);
    const target=guide.target,land=guide.landing;
    if(target&&land){const w=target.width||1,h=target.height||1,from=world(target),x=land.column+w/2,y=land.row+h/2,z=ground(x,y);
     if(land.column!==target.column||land.row!==target.row)guideHeld={id:target.id,x,y,z};
@@ -432,8 +441,8 @@ async function mount(){
     const text=`${verb[0].toUpperCase()}${verb.slice(1)} ${land.moved}${hit?` · hits ${hit}${land.damage>0?` for ${land.damage}`:''}`:''}`;
     guideRoute=land.moved?{pieces:[{points:[{x:from.x,y:from.y,z:from.z},{x,y,z}],color:'#f59e0b'}],total:{text,at:{x,y,z:z+1.6}}}:null;}
   }
-  else if(guide.kind==='area'){view.setReachable([]);view.setPath([]);paintAreaPreview(guide,height);return;}
-  else{view.setReachable([]);view.setPath([]);}
+  else if(guide.kind==='area'){(reachSignature='',view.setReachable([]));view.setPath([]);paintAreaPreview(guide,height);return;}
+  else{(reachSignature='',view.setReachable([]));view.setPath([]);}
  }
  let gridVisible=null,warmSignature='';
  bridge.subscribe(next=>{const selectedNow=next.placements?.find(p=>p.id===next.selectedIds?.[0]);const warmKey=selectedNow&&selectedNow.canMove?[selectedNow.id,selectedNow.column,selectedNow.row,selectedNow.levelId].join(':'):'';if(warmKey&&warmKey!==warmSignature&&!next.busy){warmSignature=warmKey;planner.warm(selectedNow);}
