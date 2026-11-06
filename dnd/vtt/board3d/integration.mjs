@@ -558,6 +558,8 @@ async function mount(){
     const boxTop=head?Math.min(head.y,foot.y-size*.5):Math.min(foot.y-size*.12,top.y+size*.1)-size;
     node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${boxTop}px`);node.style.setProperty('--vtt3d-size',`${size}px`);
     if(head)node.style.setProperty('--vtt3d-height',`${foot.y+size*.12-boxTop}px`);else node.style.removeProperty('--vtt3d-height');
+    // Seen from the side the head is not straight over the base: the bar and conditions shift over the head (integration.css).
+    if(head)node.style.setProperty('--vtt3d-head-dx',`${(head.x-(foot.x-(shared?shared.offset*size*.55:0))).toFixed(1)}px`);else node.style.removeProperty('--vtt3d-head-dx');
     node.style.setProperty('--vtt3d-visible',(shownLevel===null||shownLevel<0||p.level<=shownLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
    }
    }

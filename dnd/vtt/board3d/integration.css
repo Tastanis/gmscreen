@@ -35,9 +35,19 @@
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-hover-highlight { outline: 3px solid rgba(129, 140, 248, .95) !important; outline-offset: 2px; box-shadow: 0 0 0 7px rgba(165, 180, 252, .45), 0 0 18px rgba(129, 140, 248, .6) !important; }
 /* A held token lets the pointer through to the square it is being put down on (integration.mjs markHeld). */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held, .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held * { pointer-events: none !important; }
-/* Conditions sit above the health bar (Brandon, November 4, 2026: they covered it). The bar's top is at -30.4u
-   (board.css .vtt-token__hp-bar); a token with no bar keeps them just over the head. */
-.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { top: auto; bottom: calc(100% + var(--tok-unit) * 32); z-index: 2; }
+/* Conditions sit above the health bar (Brandon, November 4, 2026: they covered it). Over a mini the bar's top is
+   about 35u over the head (below); a token with no bar keeps them just over the head. */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { top: auto; bottom: calc(100% + var(--tok-unit) * 40); z-index: 2; }
+/* On the 3D board the bar is tighter under its numbers, and over a mini it sits a gap above the head, so it never
+   covers the face (Brandon, November 6, 2026). It is anchored by its foot; the conditions above clear its ~30u. */
+.vtt3d-on #vtt-token-layer>.vtt-token .vtt-token__hp-bar { padding-bottom: calc(var(--tok-unit) * 2); gap: calc(var(--tok-unit) * 2.4); }
+.vtt3d-on #vtt-token-layer>.vtt-token .vtt-token__hp-value { line-height: 1.05; }
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__hp-bar { top: auto; bottom: calc(100% + var(--tok-unit) * 7); }
+/* ...and the "trigger ready" badge sits beside the bar, off the head. All three are centred on the head, which seen
+   from the side is not straight over the base (--vtt3d-head-dx, integration.mjs). */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__trigger-ready { top: auto; right: 0; bottom: calc(100% + var(--tok-unit) * 7); translate: calc(100% + var(--vtt3d-head-dx, 0px)) 0; }
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__hp-bar,
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { translate: var(--vtt3d-head-dx, 0px) 0; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini:not(:has(> .vtt-token__hp-bar)) .vtt-token__condition { bottom: calc(100% + var(--tok-unit) * 6); }
 
 /* Where the turn began (integration.mjs placeTurnGhost): a faint copy of the token, in a dashed gold ring. */
