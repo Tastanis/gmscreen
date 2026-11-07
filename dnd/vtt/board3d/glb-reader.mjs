@@ -7,10 +7,11 @@ import {shrinkBitmap} from './quality.mjs';
 // KHR_materials_unlit, alphaMode BLEND (alpha may come from a 4-part COLOR_0) with extras.blending "additive", and
 // extras.ghost (see-through, still writing depth, drawn in one pass). Packed files read too: geometry compressed with
 // meshoptimizer (EXT_/KHR_meshopt_compression, as gltfpack writes), smaller number types (KHR_mesh_quantization),
-// WebP pictures (EXT_texture_webp) and KHR_texture_transform. No Draco, KTX2, skins or animation: what the board's
-// hero minis and map art use. Returns {scene, extras} (the root node's extras).
+// WebP pictures (EXT_texture_webp) and KHR_texture_transform. Skins (joints and weights) and animations read too,
+// for Pippa's thorn vines (November 2026): a cubic-spline curve is read through its key values. No Draco or KTX2.
+// Returns {scene, extras, animations} (the root node's extras; animations as three.js clips, by node name).
 const COMPONENT={5120:Int8Array,5121:Uint8Array,5122:Int16Array,5123:Uint16Array,5125:Uint32Array,5126:Float32Array};
-const SIZE={SCALAR:1,VEC2:2,VEC3:3,VEC4:4};
+const SIZE={SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT4:16};
 
 export async function readGlb(url){
  const buffer=await fetch(url).then(r=>{if(!r.ok)throw Error(`${url}: ${r.status}`);return r.arrayBuffer();});
@@ -55,21 +56,33 @@ export async function readGlb(url){
   if(m.extras?.ghost)out.userData.ghost=true;
   out.name=m.name||'';out.userData.additive=out.blending===THREE.AdditiveBlending;materials.set(key,out);return out;};
  const meshes=(json.meshes||[]).map(mesh=>mesh.primitives.map(p=>{const g=new THREE.BufferGeometry();
-  for(const [name,target] of [['POSITION','position'],['NORMAL','normal'],['TEXCOORD_0','uv'],['COLOR_0','color']])if(p.attributes[name]!==undefined)g.setAttribute(target,attribute(p.attributes[name]));
+  for(const [name,target] of [['POSITION','position'],['NORMAL','normal'],['TEXCOORD_0','uv'],['COLOR_0','color'],['JOINTS_0','skinIndex'],['WEIGHTS_0','skinWeight']])if(p.attributes[name]!==undefined)g.setAttribute(target,attribute(p.attributes[name]));
   if(p.indices!==undefined)g.setIndex(attribute(p.indices));if(!g.attributes.normal)g.computeVertexNormals();g.computeBoundingSphere();
-  const m=new THREE.Mesh(g,material(p.material,p.attributes.COLOR_0!==undefined));m.name=mesh.name||'';return m;}));
+  const skinned=p.attributes.JOINTS_0!==undefined,m=new (skinned?THREE.SkinnedMesh:THREE.Mesh)(g,material(p.material,p.attributes.COLOR_0!==undefined));m.name=mesh.name||'';return m;}));
  // A mesh used by several nodes (a map's repeated props: barrels, mushrooms, stones) is drawn once per top part as an
  // InstancedMesh, one copy at each node. (One three.js object can have only one parent: sharing it left every copy but the last empty.)
  const uses=new Map();(json.nodes||[]).forEach(n=>{if(n.mesh!==undefined)uses.set(n.mesh,(uses.get(n.mesh)||0)+1);});
- const nodes=(json.nodes||[]).map(n=>{const o=n.mesh===undefined?new THREE.Group():uses.get(n.mesh)>1&&!n.children?.length?Object.assign(new THREE.Object3D(),{userData:{repeat:n.mesh}}):meshes[n.mesh].length===1?meshes[n.mesh][0]:new THREE.Group().add(...meshes[n.mesh]);o.name=n.name||o.name;
+ const joints=new Set((json.skins||[]).flatMap(k=>k.joints||[]));
+ const nodes=(json.nodes||[]).map((n,index)=>{const o=n.mesh===undefined?(joints.has(index)?new THREE.Bone():new THREE.Group()):uses.get(n.mesh)>1&&!n.children?.length?Object.assign(new THREE.Object3D(),{userData:{repeat:n.mesh}}):meshes[n.mesh].length===1?meshes[n.mesh][0]:new THREE.Group().add(...meshes[n.mesh]);o.name=n.name||o.name;
   if(n.matrix)o.applyMatrix4(new THREE.Matrix4().fromArray(n.matrix));else{if(n.translation)o.position.fromArray(n.translation);if(n.rotation)o.quaternion.fromArray(n.rotation);if(n.scale)o.scale.fromArray(n.scale);}
   o.userData.extras=n.extras||null;return o;});
  (json.nodes||[]).forEach((n,i)=>{for(const c of n.children||[])nodes[i].add(nodes[c]);});
  const scene=new THREE.Group(),roots=json.scenes?.[json.scene??0]?.nodes||[];for(const r of roots)scene.add(nodes[r]);
  scene.updateMatrixWorld(true);
+ // A skinned mesh is bound to its joints as they stand now (the file's rest pose).
+ (json.nodes||[]).forEach((n,i)=>{if(n.skin===undefined)return;const skin=json.skins[n.skin],bones=skin.joints.map(j=>nodes[j]);
+  const inv=skin.inverseBindMatrices!==undefined?attribute(skin.inverseBindMatrices).array:null;
+  const inverses=bones.map((_,k)=>inv?new THREE.Matrix4().fromArray(inv,k*16):new THREE.Matrix4());
+  nodes[i].traverse(o=>{if(o.isSkinnedMesh)o.bind(new THREE.Skeleton(bones,inverses),o.matrixWorld);});});
+ // Animations as clips; each track names its node by name (names are the file's own, unique in it).
+ const animations=(json.animations||[]).map(a=>new THREE.AnimationClip(a.name||'',-1,a.channels.map(c=>{const sampler=a.samplers[c.sampler],node=nodes[c.target.node];if(!node)return null;
+  const times=attribute(sampler.input).array,values=attribute(sampler.output).array,n={translation:3,rotation:4,scale:3}[c.target.path];if(!n)return null;
+  let out=values;if(sampler.interpolation==='CUBICSPLINE'){out=new Float32Array(times.length*n);for(let k=0;k<times.length;k++)for(let q=0;q<n;q++)out[k*n+q]=values[k*n*3+n+q];}
+  const Track=c.target.path==='rotation'?THREE.QuaternionKeyframeTrack:THREE.VectorKeyframeTrack,prop={translation:'position',rotation:'quaternion',scale:'scale'}[c.target.path];
+  return new Track(`${node.name}.${prop}`,Array.from(times),Array.from(out),sampler.interpolation==='STEP'?THREE.InterpolateDiscrete:THREE.InterpolateLinear);}).filter(Boolean)));
  for(const part of [...scene.children]){const spots=new Map(),inv=part.matrixWorld.clone().invert();
   part.traverse(o=>{if(o.userData.repeat===undefined)return;if(!spots.has(o.userData.repeat))spots.set(o.userData.repeat,[]);spots.get(o.userData.repeat).push(inv.clone().multiply(o.matrixWorld));});
   for(const [i,list] of spots)for(const m of meshes[i]){const im=new THREE.InstancedMesh(m.geometry,m.material,list.length);im.name=m.name;list.forEach((x,k)=>im.setMatrixAt(k,x));im.instanceMatrix.needsUpdate=true;im.computeBoundingSphere();im.computeBoundingBox?.();part.add(im);}
   const gone=[];part.traverse(o=>{if(o.userData.repeat!==undefined)gone.push(o);});for(const o of gone)o.removeFromParent();}
- return {scene,extras:roots.length===1?nodes[roots[0]].userData.extras:null};
+ return {scene,extras:roots.length===1?nodes[roots[0]].userData.extras:null,animations};
 }

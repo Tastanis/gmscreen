@@ -60,3 +60,19 @@ export async function shrinkBitmap(bitmap, max = quality().maxTexture) {
   bitmap.close?.();
   return small;
 }
+
+// Auras on this screen (Brandon, November 6, 2026: "make the animated auras toggleable in the settings ... anyone can fade
+// the auras on their own screen"). 'vtt-aura-animated' = on | off: off draws every aura as a plain faint box, with no
+// vines, flames, smoke or spores (lighter). 'vtt-aura-box' = how strong the boxes are drawn, 0..1.
+export const AURA_ANIMATED_KEY = 'vtt-aura-animated';
+export const AURA_BOX_KEY = 'vtt-aura-box';
+export const AURA_BOX_LEVELS = [{ value: 1, label: 'Full' }, { value: .55, label: 'Half' }, { value: .25, label: 'Faint' }, { value: 0, label: 'Hidden' }];
+export function auraSettings(storage = globalThis.localStorage) {
+  let animated = true, box = 1;
+  try {
+    animated = storage?.getItem(AURA_ANIMATED_KEY) !== 'off';
+    const b = Number.parseFloat(storage?.getItem(AURA_BOX_KEY));
+    if (Number.isFinite(b)) box = Math.max(0, Math.min(1, b));
+  } catch { /* no storage: the defaults */ }
+  return { animated, box };
+}

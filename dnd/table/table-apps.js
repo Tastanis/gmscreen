@@ -769,6 +769,7 @@
       { t: 'Prep', gm: true, icon: 'workshop', note: 'creatures beside the map', go: () => { const b = tb(); place(apps.creatures(), 0, 0, b.width * .36, b.height); place(apps.map(), b.width * .36, 0, b.width * .64, b.height); } },
       { t: 'Clear the table', icon: 'layouts', go: () => T.clearLayout() },
       ...(SERVED ? qualityRows() : []),
+      ...(SERVED ? auraRows() : []),
       { html: '<div class="menu-label">The table</div>' },
       { t: 'Background…', icon: 'picture', note: 'picture · GIF · MP4', go: () => { const i = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/*' }); i.onchange = () => i.files[0] && T.useBackgroundFile(i.files[0]); i.click(); } },
       { t: 'Default background', icon: 'settings', note: 'leather', go: () => { T.setBackground(null); T.saveBg(null); } },
@@ -788,6 +789,17 @@
       row('high', 'High', 'sharpest, most memory'),
       row('balanced', 'Balanced', 'half the pixels, smaller pictures'),
       row('low', 'Low', 'lightest; unloads a tucked map'),
+    ];
+  }
+  // Auras on this screen only (Brandon, November 6, 2026: "make the animated auras toggleable in the settings ... anyone
+  // can fade the auras on their own screen"). Read by the map through this browser's storage (board3d/quality.mjs).
+  function auraRows() {
+    if (!MQ?.auraSettings) return [];
+    const now = MQ.auraSettings(), pick = (key, value, text) => () => { try { localStorage.setItem(key, value); } catch (_) { /* no storage */ } T.toast(text); };
+    return [
+      { html: '<div class="menu-label">Auras · on your screen</div>' },
+      { t: now.animated ? 'Animated auras: on' : 'Animated auras: off', icon: now.animated ? 'radioOn' : 'radio', cls: now.animated ? 'on' : '', note: now.animated ? 'vines, fire, spores; click for plain boxes' : 'plain boxes; click for the effects', go: pick(MQ.AURA_ANIMATED_KEY, now.animated ? 'off' : 'on', now.animated ? 'Auras: plain boxes on your screen' : 'Auras: animated on your screen') },
+      ...MQ.AURA_BOX_LEVELS.map((level) => ({ t: 'Aura boxes: ' + level.label, icon: Math.abs(now.box - level.value) < .01 ? 'radioOn' : 'radio', cls: Math.abs(now.box - level.value) < .01 ? 'on' : '', go: pick(MQ.AURA_BOX_KEY, String(level.value), 'Aura boxes: ' + level.label.toLowerCase() + ' on your screen') })),
     ];
   }
   function setQuality(k) {

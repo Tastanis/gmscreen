@@ -166,3 +166,6 @@ export function buildGroundCover(items,{leafMaterial,flowerMaterial}){
   const mesh=new THREE.InstancedMesh(geo,mat,list.length);list.forEach((item,i)=>{mesh.setMatrixAt(i,item.matrix);mesh.setColorAt(i,item.color);});mesh.receiveShadow=true;mesh.userData={level,category:'prop'};meshes.push(mesh);}
  return {meshes};
 }
+
+// Shared with the aura layer (layers/auras.mjs: Pippa's psionic thorns).
+export {appendTube,random as seededRandom,hashOf};

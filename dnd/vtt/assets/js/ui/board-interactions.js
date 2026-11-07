@@ -1873,6 +1873,11 @@ export function mountBoardInteractions(store, routes = {}) {
   // The creatures picked so far for one ability's targets ({id, name}): each keeps a red ring and its number until
   // the picking ends (a moment after, so the last one is seen).
   let pickedAutomationTargets = [];
+  // Used while tokens are drawn (applyTokenOverlays), which can happen before the setup reaches where they used to
+  // be made: the map then failed to load with "Cannot access 'heroMovePopups' before initialization" (November 6, 2026).
+  const heroMovePopups = new Map(); // pending id -> popup element
+  const promptedTriggerPopups = new Set();
+  const HERO_TRIGGER_DIRECTOR_AFTER_MS = 25000;
   let pickedAutomationTargetsTimer = null;
   let automationTargetPrompt = null;
   let automationTargetRangeOverlay = null;
@@ -17333,7 +17338,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  const heroMovePopups = new Map(); // pending id -> popup element
   function maybePromptHeroMove(placement) {
     const pending = placement?.pendingMove;
     heroMovePopups.forEach((popup, id) => {
@@ -17372,7 +17376,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Popup triggers ("when it dies"): the GM's page asks as soon as one is waiting on a monster, wherever it fired.
   // Yes runs the ability as the abilities list would (with its pickers); No lets it go.
-  const promptedTriggerPopups = new Set();
   function maybePromptTriggerPopups(placement) {
     if (!placement?.id) return;
     if (!placement.monster) { maybePromptHeroTriggerPopups(placement); return; }
@@ -17390,7 +17393,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // A hero's trigger that asks (resolve "popup"): the hero's player is asked "Use it now?", the Director when the
   // player's page has not taken it up within a while; yes runs it as the ready trigger it is.
-  const HERO_TRIGGER_DIRECTOR_AFTER_MS = 25000;
   function maybePromptHeroTriggerPopups(placement) {
     const payloads = placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object' ? placement.readyTriggerPayloads : {};
     const profileId = getAutomationProfileIdForPlacement(placement.id);

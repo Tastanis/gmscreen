@@ -78,7 +78,9 @@ test('heroes asked to move: a popup for whoever can move the hero; Move opens th
   assert.match(popup, /canCurrentUserMovePlacement\(placement\)/);
   assert.match(popup, /sourcePlacement: \{ id: placement\.id \}/);
   assert.match(popup, /walkKind: pending\.verb === 'move' \? 'walk' : 'shift'/);
-  const ask = section('  function requestHeroMoves(', '  const heroMovePopups');
+  const ask = section('  function requestHeroMoves(', '  function maybePromptHeroMove(');
+  // Made before tokens are first drawn (the map failed to load: "Cannot access 'heroMovePopups' before initialization").
+  assert.ok(board.indexOf('const heroMovePopups') < board.indexOf('function applyTokenOverlays('));
   assert.match(ask, /Stop waiting/);
   assert.match(board, /const walkKind = request\.payload\?\.walkKind === 'walk' \? 'walk' : 'shift';/);
 });
