@@ -12,3 +12,6 @@ with Meshy (meshy.ai) on Brandon's account from his own art, then given detail l
 `Meshy_AI_Textured_Ink_Octopus_1107042941_texture.glb`. The ink was centered,
 the attachment repaired, tentacle and hover joints added, and three detail levels
 exported with shared 2K textures. Source model rights are unchanged.
+
+Build 609 removes the emitted plume/nozzle, repairs the face, and retains the
+twelve floating droplets around the sides. The hover/tentacle rig is unchanged.

@@ -1,6 +1,11 @@
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const repo=path.resolve(__dirname,'../../..');
+// The revised asset keeps side motes but never restores the removed facial jet.
+const asset=fs.readFileSync(path.join(repo,'dnd/vtt/board3d/assets/minis/ink-devourer.glb'));
+const gltf=JSON.parse(asset.subarray(20,20+asset.readUInt32LE(12)));
+assert(!gltf.nodes.some(n=>/Ink_plume|Centered_siphon/.test(n.name||'')));
+assert.equal(gltf.nodes.filter(n=>/Ink_droplet_/.test(n.name||'')).length,36);
 const html=`<!doctype html><script type="importmap">{"imports":{"three":"/dnd/vtt/board3d/lib/three.module.js"}}</script><script type="module">
 import * as THREE from 'three';import {createMinis} from '/dnd/vtt/board3d/minis.mjs';
 const scene=new THREE.Scene();scene.background=new THREE.Color('#172236');const camera=new THREE.PerspectiveCamera(38,1.5,.01,100);camera.position.set(0,2.6,5);camera.lookAt(0,.6,0);

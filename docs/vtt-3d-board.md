@@ -152,9 +152,9 @@ Meshy ink octopus. The existing `ink-devourer-level-4-retainer` monster ID and
 the name `ink devourer` select it through `minis.json`, with `scale: 0.6` and
 `noBase: true`. Monster statistics, abilities and placements are unchanged.
 
-The 4.26 MB GLB shares its 2K textures across three levels: 50,997 / 18,787 /
-6,888 triangles, switching at 0 / 4 / 10 world squares. It has a six-second idle
-clip with hovering, jointed tentacles and ink motion. All LODs use the same scale.
+The 3.68 MB GLB shares its 2K textures across three levels: 44,574 / 15,958 /
+5,460 triangles, switching at 0 / 4 / 10 world squares. It has a six-second idle
+clip with hovering, jointed tentacles and floating side droplets. All LODs use the same scale.
 
 `minis.mjs` now retains clips from the GLB reader. `animated-mini.mjs` gives each
 placement its own skeleton and mixer; static minis keep their existing cloning
@@ -169,3 +169,12 @@ mini mappings, independent bones, actual movement, hidden pause, height/scale,
 static mini coexistence and removal/disposal. Existing board3d-hands tests pass.
 The browser test requires Playwright and Chrome. Publication is through the
 normal cPanel Git deployment after pulling this build.
+
+
+### Build 609 — remove the emitted ink plume
+
+Removed the forward ink plume and centered nozzle at Brandon's request. The
+facial attachment was smoothed, welded and patched into a closed surface (zero
+open boundary edges in the source mesh). The twelve floating ink droplets remain,
+spread beside and behind the creature. Hover and tentacle animation are unchanged.
+All three detail levels were regenerated; the monster mapping and scale stay put.
