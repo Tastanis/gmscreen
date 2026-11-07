@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {readGlb} from './glb-reader.mjs';
+import {createAnimatedMini} from './animated-mini.mjs';
 import {createParticles,HERO_FX} from './hero-fx.mjs';
 
 // Hero minis: 3D figures for the player characters, standing on their token's base (assets/minis). minis.json says
@@ -22,10 +23,10 @@ function modelHeight(s){s.updateMatrixWorld(true);const box=new THREE.Box3();s.t
 
 export function createMinis(scene){
  const root=new THREE.Group();root.name='vtt-hero-minis';scene.add(root);
- const models=new Map(),standing=new Map();let config=null,configLoad=null,changed=false,time=0;
+ const models=new Map(),standing=new Map(),animated=new Map();let config=null,configLoad=null,changed=false,time=0;
  const loadConfig=()=>configLoad??=fetch(url('minis.json')).then(r=>r.ok?r.json():null).catch(()=>null).then(c=>{config=c;changed=true;return c;});
  const model=name=>{if(models.has(name))return models.get(name);const entry={template:null,extras:null,failed:false};models.set(name,entry);
-  readGlb(url(name+'.glb')).then(({scene:s,extras})=>{s.traverse(o=>{if(!o.isMesh)return;const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=detailLevels(s);entry.height=modelHeight(s);for(const fx of HERO_FX[name]||[])entry.template.add(createParticles({...fx,clock:()=>time}));entry.extras=extras;changed=true;})
+  readGlb(url(name+'.glb')).then(({scene:s,extras,animations=[]})=>{entry.animations=animations;s.traverse(o=>{if(!o.isMesh)return;if(o.isSkinnedMesh){o.bindMatrix.identity();o.updateMatrixWorld(true);}const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=detailLevels(s);entry.height=modelHeight(s);for(const fx of HERO_FX[name]||[])entry.template.add(createParticles({...fx,clock:()=>time}));entry.extras=extras;changed=true;})
    .catch(error=>{entry.failed=true;console.warn('[3D board] hero mini not loaded:',name,error);});
   return entry;};
  /**
@@ -41,17 +42,18 @@ export function createMinis(scene){
    const word=text.split(' ').find(has);if(word)return word;const aliases=globalThis.vttConfig?.playerAliases||{};
    return Object.keys(aliases).find(id=>has(id)&&(aliases[id]||[]).some(a=>a&&` ${text} `.includes(` ${a} `)));};
   if(config)for(const r of records){const who=profiles.get(r.id)||{},monster=who.mini||config.monsters?.[who.monster]||config.names?.[String(who.name||'').trim().toLowerCase()],name=monster?.model||config.heroes?.[who.hero]||config.heroes?.[heroByName(who.name)];if(!name)continue;if(monster?.noBase)noBase.add(r.id);const entry=model(name);if(!entry.template)continue;
-   let mini=standing.get(r.id);if(!mini||mini.userData.model!==name){if(mini)root.remove(mini);mini=entry.template.clone();mini.userData={model:name,extras:entry.extras};standing.set(r.id,mini);root.add(mini);changed=true;}
+   let mini=standing.get(r.id);if(!mini||mini.userData.model!==name){animated.get(r.id)?.dispose();animated.delete(r.id);if(mini)root.remove(mini);if(entry.animations?.length){const instance=createAnimatedMini(entry.template,entry.animations);mini=instance.root;animated.set(r.id,instance);}else mini=entry.template.clone();mini.userData={model:name,extras:entry.extras};standing.set(r.id,mini);root.add(mini);changed=true;}
    const scale=monster?(monster.scale??1):(config.scale||1)*Math.max(r.width,r.height),x=r.x,z=r.y,y=r.z+(monster?.noBase?0:BASE_TOP),yaw=Math.atan2(camera.position.x-x,camera.position.z-z),show=visible(r);
    if(mini.position.x!==x||mini.position.y!==y||mini.position.z!==z||mini.scale.x!==scale||mini.visible!==show)changed=true;
    mini.position.set(x,y,z);mini.scale.setScalar(scale);mini.rotation.y=yaw;mini.visible=show;seen.add(r.id);tops.set(r.id,y+(entry.height||1)*scale);
    // A falling token's model shakes (r.shake, 1 at the start of the fall down to 0), as the flat token's picture did.
    const shake=Number(r.shake)||0;if(shake>0){mini.rotation.z=Math.sin(time*38)*.22*shake;mini.position.x+=Math.sin(time*31)*.05*shake;changed=true;}else if(mini.rotation.z){mini.rotation.z=0;changed=true;}
+   const instance=animated.get(r.id);if(instance&&show){instance.update(dt,camera);if(dt>0)changed=true;}
    // Idle motion from the model's own hint: its glow and effects breathe and turn a little.
    mini.traverse(o=>{if(o.isMesh&&/-fx$/.test(o.name)){o.rotation.y=Math.sin(time*.8)*.25;o.material.opacity=.75+.25*Math.sin(time*5.3+x);}});
   }
-  for(const [id,mini] of standing)if(!seen.has(id)){root.remove(mini);standing.delete(id);changed=true;}
+  for(const [id,mini] of standing)if(!seen.has(id)){animated.get(id)?.dispose();animated.delete(id);root.remove(mini);standing.delete(id);changed=true;}
   const redraw=changed;changed=false;return {ids:new Set(standing.keys()),noBase,tops,redraw};
  }
- return {update,dispose(){scene.remove(root);for(const e of models.values())e.template?.traverse(o=>{if(o.isPoints){o.geometry.dispose();o.material.dispose();}if(o.isMesh){o.geometry.dispose();o.material.map?.dispose();o.material.emissiveMap?.dispose();o.material.dispose();}});}};
+ return {update,dispose(){for(const instance of animated.values())instance.dispose();animated.clear();standing.clear();scene.remove(root);for(const e of models.values())e.template?.traverse(o=>{if(o.isPoints){o.geometry.dispose();o.material.dispose();}if(o.isMesh){o.geometry.dispose();o.material.map?.dispose();o.material.emissiveMap?.dispose();o.material.dispose();}});}};
 }

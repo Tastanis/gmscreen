@@ -46,7 +46,7 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/lib/` | three.js r160, loaded through the import map as `three`. |
 | `dnd/vtt/board3d/art-kit.mjs`, `assets/kit/` | CC0 art kit (Quaternius nature models, Poly Haven textures; see its CREDITS.md) used to draw the Orchard's rocks, trees, plants and ground. |
 | `dnd/vtt/board3d/vine-art.mjs` | Vine ramps as climbable vines, hanging ivy and roots, ground cover. |
-| `dnd/vtt/board3d/glb-reader.mjs` | A small reader for plain .glb files (no compression, no animation), so no outside loader is needed. |
+| `dnd/vtt/board3d/glb-reader.mjs` | The local GLB reader, including meshopt compression, skins and animation clips. No Draco or KTX2. |
 | `dnd/vtt/board3d/minis.mjs`, `assets/minis/` | 3D minis on tokens. `minis.json` maps a character sheet id (heroes) or monster id (monsters), or a token name, to a model; `noBase` floats a model with no base. A model whose top nodes are named `*_lod0/1/2` switches detail by camera distance. |
 | `dnd/vtt/board3d/hero-fx.mjs` | Hero particle effects (embers, spores, psionic sparks), run on the graphics card and added to a hero's mini. |
 | `dnd/vtt/board3d/scene-art.mjs` | A map's own 3D art from `assets/scenes/index.json` (matched by terrain size and floor ids), drawn over the map that plays. Installed: Medpilis (art pass 10, for the Medpilis v5b scene) and Dead Root Node (art pass 8, for v39); see `assets/scenes/CREDITS.md`. |
@@ -143,3 +143,29 @@ Gravity Orchard has no roofs: all 19 of its surfaces are floating floors, which 
   choice is clicked from a script. This happens in tests only.
 - About 6% of the idle frame time is the 2D `edit-tools.js` reading `getBoundingClientRect`
   every frame. It was there before the 3D board.
+
+
+## Ink Devourer animated mini — Build 608
+
+`assets/minis/ink-devourer.glb` is the repaired and rigged version of Brandon's
+Meshy ink octopus. The existing `ink-devourer-level-4-retainer` monster ID and
+the name `ink devourer` select it through `minis.json`, with `scale: 0.6` and
+`noBase: true`. Monster statistics, abilities and placements are unchanged.
+
+The 4.26 MB GLB shares its 2K textures across three levels: 50,997 / 18,787 /
+6,888 triangles, switching at 0 / 4 / 10 world squares. It has a six-second idle
+clip with hovering, jointed tentacles and ink motion. All LODs use the same scale.
+
+`minis.mjs` now retains clips from the GLB reader. `animated-mini.mjs` gives each
+placement its own skeleton and mixer; static minis keep their existing cloning
+path. It neutralizes the reader's extra bind transform for glTF skins, advances
+visible mini animations, refreshes animated shadows and releases mixers/skeletons
+when placements leave. Hidden minis pause. Shared geometry and materials remain
+owned by the cached template.
+
+Validation: `node dnd/vtt/tools/test-animated-minis-browser.cjs` uses intercepted
+local file responses with no live scene access. It covers monster-ID and player
+mini mappings, independent bones, actual movement, hidden pause, height/scale,
+static mini coexistence and removal/disposal. Existing board3d-hands tests pass.
+The browser test requires Playwright and Chrome. Publication is through the
+normal cPanel Git deployment after pulling this build.

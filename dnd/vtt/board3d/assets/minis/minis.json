@@ -66,6 +66,11 @@
     "sluice-rootgnawer-level-4-minion": {
       "model": "rootgnawer",
       "scale": 1.15
+    },
+    "ink-devourer-level-4-retainer": {
+      "model": "ink-devourer",
+      "scale": 0.6,
+      "noBase": true
     }
   },
   "names": {
@@ -76,6 +81,11 @@
     "eglė": {
       "model": "egle",
       "scale": 1.15
+    },
+    "ink devourer": {
+      "model": "ink-devourer",
+      "scale": 0.6,
+      "noBase": true
     }
   }
 }
