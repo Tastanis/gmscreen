@@ -14,19 +14,29 @@ const BASE_TOP=.17;
 const url=name=>new URL(`./assets/minis/${name}${new URL(import.meta.url).search}`,import.meta.url).href;
 
 // A model with several detail levels (top nodes named *_lod0, *_lod1, ...) is drawn as one, switching by camera
-// distance: the finest close up, the lightest far off.
+// distance: the finest close up, the lightest far off. These distances suit a hero-sized mini; fitDetail stretches them for a bigger one.
+const LOD_STEPS=[0,4,10,20],HERO_RADIUS=.5;
 function detailLevels(s){const levels=s.children.filter(c=>/_lod\d+$/.test(c.name)).sort((a,b)=>a.name.localeCompare(b.name));if(levels.length<2)return s;
- const lod=new THREE.LOD();levels.forEach((c,i)=>{s.remove(c);lod.addLevel(c,[0,4,10,20][i]??i*10);});s.add(lod);return s;}
+ const lod=new THREE.LOD();levels.forEach((c,i)=>{s.remove(c);lod.addLevel(c,LOD_STEPS[i]??i*10);});s.add(lod);return s;}
+// How much bigger than a hero a mini stands on the board (1 for a hero or smaller). A mini k times wider looks as big at k times the distance,
+// so its detail levels switch k times farther off and its animation pauses k times farther off.
+const sizeFactor=(entry,scale)=>Math.max(1,(entry.radius||0)*scale/HERO_RADIUS);
+function fitDetail(mini,k){if(mini.userData.detail===k)return;mini.userData.detail=k;mini.traverse(o=>{if(o.isLOD)o.levels.forEach((l,i)=>{l.distance=(LOD_STEPS[i]??i*10)*k;});});}
 
 // How tall a model stands, from its meshes only (particles and glows reach past it). Its detail levels are the same size.
-function modelHeight(s){s.updateMatrixWorld(true);const box=new THREE.Box3();s.traverse(o=>{if(o.isMesh&&!/-glow|-fx|-ghost/.test(o.name))box.expandByObject(o);});return box.isEmpty()?1:Math.max(.2,box.max.y);}
+function modelBox(s){s.updateMatrixWorld(true);const box=new THREE.Box3();s.traverse(o=>{if(o.isMesh&&!/-glow|-fx|-ghost/.test(o.name))box.expandByObject(o);});return box;}
+const modelHeight=box=>box.isEmpty()?1:Math.max(.2,box.max.y);
+// How far it reaches out sideways from its centre (the widest of its levels, which are all the same size).
+const modelRadius=box=>box.isEmpty()?.5:Math.max(Math.abs(box.min.x),box.max.x,Math.abs(box.min.z),box.max.z);
+// Animation is skipped for a mini off screen or this far off (times its size factor): it is a few pixels tall there.
+const ANIMATE_WITHIN=30,frustum=new THREE.Frustum(),viewMatrix=new THREE.Matrix4(),sphere=new THREE.Sphere();
 
 export function createMinis(scene){
  const root=new THREE.Group();root.name='vtt-hero-minis';scene.add(root);
  const models=new Map(),standing=new Map(),animated=new Map();let config=null,configLoad=null,changed=false,time=0;
  const loadConfig=()=>configLoad??=fetch(url('minis.json')).then(r=>r.ok?r.json():null).catch(()=>null).then(c=>{config=c;changed=true;return c;});
  const model=name=>{if(models.has(name))return models.get(name);const entry={template:null,extras:null,failed:false};models.set(name,entry);
-  readGlb(url(name+'.glb')).then(({scene:s,extras,animations=[]})=>{entry.animations=animations;s.traverse(o=>{if(!o.isMesh)return;if(o.isSkinnedMesh){o.bindMatrix.identity();o.updateMatrixWorld(true);}const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=detailLevels(s);entry.height=modelHeight(s);for(const fx of HERO_FX[name]||[])entry.template.add(createParticles({...fx,clock:()=>time}));entry.extras=extras;changed=true;})
+  readGlb(url(name+'.glb')).then(({scene:s,extras,animations=[]})=>{entry.animations=animations;s.traverse(o=>{if(!o.isMesh)return;if(o.isSkinnedMesh){o.bindMatrix.identity();o.updateMatrixWorld(true);}const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=detailLevels(s);const box=modelBox(s);entry.height=modelHeight(box);entry.radius=modelRadius(box);for(const fx of HERO_FX[name]||[])entry.template.add(createParticles({...fx,clock:()=>time}));entry.extras=extras;changed=true;})
    .catch(error=>{entry.failed=true;console.warn('[3D board] hero mini not loaded:',name,error);});
   return entry;};
  /**
@@ -35,6 +45,7 @@ export function createMinis(scene){
   */
  function update(records,profiles,visible,camera,dt=0){
   loadConfig();time+=dt;const seen=new Set();
+  camera.updateMatrixWorld();frustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   const noBase=new Set(),tops=new Map();
   // Most hero tokens carry only their name ("Cal"); like the 2D board, a hero's sheet id as a whole word of it is that hero,
   // and so is the player's name from the players page (a token "Pippa" is sheet player6).
@@ -48,7 +59,9 @@ export function createMinis(scene){
    mini.position.set(x,y,z);mini.scale.setScalar(scale);mini.rotation.y=yaw;mini.visible=show;seen.add(r.id);tops.set(r.id,y+(entry.height||1)*scale);
    // A falling token's model shakes (r.shake, 1 at the start of the fall down to 0), as the flat token's picture did.
    const shake=Number(r.shake)||0;if(shake>0){mini.rotation.z=Math.sin(time*38)*.22*shake;mini.position.x+=Math.sin(time*31)*.05*shake;changed=true;}else if(mini.rotation.z){mini.rotation.z=0;changed=true;}
-   const instance=animated.get(r.id);if(instance&&show){instance.update(dt,camera);if(dt>0)changed=true;}
+   const k=sizeFactor(entry,scale);fitDetail(mini,k);
+   const instance=animated.get(r.id);if(instance&&show){const h=(entry.height||1)*scale;sphere.center.set(x,y+h/2,z);sphere.radius=Math.max(entry.radius||.5,(entry.height||1)/2)*scale*1.5;
+    if(frustum.intersectsSphere(sphere)&&camera.position.distanceTo(sphere.center)<ANIMATE_WITHIN*k){instance.update(dt,camera);if(dt>0)changed=true;}}
    // Idle motion from the model's own hint: its glow and effects breathe and turn a little.
    mini.traverse(o=>{if(o.isMesh&&/-fx$/.test(o.name)){o.rotation.y=Math.sin(time*.8)*.25;o.material.opacity=.75+.25*Math.sin(time*5.3+x);}});
   }
