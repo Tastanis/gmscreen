@@ -76,7 +76,9 @@ export async function readGlb(url){
   nodes[i].traverse(o=>{if(o.isSkinnedMesh)o.bind(new THREE.Skeleton(bones,inverses),o.matrixWorld);});});
  // Animations as clips; each track names its node by name (names are the file's own, unique in it).
  const animations=(json.animations||[]).map(a=>new THREE.AnimationClip(a.name||'',-1,a.channels.map(c=>{const sampler=a.samplers[c.sampler],node=nodes[c.target.node];if(!node)return null;
-  const times=attribute(sampler.input).array,values=attribute(sampler.output).array,n={translation:3,rotation:4,scale:3}[c.target.path];if(!n)return null;
+  // gltfpack stores rotations as normalized whole numbers; turn them back into -1..1 decimals (glTF spec).
+  const oa=json.accessors[sampler.output],raw=attribute(sampler.output).array,top={5120:127,5121:255,5122:32767,5123:65535}[oa.componentType];
+  const times=attribute(sampler.input).array,values=oa.normalized&&top?Float32Array.from(raw,x=>Math.max(x/top,-1)):raw,n={translation:3,rotation:4,scale:3}[c.target.path];if(!n)return null;
   let out=values;if(sampler.interpolation==='CUBICSPLINE'){out=new Float32Array(times.length*n);for(let k=0;k<times.length;k++)for(let q=0;q<n;q++)out[k*n+q]=values[k*n*3+n+q];}
   const Track=c.target.path==='rotation'?THREE.QuaternionKeyframeTrack:THREE.VectorKeyframeTrack,prop={translation:'position',rotation:'quaternion',scale:'scale'}[c.target.path];
   return new Track(`${node.name}.${prop}`,Array.from(times),Array.from(out),sampler.interpolation==='STEP'?THREE.InterpolateDiscrete:THREE.InterpolateLinear);}).filter(Boolean)));

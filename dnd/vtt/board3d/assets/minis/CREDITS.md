@@ -15,3 +15,8 @@ exported with shared 2K textures. Source model rights are unchanged.
 
 Build 609 removes the emitted plume/nozzle, repairs the face, and retains the
 twelve floating droplets around the sides. The hover/tentacle rig is unchanged.
+
+`thorn-briar.glb` (November 8, 2026) starts from Codex's procedural vine rig.
+Build 611 keeps every third vine joint (949 to 349), adds hooked thorns, dead
+leaves and a root heart, and textures the bark from Poly Haven's `bark_willow`
+(CC0). Packed with gltfpack and WebP: 1.8 MB, down from 5.1 MB.

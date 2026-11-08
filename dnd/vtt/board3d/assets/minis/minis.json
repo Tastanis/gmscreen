@@ -71,6 +71,11 @@
       "model": "ink-devourer",
       "scale": 0.6,
       "noBase": true
+    },
+    "thorn-briar-sandbox": {
+      "noBase": true,
+      "model": "thorn-briar",
+      "scale": 1
     }
   },
   "names": {
@@ -86,6 +91,11 @@
       "model": "ink-devourer",
       "scale": 0.6,
       "noBase": true
+    },
+    "thorn briar": {
+      "noBase": true,
+      "model": "thorn-briar",
+      "scale": 1
     }
   }
 }
