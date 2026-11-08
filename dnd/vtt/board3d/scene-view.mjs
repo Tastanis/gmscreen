@@ -758,7 +758,9 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  const tokenCapacity=512,tokenBodies=new THREE.InstancedMesh(new THREE.CylinderGeometry(.23,.30,.65,16),new THREE.MeshStandardMaterial({roughness:.42,metalness:.2}),tokenCapacity);
  const tokenHeads=new THREE.InstancedMesh(new THREE.SphereGeometry(.19,16,10),new THREE.MeshStandardMaterial({roughness:.4,metalness:.16}),tokenCapacity);
  const tokenBases=new THREE.InstancedMesh(new THREE.CylinderGeometry(.42,.44,.10,24),new THREE.MeshStandardMaterial({color:'#162d37',roughness:.35,metalness:.4}),tokenCapacity);
- const tokenRings=new THREE.InstancedMesh(new THREE.TorusGeometry(.36,.045,7,32),new THREE.MeshBasicMaterial({color:'#ffffff'}),tokenCapacity);
+ // The token's side colour (gold when selected) as a thin rim on the base's top edge, part of the one base: as a ring
+ // standing above it, it read as a second base (Brandon, November 8, 2026: "they don't need two bases like that").
+ const tokenRings=new THREE.InstancedMesh(new THREE.TorusGeometry(.425,.014,6,48),new THREE.MeshBasicMaterial({color:'#ffffff'}),tokenCapacity);
  for(const mesh of [tokenBodies,tokenHeads,tokenBases,tokenRings]){mesh.count=0;mesh.castShadow=true;mesh.frustumCulled=false;mesh.boundingSphere=new THREE.Sphere(new THREE.Vector3(w/2,2,depth/2),w+depth);scene.add(mesh);}tokenBodies.userData.token=true;tokenBases.userData.token=true;tokenHeads.userData.token=true;
  let disposed=false; // set by dispose(): art that finishes loading for a board already gone is not added
  let tokenRecords=[],selectedId=null,visibleTokens=[],noBaseIds=new Set(),noBaseKey='';
@@ -774,7 +776,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
    const color=new THREE.Color(t.color||'#59c8c0');obj.rotation.set(0,0,0);obj.scale.set(t.width||1,1,t.height||1);
    const bare=noBaseIds.has(t.id);
    for(const [mesh,up] of [[tokenBases,.12],[tokenBodies,.48],[tokenHeads,.92]]){obj.position.set(t.x,t.z+up,t.y);obj.scale.set(bare&&mesh===tokenBases?0:t.width||1,bare&&mesh===tokenBases?0:1,bare&&mesh===tokenBases?0:t.height||1);obj.updateMatrix();mesh.setMatrixAt(i,obj.matrix);if(mesh!==tokenBases)mesh.setColorAt(i,color);}
-   obj.position.set(t.x,t.z+.19,t.y);obj.rotation.x=Math.PI/2;const ringScale=bare?0:t.id===selectedId?1.15:.9;obj.scale.set((t.width||1)*ringScale,(t.height||1)*ringScale,1);obj.updateMatrix();tokenRings.setMatrixAt(i,obj.matrix);tokenRings.setColorAt(i,new THREE.Color(t.id===selectedId?'#ffda80':t.color||'#59c8c0'));
+   obj.position.set(t.x,t.z+.171,t.y);obj.rotation.x=Math.PI/2;const ringScale=bare?0:t.id===selectedId?1.05:1;obj.scale.set((t.width||1)*ringScale,(t.height||1)*ringScale,1);obj.updateMatrix();tokenRings.setMatrixAt(i,obj.matrix);tokenRings.setColorAt(i,new THREE.Color(t.id===selectedId?'#ffda80':t.color||'#59c8c0'));
   });for(const mesh of [tokenBodies,tokenHeads,tokenBases,tokenRings]){mesh.count=visibleTokens.length;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
  }
  const overlayGeo=new THREE.PlaneGeometry(.92,.92);overlayGeo.rotateX(-Math.PI/2);
