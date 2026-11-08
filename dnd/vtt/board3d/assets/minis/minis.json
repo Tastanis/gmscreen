@@ -74,12 +74,12 @@
     },
     "thorn-briar-sandbox": {
       "model": "thorn-briar",
-      "scale": 0.34,
+      "scale": 0.45,
       "noBase": true
     },
     "thorn-briar-level-4-elite": {
       "model": "thorn-briar",
-      "scale": 0.34,
+      "scale": 0.45,
       "noBase": true
     }
   },
@@ -99,7 +99,7 @@
     },
     "thorn briar": {
       "model": "thorn-briar",
-      "scale": 0.34,
+      "scale": 0.45,
       "noBase": true
     }
   }
