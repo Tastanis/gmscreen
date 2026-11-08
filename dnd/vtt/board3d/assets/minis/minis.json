@@ -73,9 +73,14 @@
       "noBase": true
     },
     "thorn-briar-sandbox": {
-      "noBase": true,
       "model": "thorn-briar",
-      "scale": 1
+      "scale": 0.34,
+      "noBase": true
+    },
+    "thorn-briar-level-4-elite": {
+      "model": "thorn-briar",
+      "scale": 0.34,
+      "noBase": true
     }
   },
   "names": {
@@ -93,9 +98,9 @@
       "noBase": true
     },
     "thorn briar": {
-      "noBase": true,
       "model": "thorn-briar",
-      "scale": 1
+      "scale": 0.34,
+      "noBase": true
     }
   }
 }
