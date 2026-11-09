@@ -62,7 +62,7 @@ test('a token with a mini is the mini: its box covers the model from base to hea
   // Build 518 added a grab area under a box that floated above the model; Brandon: "the invisible token thing above
   // the models needs to go away", and the popups go just above the character, a little bigger.
   assert.match(minis, /tops\.set\(r\.id,y\+\(entry\.height\|\|1\)\*scale\);/, 'each mini says where its head is');
-  assert.match(minis, /function modelHeight\(s\)\{[^\n]*if\(o\.isMesh&&!\/-glow\|-fx\|-ghost\/\.test\(o\.name\)\)box\.expandByObject\(o\);/, 'measured from its meshes, not its particles');
+  assert.match(minis, /function modelBox\(s\)\{[^\n]*if\(o\.isMesh&&!\/-glow\|-fx\|-ghost\/\.test\(o\.name\)\)box\.expandByObject\(o\);/, 'measured from its meshes, not its particles');
   assert.match(board3d, /const head=miniStanding\.has\(p\.id\)&&Number\.isFinite\(miniTops\.get\(p\.id\)\)\?view\.project\(\{\.\.\.p,z:miniTops\.get\(p\.id\)\}\):null;\s*const boxTop=head\?Math\.min\(head\.y,foot\.y-size\*\.5\):/);
   assert.match(board3d, /if\(head\)node\.style\.setProperty\('--vtt3d-height',`\$\{foot\.y\+size\*\.12-boxTop\}px`\);else node\.style\.removeProperty\('--vtt3d-height'\);/, 'down to its base');
   assert.match(css, /#vtt-token-layer>\.vtt-token\.vtt3d-mini \{ height: var\(--vtt3d-height, var\(--vtt3d-size, 36px\)\) !important;/);
