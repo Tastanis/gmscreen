@@ -41,7 +41,7 @@ async function mount(){
   let found=0;for(const r of roofs)if(art.roofs.has(r.id))found++;return found>=art.roofs.size*.8;
  }
 
- let sceneArtParts=[];
+ let sceneArtParts=[],sceneArtPieces=null,piecesAt='';
  let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
  let guideHeld=null,guideRoute=null;
@@ -131,8 +131,12 @@ async function mount(){
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
    minis?.dispose();minis=createMinis(view.scene);miniIds='';
    // A map with its own 3D art (scene-art.mjs) draws that art in place of its picture.
+   sceneArtPieces=null;
    if(!useArt){const entry=await sceneArtFor(context);if(entry&&view===nextView){const art=await loadSceneArt(entry).catch(error=>{console.warn('[3D board] map art not loaded',error);return null;});
     if(art&&view===nextView){art.userData.parts??=[...art.children];view.useArtModel();
+     // Where the art paints a ground zone itself (its water), the zone's coloured fill is left off (layers/terrain-zones.mjs).
+     // Its breakable pieces follow the map's broken walls (breakable-art.mjs).
+     view.terrainZoneFills=entry.terrainZoneFills||null;sceneArtPieces=art.userData.pieces||null;piecesAt='';
      // Each art part belongs to the floor at its height (a scene copy renames its floors, so names cannot be used).
      for(const part of art.userData.parts){const height=Number(entry.levels?.[part.name]),index=Number.isFinite(height)?Math.max(0,(data?.levels||[]).findIndex(l=>Math.abs(l.height-height)<.1)):0;view.addLevelArt(part,index,{always:index===0});sceneArtParts.push(part);}}}}
    if(!current()||view!==nextView)return;
@@ -586,6 +590,9 @@ async function mount(){
     const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(shownLevel===null||shownLevel<0||level<=shownLevel)&&!(sightHides&&window.vttSightSees(x,y)===false);
     el.style.left=`${rect.left-hostRect.left+q.x}px`;el.style.top=`${rect.top-hostRect.top+q.y}px`;el.style.visibility=shown?'':'hidden';}
    }
+   // A broken object or wall shows its rubble in place of its piece of the map's art, on every screen at once.
+   // Read from the map's own walls design: the walls the page moves by (wallPrototype.model) leave broken ones out.
+   if(sceneArtPieces){const design=context.environment?.walls,piecesKey=`${design?.revision}|${window.wallPrototype?.revision}|${context.sceneId}`;if(piecesKey!==piecesAt){piecesAt=piecesKey;sceneArtPieces.sync(design?.value);}}
    const portalKey=[window.wallPrototype?.revision,document.querySelector('#wall-panel')?.hidden,context.isGM,window.terrainPrototype?.revision,context.sceneId].join('|');if(portalKey!==portalsAt){portalsAt=portalKey;window.wallPrototype?.refreshPortals?.();}
   }
   requestAnimationFrame(frame);}
@@ -593,7 +600,7 @@ async function mount(){
  function focus(point){if(!view)return;const goal=point&&typeof point==='object'?point:find(point)&&world(find(point));if(!goal)return;view.focus(goal);view.camera.position.copy(view.controls.target).add({x:13,y:17,z:16});view.controls.update();}
  const api={get ready(){return !!view;},
   // The held token as drawn on its landing square ({id,x,y,z}), or null.
-  get held(){return held?{...held}:null;},get view(){return view;},get scene(){return view?.scene;},get camera(){return view?.camera;},get canvas(){return canvas;},bridge,pickAtClient,clientToMap,pick:event=>view?.pick(event),project:point=>view?.project(point),getContext:()=>bridge.getContext(),
+  get held(){return held?{...held}:null;},get brokenArt(){return sceneArtPieces?[...sceneArtPieces.broken]:null;},get view(){return view;},get scene(){return view?.scene;},get camera(){return view?.camera;},get canvas(){return canvas;},bridge,pickAtClient,clientToMap,pick:event=>view?.pick(event),project:point=>view?.project(point),getContext:()=>bridge.getContext(),
   getTokenPoint:id=>{const p=find(id);return p&&view?view.project(world(p)):null;},focus,
   // The camera as {position, target} in board units (the Director's, sent with his focus ping), and putting it there.
   cameraState:()=>view?{position:view.camera.position.toArray().map(n=>Math.round(n*1000)/1000),target:view.controls.target.toArray().map(n=>Math.round(n*1000)/1000)}:null,

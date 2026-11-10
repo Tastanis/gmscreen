@@ -81,5 +81,226 @@
       "rim": 1.5,
       "exposure": 1.6
     }
+  },
+  {
+    "id": "thornbriar",
+    "note": "The Thornbriar, Witherbloom combat arena (art pass 7). Visual art only; gameplay geometry stays in the imported scene. Its 38 labelled objects are breakable pieces with rubble (pieces file); the same art serves the plain and the labelled package.",
+    "match": {
+      "terrain": [
+        257,
+        225
+      ],
+      "roofs": [
+        "great-crossing",
+        "west-ascent",
+        "east-ascent",
+        "upper-briar-0",
+        "upper-briar-1",
+        "upper-briar-2"
+      ]
+    },
+    "glb": "thornbriar/Thornbriar-living-b641368284.glb",
+    "pieces": "thornbriar/pieces-b641368284.json",
+    "levels": {
+      "Thornbriar organic scenery": 0
+    },
+    "light": {
+      "hemi": [
+        "#d7e4ca",
+        "#68705a",
+        1.8
+      ],
+      "sun": [
+        "#ffe6ba",
+        2.2
+      ],
+      "rim": 1.2,
+      "exposure": 1.05
+    },
+    "terrainZoneFills": {
+      "water": false
+    },
+    "materials": {
+      "Dark tannin water": {
+        "envMapIntensity": 0,
+        "roughness": 0.85,
+        "animation": "swamp-ripples",
+        "rippleSources": [
+          {
+            "x": 10.04447,
+            "z": 21.04583,
+            "radius": 0.32599,
+            "radiusZ": 0.30574,
+            "rotation": 4.19288,
+            "phase": 0.0
+          },
+          {
+            "x": 12.29775,
+            "z": 10.36409,
+            "radius": 0.297,
+            "radiusZ": 0.27473,
+            "rotation": 3.44846,
+            "phase": 4.137
+          },
+          {
+            "x": 17.724,
+            "z": 22.04179,
+            "radius": 0.15835,
+            "radiusZ": 0.15221,
+            "rotation": 3.38315,
+            "phase": 0.9739999999999993
+          },
+          {
+            "x": 24.72011,
+            "z": 9.7882,
+            "radius": 0.31238,
+            "radiusZ": 0.33012,
+            "rotation": 4.83574,
+            "phase": 5.110999999999998
+          },
+          {
+            "x": 24.13596,
+            "z": 10.00135,
+            "radius": 0.20946,
+            "radiusZ": 0.18316,
+            "rotation": 3.12038,
+            "phase": 1.9479999999999986
+          },
+          {
+            "x": 18.88785,
+            "z": 22.60597,
+            "radius": 0.31312,
+            "radiusZ": 0.2783,
+            "rotation": 5.58403,
+            "phase": 6.084999999999999
+          },
+          {
+            "x": 9.875,
+            "z": 20.95273,
+            "normalX": 0.82271,
+            "normalZ": 0.56846,
+            "reach": 2.0,
+            "phase": 2.921999999999996
+          },
+          {
+            "x": 12.375,
+            "z": 10.32371,
+            "normalX": -0.17968,
+            "normalZ": 0.98373,
+            "reach": 2.0,
+            "phase": 7.058999999999997
+          },
+          {
+            "x": 17.875,
+            "z": 21.68783,
+            "normalX": 0.29239,
+            "normalZ": 0.9563,
+            "reach": 2.0,
+            "phase": 3.8959999999999972
+          },
+          {
+            "x": 24.90963,
+            "z": 10.0,
+            "normalX": -1.0,
+            "normalZ": -0.0,
+            "reach": 2.0,
+            "phase": 0.7329999999999979
+          },
+          {
+            "x": 8.75,
+            "z": 24.439,
+            "normalX": 0.97086,
+            "normalZ": 0.23964,
+            "reach": 2.0,
+            "phase": 4.869999999999998
+          },
+          {
+            "x": 28.64198,
+            "z": 17.5,
+            "normalX": -0.81606,
+            "normalZ": -0.57797,
+            "reach": 2.0,
+            "phase": 1.706999999999999
+          },
+          {
+            "x": 10.0,
+            "z": 15.895,
+            "normalX": -0.0,
+            "normalZ": -1.0,
+            "reach": 2.0,
+            "phase": 5.843999999999992
+          },
+          {
+            "x": 19.24126,
+            "z": 19.0,
+            "normalX": 0.99989,
+            "normalZ": -0.0146,
+            "reach": 2.0,
+            "phase": 2.680999999999993
+          },
+          {
+            "x": 20.5,
+            "z": 24.0,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 2.1313,
+            "waterSurface": 0.32,
+            "phase": 6.817999999999993
+          },
+          {
+            "x": 14.0,
+            "z": 24.0,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 3.5411,
+            "waterSurface": 0.32,
+            "phase": 3.654999999999994
+          },
+          {
+            "x": 20.5,
+            "z": 18.0,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 4.0321,
+            "waterSurface": 0.32,
+            "phase": 0.49199999999999466
+          },
+          {
+            "x": 17.5,
+            "z": 11.0,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 4.2933,
+            "waterSurface": 0.32,
+            "phase": 4.628999999999995
+          },
+          {
+            "x": 28.0,
+            "z": 11.5,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 2.8817,
+            "waterSurface": 0.32,
+            "phase": 1.4659999999999958
+          },
+          {
+            "x": 12.5,
+            "z": 17.0,
+            "radius": 0.04,
+            "reach": 1.4,
+            "terrainHeight": 0.0,
+            "nearestPadDistance": 3.7161,
+            "waterSurface": 0.32,
+            "phase": 5.602999999999996
+          }
+        ]
+      }
+    },
+    "lilyBob": "thornbriar/lily-bob-33fad4dbd7.json"
   }
 ]

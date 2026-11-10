@@ -16,12 +16,18 @@ export function createTerrainZonesLayer({guideScene,overlayHost,helpers,view}){
  const ctx=()=>window.terrainContext?.()||null;
  function shownOn3d(levelId){const s=helpers.shownLevel;return s===null||s<0||helpers.levelIndex(levelId)<=s;}
  function clear(){for(const child of [...root.children]){root.remove(child);child.traverse(o=>{o.geometry?.dispose();for(const m of [o.material].flat())m?.dispose?.();});}}
+ let editing=false;
  function rebuild(c,zones){
   clear();report={zones:0,squares:0,labels:0};placed=[];
   const floors=floorElevations(c.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.mapLevels);
   const fills=[],fillColors=[],byColor=new Map();
   for(const zone of zones){
    if(!shownOn3d(zone.levelId))continue;
+   // Ground a labelled map marks no-climb (bumpy ground walked as plain) is a note for whoever edits the map: outlined
+   // for the Director while the Walls panel is open, never drawn for players and never in the way of play.
+   if(zone.kind==='no-climb'&&!editing)continue;
+   // Scene art may paint a zone's ground itself (its water): the fill is left off; outline, name and rules stay.
+   const filled=zone.kind!=='no-climb'&&view.terrainZoneFills?.[zone.tag]!==false;
    const surface=zoneSurface(zone,floors.get(zone.levelId)??0),ground=zone.levelId===BASE_LEVEL_ID&&zone.surfaceHeight===null;
    const heightOf=(x,y)=>(ground?helpers.groundAt(x+.5,y+.5):surface)+.05;
    const {edge,fill}=areaColors(zoneColor(zone.tag)),alpha=zone.cost>1?.26:.15,dash=!!zone.gmOnly;
@@ -29,12 +35,12 @@ export function createTerrainZonesLayer({guideScene,overlayHost,helpers,view}){
    const heights=new Map(zone.squares.map(([x,y])=>[`${x},${y}`,heightOf(x,y)]));
    for(const [x,y] of zone.squares){
     const h=heights.get(`${x},${y}`);
-    for(const p of [[x,h,y],[x+1,h,y],[x+1,h,y+1],[x,h,y],[x+1,h,y+1],[x,h,y+1]]){fills.push(...p);fillColors.push(fill.r,fill.g,fill.b,alpha);}
+    if(filled)for(const p of [[x,h,y],[x+1,h,y],[x+1,h,y+1],[x,h,y],[x+1,h,y+1],[x,h,y+1]]){fills.push(...p);fillColors.push(fill.r,fill.g,fill.b,alpha);}
     for(const [nx,ny,ax,ay,bx,by] of [[x,y-1,x,y,x+1,y],[x+1,y,x+1,y,x+1,y+1],[x,y+1,x+1,y+1,x,y+1],[x-1,y,x,y+1,x,y]])if(!heights.has(`${nx},${ny}`))lines.segments.push([ax,h+.01,ay,bx,h+.01,by]);
     report.squares++;
    }
    // The 2D board names ground zones and those of the floor the page is on (terrain-zones-overlay.js draw()).
-   if(zone.levelId===BASE_LEVEL_ID||zone.levelId===c.levelId){
+   if(zone.kind!=='no-climb'&&(zone.levelId===BASE_LEVEL_ID||zone.levelId===c.levelId)){
     const shape=zoneGeometry(zone,(x,y)=>({x,y})),[lx,ly]=shape.labelSquare,name=zone.label||zone.tag;
     placed.push({zone,color:'#'+edge.getHexString(THREE.SRGBColorSpace),text:(name.length>16?name.slice(0,15)+'…':name)+(zone.cost>1?' ×'+zone.cost:'')+(zone.gmOnly?' (GM)':''),anchor:{x:lx+.5,y:ly+.5,z:heightOf(lx,ly)+.02}});
    }
@@ -57,8 +63,9 @@ export function createTerrainZonesLayer({guideScene,overlayHost,helpers,view}){
   const c=ctx(),zones=window.terrainZones;if(!c||!zones)return;
   // Each person's own Zones switch, and the GM's switch for the players (terrain-zones-overlay.js).
   const list=zones.zones,show=list.length>0&&zones.visible&&(c.isGM||!zones.hiddenFromPlayers);
-  const quick=`${show}|${helpers.shownLevel}|${window.terrainPrototype?.revision}|${helpers.gridSize}|${c.levelId}`;
-  if(list!==lastList||quick!==lastKey){lastList=list;lastKey=quick;const key=quick+'|'+JSON.stringify(list.map(z=>[z.id,z.tag,z.label,z.cost,z.levelId,z.surfaceHeight,z.gmOnly,z.squares]));
+  const panel=document.querySelector('#wall-panel');editing=!!c.isGM&&!!panel&&!panel.hidden;
+  const quick=`${editing}|${show}|${helpers.shownLevel}|${window.terrainPrototype?.revision}|${helpers.gridSize}|${c.levelId}|${c.isGM}|${JSON.stringify(view.terrainZoneFills||{})}`;
+  if(list!==lastList||quick!==lastKey){lastList=list;lastKey=quick;const key=quick+'|'+JSON.stringify(list.map(z=>[z.id,z.tag,z.label,z.cost,z.levelId,z.surfaceHeight,z.gmOnly,z.kind,z.squares]));
    if(key!==signature){signature=key;rebuild(c,show?list:[]);placedAt='';
     const keep=new Set(placed.map(p=>p.zone.id));for(const [id,el] of labels)if(!keep.has(id)){el.remove();labels.delete(id);}
     for(const p of placed){const el=labelFor(p.zone.id);el.textContent=p.text;el.style.setProperty('--zone-edge',p.color);el.dataset.vtt3dAnchor=`${p.anchor.x},${p.anchor.y},${p.anchor.z}`;el.dataset.vtt3dLevel=p.zone.levelId;}
