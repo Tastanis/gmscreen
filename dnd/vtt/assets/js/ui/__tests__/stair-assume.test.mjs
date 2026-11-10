@@ -77,10 +77,12 @@ test('a stair that runs east and west', () => {
   assert.deepEqual(stairAssume(ramp, true, at(8, 1), at(5, 2)), [at(8, 2)]);
 });
 
-test('the ruler shows the app\'s corners, sends them, and drops them the moment he drops his own or forces the move', () => {
+test('the ruler shows the app\'s corners and sends them; his own corners keep the route-finder on for each leg (November 8, 2026); Alt is a straight line', () => {
   const ruler = readFileSync(new URL('../drag-ruler.js', import.meta.url), 'utf8');
-  assert.match(ruler, /if \(state\.mode !== 'external' \|\| !state\.measuring \|\| state\.points\.length !== 1 \|\| !state\.hoverPoint\) return null;/);
-  assert.match(ruler, /return state\.assumed\?\.length && state\.points\.length === 1 \? \[state\.points\[0\], \.\.\.state\.assumed\] : state\.points;/);
+  assert.match(ruler, /if \(state\.mode !== 'external' \|\| !state\.measuring \|\| !state\.points\.length \|\| !state\.hoverPoint\) return null;/);
+  assert.match(ruler, /if \(state\.straight\) \{ state\.plannedRoute = null; return null; \}/);
+  assert.match(ruler, /ends = \[\.\.\.state\.points\.slice\(1\), state\.hoverPoint\];/);
+  assert.match(ruler, /return state\.assumed\?\.length \? \[state\.points\[0\], \.\.\.state\.assumed\] : state\.points;/);
   assert.match(ruler, /sharedState\.assumed = assumedCorners\(sharedState\);/);
   const terrain = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
   // Only when the straight line would not do, and the way by the stair is free of walls.

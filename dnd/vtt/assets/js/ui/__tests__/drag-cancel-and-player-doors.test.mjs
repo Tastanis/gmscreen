@@ -30,11 +30,12 @@ test('a player may click an ordinary door, and is told in a word when it does no
   assert.match(editor, /button\.disabled=!c\.isGM&&e\.interaction!=='door';/, 'a door\'s button is live for a player; a window\'s is not');
   assert.match(editor, /if\(e\.secret&&!c\.isGM\|\|isBroken\(e\)\)continue;|e\.secret&&!c\.isGM/, 'a secret door has no button on a player\'s page at all');
   assert.match(editor, /const gm=!!context\(\)\?\.isGM;if\(!gm&&e\.interaction!=='door'\)return;if\(e\.locked\)\{if\(!gm\)doorNote\(button,'Locked'\);return;\}/, 'a locked door says Locked and nothing is sent');
-  assert.match(editor, /else doorNote\(button,\/locked\/i\.test\(error\?\.message\|\|''\)\?'Locked':\/next to\/i\.test\(error\?\.message\|\|''\)\?'Too far':'Not now'\);/, 'a refusal from the server is one word beside the door, not an alert');
+  assert.match(editor, /else doorNote\(button,\/locked\/i\.test\(error\?\.message\|\|''\)\?'Locked':'Not now'\);/, 'a refusal from the server is one word beside the door, not an alert');
+  assert.match(editor, /else if\(\/next to\/i\.test\(error\?\.message\|\|''\)\)return askMoveQuestion\(\{kind:'reach'\},\{anchor:button\}\)\.then\(answer=>answer==='anyway'\?savePortal\(e\.id,!e\.open,true\)/, 'too far from the door is asked, Open anyway (November 8, 2026: never block)');
   assert.match(editor, /function doorNote\(button,text\)\{[\s\S]{0,800}transform\.append\(note\);setTimeout\(\(\)=>note\.remove\(\),1500\);\}/, 'the word goes away by itself');
   // 3D board: the flat map layer is hidden, so the word is shown over the button on the screen (October 16, 2026).
   assert.match(editor, /if\(window\.vtt3d\?\.active\)\{const r=button\.getBoundingClientRect\(\)[^\n]*document\.body\.append\(note\);setTimeout\(\(\)=>note\.remove\(\),1800\);return;\}/, 'on the 3D board the word is seen');
   const sync = read('environment-sync.mjs');
   assert.doesNotMatch(sync, /Only the GM can change doors/, 'the page no longer refuses a player before the server is asked');
-  assert.match(sync, /type:'environment\.portal\.set',sceneId,payload:\{segmentId,open,expectedRevision:/);
+  assert.match(sync, /type:'environment\.portal\.set',sceneId,payload:\{segmentId,open,\.\.\.\(anyway\?\{anyway:true\}:\{\}\),expectedRevision:/);
 });

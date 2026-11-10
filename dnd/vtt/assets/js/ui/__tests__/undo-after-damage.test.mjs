@@ -55,10 +55,13 @@ test('Undo Move uses that rule, still only for the user who made the move, and s
 test('undoing a push gives back the damage the push itself dealt', () => {
   // The list it goes by is tested in services/__tests__/collision-effects.test.mjs: applied collisions of that
   // move, never a fall.
-  assert.match(board, /const givenBack = last\.groupMove \? 0 : await giveBackCollisionDamage\(last\.operationId\);/);
+  assert.match(board, /const givenBack = last\.groupMove \? 0 : await giveBackCollisionDamage\(last\.operationId, placementId\);/);
   const giveBack = board.slice(board.indexOf('async function giveBackCollisionDamage('), board.indexOf('function getAutomationCollisionStopCell('));
   assert.match(giveBack, /for \(const dealt of await collisionDamageDealt\(operationId\)\) \{/);
-  assert.match(giveBack, /const amount = resolveAutomationDamageAmount\(\{ amount: dealt\.amount, vulnerability: adjustment\.vulnerability, immunity: adjustment\.immunity \}\)\.amount;/, 'as much as was dealt: the same weakness and immunity');
+  // As much as it really took (November 10, 2026, the tester's R3): the pushed creature's own cut first, then the
+  // same weakness and immunity.
+  assert.match(giveBack, /if \(movedId && dealt\.targetId === movedId\) \{ const cut = await forcedMovementDamageReduction\(dealt\.targetId\);/);
+  assert.match(giveBack, /const amount = recorded > 0 \? resolveAutomationDamageAmount\(\{ amount: recorded, vulnerability: adjustment\.vulnerability, immunity: adjustment\.immunity \}\)\.amount : 0;/, 'as much as was dealt: the same weakness and immunity');
   assert.match(giveBack, /applyDamageHealToPlacement\(dealt\.targetId, 'heal', amount\)/, 'as healing, which stops at the maximum and reaches a hero\'s sheet');
   assert.doesNotMatch(giveBack, /allowTempHp/);
   // A failure to give back does not undo the undo: the move is back and the wall is whole.

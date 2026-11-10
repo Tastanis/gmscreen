@@ -24,7 +24,7 @@ const stateless = (actor, from, to) => routeSteps({ column: from[0], row: from[1
 test('the old preview priced a bridge crossing as a drop into the canal and a climb out', () => {
   const actor = hero(5, 1);
   const before = stateless(actor, [5, 1], [5, 10]);
-  assert.equal(before.cost, 13, '9 squares priced as 13');
+  assert.equal(before.cost, 12, '9 squares priced as 12 (13 before November 8, 2026, when the drop was charged too): the drop is walked over, the climb out is paid');
   assert.equal(before.climbExtra, 2, 'and a two-square climb at the far bank');
 });
 

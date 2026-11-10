@@ -17,7 +17,9 @@ export function blockedText(edge, byDrag) {
 }
 
 /** True when the server's refusal is the wall one (WallMovement::assertAllowed). */
-export const isWallRefusal = (message) => /blocked by a wall/i.test(String(message || ''));
+export const isWallRefusal = (message) => /blocked by a (wall|closed door)|needs a climb/i.test(String(message || ''));
+/** What a refusal was about (WallMovement::MET_*), so the walker is asked the right question: 'door', 'climb' or 'wall'. */
+export const refusalKind = (message) => /closed door or window/i.test(String(message || '')) ? 'door' : /needs a climb/i.test(String(message || '')) ? 'climb' : 'wall';
 
 /** How long the mark stays, in milliseconds. */
 export const WALL_FLASH_MS = 1800;

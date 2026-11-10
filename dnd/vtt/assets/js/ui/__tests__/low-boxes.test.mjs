@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { BOX_HEIGHT, BOX_TOP, lowBoxes, withLowBoxes } from '../low-boxes.mjs';
-import { LOW_BARRIER, BOX_FOOT, movementBlocked, lowBarrier } from '../wall-properties.mjs';
+import { LOW_BARRIER, BOX_FOOT, movementBlocked, walkBlocked, lowBarrier, wallQuestion } from '../wall-properties.mjs';
 import { walkFloorContact, floorSupported, BOX_REACH } from '../floor-support.js';
 import { roofSurfaces } from '../roof-geometry.mjs';
 import { climbPromptText } from '../climb-prompt.js';
@@ -34,7 +34,7 @@ test('a box is a closed ring of four plain wall pieces of one height, one square
 
 test('what is not a box is left exactly as it was', () => {
   const none = (m, why) => { assert.deepEqual(lowBoxes(m), [], why); assert.equal(withLowBoxes(m), m, why + ': the model itself comes back'); };
-  none(model(ring('pillar', 3, 3, { height: 1.2 })), 'taller than a square');
+  none(model(ring('pillar', 3, 3, { height: 1.6 })), 'taller than a plain step (1.5)');
   none(model(ring('door', 3, 3, { interaction: 'door' })), 'made of doors');
   none(model(ring('ghost', 3, 3, { movement: 'pass' })), 'walls that stop nothing');
   none(model(ring('oneway', 3, 3, { movementDirection: 'left' })), 'one-way walls');
@@ -58,38 +58,34 @@ test('the box gets a top to stand on, on the floor it stands on, and its walls a
   assert.deepEqual(roofSurfaces(worked).map((r) => r.id), ['mid']);
 });
 
-test('a walk into a box is asked like a rail, and says "onto"; without the yes it is refused as before', () => {
+test('a walk onto a box is a plain step (November 8, 2026); a push is still stopped by it', () => {
   const raw = model(ring('crate', 5, 2, { height: 0.86 })), worked = withLowBoxes(raw);
   const hero = { column: 4, row: 2, width: 1, height: 1 }, into = { column: 5, row: 2 }, z = () => 0, ground = () => 0;
-  assert.equal(movementBlocked(worked, hero, into, z, ground), true);
-  assert.equal(movementBlocked(worked, hero, into, z, ground, true), false);
-  const low = lowBarrier(worked, hero, into, z, ground);
-  assert.ok(Math.abs(low.rise - 0.86) < 1e-9); assert.equal(low.onto, true);
+  assert.equal(walkBlocked(worked, hero, into, z, ground), false, 'no question');
+  assert.equal(wallQuestion(worked, hero, into, z, ground).kind, 'none');
+  assert.equal(movementBlocked(worked, hero, into, z, ground), true, 'a push hits it');
+  assert.equal(lowBarrier(worked, hero, into, z, ground), null, 'no climb question');
+  // A climbable one taller than a step says "onto".
+  const tall = withLowBoxes(model(ring('rock', 5, 2, { height: 2.4, climbable: true }))), low = lowBarrier(tall, hero, into, z, ground);
+  assert.ok(Math.abs(low.rise - 2.4) < 1e-9); assert.equal(low.onto, true);
   assert.equal(climbPromptText({ over: low.rise, onto: low.onto, cost: 1 }).title, 'Climb onto it?');
-  // The same walls before the boxes are worked in: an object's walls inside a square are no rail.
-  assert.equal(movementBlocked(raw, hero, into, z, ground, true), true);
-  // A rail is still "over".
-  const rail = { nodes: [{ id: 'a', x: 5, y: 1 }, { id: 'b', x: 5, y: 4 }], segments: [{ id: 'rail', a: 'a', b: 'b', baseMode: 'fixed', base: 0, height: 0.67, movement: 'block' }] };
-  assert.equal(lowBarrier(rail, hero, into, z, ground).onto, false);
-  // A taller ring refuses either way.
-  assert.equal(movementBlocked(withLowBoxes(model(ring('pillar', 5, 2, { height: 1.2 }))), hero, into, z, ground, true), true);
+  // A taller ring that is not climbable is a wall: Move anyway.
+  assert.equal(wallQuestion(withLowBoxes(model(ring('pillar', 5, 2, { height: 1.6 }))), hero, into, z, ground).kind, 'wall');
 });
 
-test('a box on rough ground: its base may be up to half a square above his feet, no more', () => {
+test('a box on rough ground: its base may be up to half a square above his feet and it is still a step', () => {
   // Dead Root's rocks stand at the ground's height where they are (0.22), and the next square is a little lower
   // or higher; one is 0.43 above the square beside it. A rail on a built floor keeps the strict rule.
   const hero = { column: 4, row: 2, width: 1, height: 1 }, into = { column: 5, row: 2 }, z = () => 0, ground = () => 0;
   for (const base of [0.02, 0.43, BOX_FOOT]) {
     const worked = withLowBoxes(model(ring('rock', 5, 2, { base, height: 1 })));
-    assert.equal(movementBlocked(worked, hero, into, z, ground), true, `base ${base}: asked`);
-    assert.equal(movementBlocked(worked, hero, into, z, ground, true), false, `base ${base}: climbed on a yes`);
-    assert.ok(Math.abs(lowBarrier(worked, hero, into, z, ground).rise - (base + 1)) < 1e-9, 'the rise is from his feet to its top');
+    assert.equal(walkBlocked(worked, hero, into, z, ground), false, `base ${base}: stepped onto (its top is ${base + 1}, within a step and the box's foot)`);
     const up = walkFloorContact({ ...hero, id: 'cal', levelId: 'level-0' }, { ...hero, ...into, id: 'cal', levelId: 'level-0' }, [], worked.roofs, { levels: [] }, ground);
     assert.equal(up?.id, BOX_TOP + 'rock-east', `base ${base}: and he stands on it`);
   }
-  assert.equal(movementBlocked(withLowBoxes(model(ring('ledge', 5, 2, { base: 0.6, height: 1 }))), hero, into, z, ground, true), true, 'a box 0.6 above his feet is not on his floor');
+  assert.equal(wallQuestion(withLowBoxes(model(ring('ledge', 5, 2, { base: 0.6, height: 1 }))), hero, into, z, ground).kind, 'wall', 'a box 0.6 above his feet is not on his floor: a wall');
   const beam = { nodes: [{ id: 'a', x: 5, y: 1 }, { id: 'b', x: 5, y: 4 }], segments: [{ id: 'beam', a: 'a', b: 'b', baseMode: 'fixed', base: 0.3, height: 0.5, movement: 'block' }] };
-  assert.equal(movementBlocked(beam, hero, into, z, ground, true), true, 'a rail keeps the strict rule: one 0.3 off the floor is not stepped over');
+  assert.equal(walkBlocked(beam, hero, into, z, ground, true), true, 'a rail keeps the strict rule: one 0.3 off the floor is not stepped over');
 });
 
 test('on the ground: he steps up onto the top, and down off it', () => {
@@ -100,7 +96,7 @@ test('on the ground: he steps up onto the top, and down off it', () => {
   const onTop = { ...hero, column: 5, _supportSurfaceId: up.id };
   assert.equal(walkFloorContact(onTop, { ...onTop, column: 6 }, [], surfaces, levels, ground), null, 'off the far side he is on the ground again');
   assert.equal(walkFloorContact(hero, { ...hero, column: 6 }, [], surfaces, levels, ground), null, 'a walk across it ends on the ground beyond');
-  assert.equal(BOX_REACH, LOW_BARRIER + BOX_FOOT);
+  assert.equal(BOX_REACH, LOW_BARRIER, 'a box top is reached from as far as a plain step goes');
   // The top is not a floor that bounds its level: the ground round it is still ground.
   assert.equal(floorSupported({ ...hero, column: 8 }, surfaces), null);
 });
@@ -138,5 +134,5 @@ test('the page works the boxes into the walls it reads, before the summoned cube
   const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
   assert.match(walls, /cachedCubeModel=wallCubeModel\(withLowBoxes\(liveWalls\(model\)\),/);
   const rules = readFileSync(new URL('../wall-properties.mjs', import.meta.url), 'utf8');
-  assert.match(rules, /plain=can\|\|e\.interaction==='none'&&\(onGridLine\(a,b\)\|\|edge\.boxWall===true\)/);
+  assert.match(rules, /const foot=edge\.boxWall===true\|\|can\|\|typeof edge\.object==='string'\?Math\.min\(BOX_FOOT,/);
 });

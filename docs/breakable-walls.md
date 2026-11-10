@@ -193,6 +193,12 @@ push is left to break the wall, a pop-up opens beside the token before anything 
   8, metal 9 and 11.
 - A large creature that strikes two squares of wall pays for both, and both break. If one of
   them cannot be broken, or the push cannot pay for both, neither breaks.
+- A creature one square wide pays for one piece whatever the angle, even where a slanted push
+  meets two pieces at once; both open (your ruling, November 9, 2026: follow the book).
+- The cost pays for breaking the piece and going through it: the creature ends one square on,
+  with no further square charged for the step across (November 9, 2026: the book's example,
+  push 5, move 1, 3 through the wood for 5 damage, the 1 left slams the next wall for 3, 8 in
+  all). Where the far side of an object still stands in that square, it stops short of it.
 - What is left of the push after paying carries the creature on. If it then meets another
   creature or wall, that is an ordinary collision, or another break if it can pay again. The
   pop-up lists all of it before you answer.
@@ -210,10 +216,11 @@ it. So a player learns a wall is breakable at the moment they could break it, no
 
 ### Things to know
 
-- **Undo** puts the creature back. The wall stays broken; repair it by hand in the Walls panel.
+- **Undo** puts the creature back and mends the wall: the move undo since October 12, 2026, and
+  Ctrl+Z during a running turn since November 9, 2026.
 - The server decides everything. The browser asks it what the push would break, shows that,
-  and sends the push with the word "break through". The server works it out again and refuses
-  the move if the board has changed since the pop-up opened.
+  and sends the push with the word "break through". The server works it out again, and if the
+  board has changed since the pop-up opened, its own answer is used (November 8, 2026: never refused).
 - This changes nothing on a map with no breakable walls, and nothing for a push that is not
   told to break through.
 

@@ -18,14 +18,18 @@ try{
  reliability(count($s->collisionEffects([],'GM',true))===2,'GM can recover both unresolved targets');
  $s->collisionEffects([...$request,'action'=>'finish','status'=>'completed'],'cal',false,true);
  reliability(count($s->collisionEffects([],'GM',true))===1,'Completed target is omitted from recovery');
- // A stale collision preview must not move or register damage against a changed obstacle.
+ // A stale collision preview (the obstacle has moved since) is not refused: the server's own answer is used
+ // (Brandon, November 8, 2026). With the blocker gone, the push goes all the way and nobody is hit.
  $st=$s->getSnapshot();$s->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'move-blocker-away','baseRevision'=>$st['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'b','entityRevision'=>0,'movementKind'=>'teleport','patch'=>['column'=>9]]]]],'GM',true);
  $st=$s->getSnapshot();$move['operationId']='stale-collision-001';$move['baseRevision']=$st['revision'];$move['entityRevision']=$st['state']['placements']['scene']['a']['_entityRevision'];
- try{$s->acceptTokenMove($move,'cal',false);throw new RuntimeException('Stale collision accepted');}catch(InvalidArgumentException $e){}
- reliability($s->getSnapshot()===$st,'Stale collision rejection is atomic');
+ reliability($s->acceptTokenMove($move,'cal',false)['status']==='accepted','A stale collision is made, not refused');
+ $now=$s->getSnapshot()['state']['placements']['scene']['a'];
+ reliability($now['column']===5&&$s->collisionEffects(['operationId'=>'stale-collision-001'],'GM',true)===[],'It goes where the server finds it ends: all the way, no one hit');
+ $st=$s->getSnapshot();$s->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'return-mover','baseRevision'=>$st['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'a','entityRevision'=>$now['_entityRevision'],'movementKind'=>'teleport','patch'=>['column'=>0]]]]],'GM',true);
  $s->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'restore-blocker','baseRevision'=>$st['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'b','entityRevision'=>1,'movementKind'=>'teleport','patch'=>['column'=>3]]]]],'GM',true);
  $st=$s->getSnapshot();$move['operationId']='unclipped-forced-001';$move['baseRevision']=$st['revision'];$move['payload']=['column'=>5,'row'=>0,'movementKind'=>'forced'];
- try{$s->acceptTokenMove($move,'cal',false);throw new RuntimeException('Unclipped force accepted');}catch(InvalidArgumentException $e){}
+ $move['entityRevision']=$st['state']['placements']['scene']['a']['_entityRevision'];
+ reliability($s->acceptTokenMove($move,'cal',false)['status']==='accepted'&&$s->getSnapshot()['state']['placements']['scene']['a']['column']===2,'A push sent straight through a creature stops short of it: the server\'s answer');
  echo "Canonical creature collisions, stale previews, reservations, privacy and recovery passed.\n";
 }finally{unset($s);foreach(['','-wal','-shm'] as $suffix)if(is_file($db.$suffix))unlink($db.$suffix);}
 $surface=['kind'=>'floor','levelId'=>'upper','points'=>[['x'=>0,'y'=>0],['x'=>6,'y'=>0],['x'=>0,'y'=>6]],'holes'=>[[['x'=>1,'y'=>1],['x'=>3,'y'=>1],['x'=>3,'y'=>3],['x'=>1,'y'=>3]]]];

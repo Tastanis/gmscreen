@@ -19,8 +19,9 @@ test('the rulebook climb: a face of two or more squares costs double for every s
   assert.equal(stepCost({ rise: 2, climb: true }), 4);
   assert.equal(stepCost({ rise: 3, climb: true }), 6);
   assert.equal(stepCost({ rise: 4, climb: true }), 8);
-  assert.equal(stepCost({ rise: 3 }), 3, 'not a climb: priced as before');
-  assert.equal(stepCost({ rise: -3, climb: true }), 3, 'walking down is never surcharged on the route; the fall review decides');
+  assert.equal(stepCost({ rise: 3 }), 1, 'not a climb: one square (November 8, 2026: a rise costs nothing unless it is a climb)');
+  assert.equal(stepCost({ rise: -3, climb: true }), 1, 'walking down costs as walking (November 8, 2026: downhill normal); the fall review decides');
+  assert.equal(stepCost({ rise: 3, climb: true, free: true }), 3, 'a creature with a climb speed pays the squares it climbs, nothing more');
   assert.equal(stepCost({ rise: 2, multiplier: 2, climb: true }), 5, 'a climb into difficult terrain adds, it does not multiply');
 });
 
@@ -32,13 +33,17 @@ test('a route up a cliff is charged the climb; a climber, a flier or forced move
   assert.equal(walker.climbExtra, 3);
   assert.deepEqual(walker.points.map((point) => point.climb || 0), [0, 0, 0, 3, 0]);
   assert.equal(walker.extra, 3, 'the surcharge counts as cost beyond the plain distance');
-  // No face test supplied (climber, flier, forced movement): the plain cost as before.
-  const climber = routeSteps({ column: 0, row: 0 }, { column: 4, row: 0 }, height, null, null);
+  // No face test supplied (a flier, forced movement): one a square.
+  const flier = routeSteps({ column: 0, row: 0 }, { column: 4, row: 0 }, height, null, null);
+  assert.equal(flier.cost, 4);
+  assert.equal(flier.climbExtra, 0);
+  // A creature with a climb speed: the 3 squares it climbs, nothing more.
+  const climber = routeSteps({ column: 0, row: 0 }, { column: 4, row: 0 }, height, null, face(heightAt), { free: true });
   assert.equal(climber.cost, 2 + 3 + 1);
   assert.equal(climber.climbExtra, 0);
-  // Coming back down the same face is not surcharged on the route.
+  // Coming back down the same face costs as walking (the ledge question or the fall review decides the rest).
   const down = routeSteps({ column: 4, row: 0 }, { column: 0, row: 0 }, height, null, face(heightAt));
-  assert.equal(down.cost, 1 + 3 + 2);
+  assert.equal(down.cost, 4);
   assert.equal(down.climbExtra, 0);
 });
 
@@ -153,15 +158,19 @@ function fakeDocument() {
   };
 }
 
-test('the climb pop-up answers once: buttons, Enter and Escape; a second request never stacks', async () => {
+test('the climb pop-up answers once: buttons, Enter and Escape; a second request waits its turn', async () => {
   const info = { name: 'Cal', squares: 2, cost: 3, extra: 1, left: 5 };
   let doc = fakeDocument();
   let answer = askClimb(info, { documentRef: doc });
   assert.equal(doc.prompts().length, 1);
-  assert.equal(await askClimb(info, { documentRef: doc }), false, 'a second request while one is open is refused');
-  assert.equal(doc.prompts().length, 1);
+  const second = askClimb(info, { documentRef: doc });
+  assert.equal(doc.prompts().length, 1, 'a second request does not stack (November 8, 2026: it waits, it is never answered no)');
   doc.button('yes').handlers.click();
   assert.equal(await answer, true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(doc.prompts().length, 1, 'then the second is asked');
+  doc.button('no').handlers.click();
+  assert.equal(await second, false);
   assert.equal(doc.prompts().length, 0);
   assert.equal(doc.listening, 0, 'the key listener is removed');
 

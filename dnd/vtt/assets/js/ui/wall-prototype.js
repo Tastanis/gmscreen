@@ -6,7 +6,7 @@ import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mj
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
-import {properties,movementPathBlocked,movementBlocked,lowBarrierOnPath,firstWallMet,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
+import {properties,movementPathBlocked,movementBlocked,lowBarrierOnPath,firstWallMet,wallHeights,liveWalls,isBreakable,isBroken,wallQuestion,headRoomOnPath} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
 import {DEFAULT_SLANT,validSlant,viewSlant,viewAbove,viewBelow} from './height-view.mjs';
 import {gmVision} from './gm-vision.js';
@@ -251,6 +251,10 @@ window.wallPrototype={refreshPortals:()=>editor.portals(),get selectedTopHeight(
 // The wall piece this walk meets first ({a,b,base,top} in squares), for showing a refused walker which it was. Null when none.
 wallMet:(from,to)=>!context?null:firstWallMet(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
 // When low barriers (a rail, a fence) are all that stop this walk: {rise}, how high the tallest stands above the walker's feet. Null otherwise.
+// What a walk meets, to ask (wall-properties wallQuestion), and head room, to warn: for the Director too (Brandon,
+// November 8, 2026: the same rules for everyone). On the 2D board only on the viewer's own floor, as the walls drawn are.
+question:(from,to)=>!context||(!window.vtt3dActive&&(from.levelId||'level-0')!==(context.levelId||'level-0'))?{kind:'none',rise:0,edge:null,locked:false}:wallQuestion(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
+headRoom:(from,to)=>!context||(!window.vtt3dActive&&(from.levelId||'level-0')!==(context.levelId||'level-0'))?null:headRoomOnPath(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
 lowBarrier:(from,to)=>!context||context.isGM||(!window.vtt3dActive&&(from.levelId||'level-0')!==(context.levelId||'level-0'))?null:lowBarrierOnPath(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
 // The height a mover is at part-way through a move (travel-height.mjs): the height of its footing
 // while it has one, and the height it left from once it has gone over an edge. Walls, slopes and

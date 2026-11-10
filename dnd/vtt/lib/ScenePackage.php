@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/MapLabels.php';
 
 /** Read-only scene package. No imports, asset fetches, or board writes. */
 final class ScenePackage
@@ -12,6 +13,16 @@ final class ScenePackage
             throw new InvalidArgumentException('A distinct reserved scene ID is required.');
         }
         $copy = self::build($package['scene'], ['state'=>array_map(static fn($data)=>[$package['scene']['id']=>$data], $package['domains'])]);
+        // A labelled map (MapLabels): objects get their walls, stairs come from ramps, and the load check is kept with the map.
+        if (is_array($copy['domains']['sceneConfig']['environment']['walls']['value'] ?? null)) {
+            $labelled = $copy['domains']['sceneConfig'];
+            $labelled['environment']['walls']['value'] = MapLabels::expand($labelled['environment']['walls']['value'], $labelled);
+            if (MapLabels::labelled($labelled['environment']['walls']['value'])) {
+                $labelled['environment']['walls']['value']['checks'] = MapLabels::check($labelled);
+                $labelled['mapLevels'] = MapLabels::stairs($labelled['environment']['walls']['value']['ramps'] ?? [], $labelled['mapLevels'] ?? []);
+            }
+            $copy['domains']['sceneConfig'] = $labelled;
+        }
         $fresh = static fn(string $domain, string $id): string => 'copy-' . substr(hash('sha256', $targetSceneId . "\0" . $domain . "\0" . $id), 0, 40);
         $maps = ['levels'=>['level-0'=>'level-0']];
         foreach ($copy['domains']['sceneConfig']['mapLevels']['levels'] ?? [] as $floor) $maps['levels'][$floor['id']] = $fresh('levels', $floor['id']);
@@ -82,7 +93,7 @@ final class ScenePackage
             foreach ($config['fogOfWar']['byLevel'] as $id=>$value) $fog[$maps['levels'][$id]] = $value;
             $config['fogOfWar']['byLevel'] = $fog;
         }
-        foreach (['roofs'=>['levelId'],'ramps'=>['fromLevel','toLevel']] as $list=>$fields) {
+        foreach (['roofs'=>['levelId'],'ramps'=>['fromLevel','toLevel'],'objects'=>['levelId']] as $list=>$fields) {
             foreach ($config['environment']['walls']['value'][$list] ?? [] as $index=>$item) {
                 if ($list === 'ramps' && isset($item['id'], $item['fromLevel'], $item['toLevel'])) {
                     $pair=[$item['fromLevel'],$item['toLevel']]; sort($pair,SORT_STRING);

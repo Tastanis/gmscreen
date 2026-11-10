@@ -47,7 +47,7 @@ $boxes=WallBoxes::boxes(climbModel([climbRing('rock',5,2,12,1.58,$tick),climbRin
 climbCheck(count($boxes)===2&&abs($boxes[0]['height']-13.58)<1e-9&&$boxes[1]['height']===18.&&!empty($boxes[0]['climbable']),'A ring of climbable walls is a box of any height, its top at its real height');
 $mixed=climbRing('mixed',5,2,0,1.58,$tick);unset($mixed['segments'][2]['climbable']);
 climbCheck(WallBoxes::boxes(climbModel([$mixed]))===[],'Three sides ticked and one not is no box above a square high');
-climbCheck(!$allowed($hero,$into,climbScene([climbRing('ledge',5,2,.6,2.,$tick)]),'walk',true),'One whose base is more than half a square above his feet refuses');
+climbCheck(!$allowed($hero,$into,climbScene([climbRing('ledge',5,2,.6,2.,$tick)]))&&$allowed($hero,$into,climbScene([climbRing('ledge',5,2,.6,2.,$tick)]),'walk',true),'One whose base is above his feet (a ledge) is asked and climbed too (November 8, 2026: never refused)');
 echo "PASS a climbable rock of any height is asked and climbed; without the tick it is a wall\n";
 
 // ---- a climbable line

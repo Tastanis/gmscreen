@@ -913,7 +913,7 @@ final class SyncV2Store
                 $config['_revision'] = $currentRevision + 1;
                 $entityRevision = $config['_revision'];
                 if ($type === 'environment.set') {
-                    $config['environment'] = SceneEnvironment::apply($config['environment'] ?? [], $payload);
+                    $config['environment'] = SceneEnvironment::apply($config['environment'] ?? [], $payload, $config['mapLevels'] ?? []);
                     if (($payload['field'] ?? '') === 'zones') SceneEnvironment::assertZoneLevels($config['environment'], $config['mapLevels'] ?? []);
                     $eventType = 'environment.changed';
                     $eventPayload = ['field'=>$payload['field'], 'entry'=>$config['environment'][$payload['field']]];
@@ -1477,6 +1477,7 @@ final class SyncV2Store
 
         $working = [];
         $restores = [];
+        $mend = [];
         $malice = 0;
         $undone = [];
         $skipped = [];
@@ -1490,6 +1491,19 @@ final class SyncV2Store
                     if (json_encode($current[$key] ?? null) !== json_encode($value)) { $unchanged = false; break; }
                 }
                 if (!$unchanged) { $skipped[] = [...$row, 'reason' => 'changed']; continue; }
+                // A push that broke through a wall, undone in the turn: the wall is made whole again too, as the move
+                // undo does (Brandon, October 12, 2026: "I need a way to undo a breakthrough"). The move is found on the
+                // token's own receipt by where it went from and to.
+                if (isset($row['before']['column'], $row['after']['column'])) {
+                    $history = is_array($current['_movementUndo']['history'] ?? null) ? $current['_movementUndo']['history'] : [];
+                    for ($k = count($history) - 1; $k >= 0; $k--) {
+                        $step = $history[$k];
+                        if ((float) ($step['to']['column'] ?? NAN) !== (float) $row['after']['column'] || (float) ($step['to']['row'] ?? NAN) !== (float) ($row['after']['row'] ?? $current['row'])
+                            || (float) ($step['from']['column'] ?? NAN) !== (float) $row['before']['column'] || (float) ($step['from']['row'] ?? NAN) !== (float) ($row['before']['row'] ?? $current['row'])) continue;
+                        foreach ($step['broke'] ?? [] as $wallId) if (is_string($wallId)) $mend[$wallId] = true;
+                        break;
+                    }
+                }
                 foreach ($row['before'] as $key => $value) $current[$key] = $value;
                 $working[$id] = $current;
                 // Newest first: an older step's "before" replaces a newer one's for the same field.
@@ -1515,6 +1529,13 @@ final class SyncV2Store
                 'baseRevision' => $snapshot['revision'], 'payload' => ['actions' => $actions]], $actorId, true, $snapshot['revision'], $restores);
             if (($result['status'] ?? '') !== 'accepted') return [...$result, 'events' => [], 'undo' => []];
             $events[] = $result['event'];
+        }
+        if ($mend !== []) {
+            $mendEvents = [];
+            $this->pdo->exec('BEGIN IMMEDIATE');
+            try { $this->mendWalls($sceneId, array_keys($mend), $actorId, $operationId . ':mend', $mendEvents); $this->pdo->exec('COMMIT'); }
+            catch (Throwable $error) { $this->rollbackTransactionSilently(); throw $error; }
+            foreach ($mendEvents ?? [] as $mendEvent) $events[] = $mendEvent;
         }
         if ($malice !== 0) {
             $result = $this->acceptCombatCommand(['operationId' => $operationId . ':malice', 'type' => 'combat.patch', 'sceneId' => $sceneId,
@@ -1771,11 +1792,12 @@ final class SyncV2Store
                 }
                 if($restore===null && $action['forcedDestination']!==null){
                     $plan=ForcedMovement::plan($current,$next,$action['forcedDestination'],$action['movementKind'],$state['placements'][$sceneId],$movementConfig);
+                    $next['column']=$plan['column'];$next['row']=$plan['row'];$patch['column']=$plan['column'];$patch['row']=$plan['row'];
                     (new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$plan,$action['collisionDamageType'],$breakDamage);
                 }
                 if ($restore === null && $action['forcedDestination']===null && (array_key_exists('column',$patch)||array_key_exists('row',$patch))) {
-                    if($action['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
-                    WallMovement::assertAllowed($current,$next,$movementConfig,$action['movementKind'],$action['path'],$isGm);
+                    if($action['movementKind']==='forced'){$next=ForcedMovement::clearSquare($current,$next,$state['placements'][$sceneId],$movementConfig);$patch['column']=$next['column'];$patch['row']=$next['row'];}
+                    WallMovement::assertAllowed($current,$next,$movementConfig,$action['movementKind'],$action['path'],$isGm,null,$action['climbLow']??false,$action['moveAnyway']??false);
                 }
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
@@ -1816,6 +1838,7 @@ final class SyncV2Store
                 if($restore===null){
                     if($action['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
                     $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$explicitFloorOnly?'teleport':$action['movementKind'],$action['path'],$floor['cause']??'');
+                    if($fall&&!empty($fall['landsOn'])){$next=[...$next,'levelId'=>$fall['landsOn']['levelId'],'_supportSurfaceId'=>$fall['landsOn']['id'],'_floorTraversal'=>null];$patch['levelId']=$next['levelId'];$patch['_supportSurfaceId']=$next['_supportSurfaceId'];$patch['_floorTraversal']=null;}
                     if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$action['movementKind']]);}
                 }
                 $next['id'] = $placementId;
@@ -1934,6 +1957,11 @@ final class SyncV2Store
                 $event['payload']['movementKind'] = 'undo';
             }
             if ($zoneEntryReceipts !== []) $event['payload']['zoneEntryReceipts'] = $zoneEntryReceipts;
+            // A group move of one kind says which (a group walk raises opportunity-attack reminders like a single one).
+            if ($groupUndoAnchor === null) {
+                $kinds = array_values(array_unique(array_map(static fn(array $action): string => $action['movementKind'] ?? 'forced', array_filter($normalized['actions'], static fn(array $action): bool => $action['kind'] === 'patch' && (array_key_exists('column', $action['patch']) || array_key_exists('row', $action['patch']))))));
+                if (count($kinds) === 1 && in_array($kinds[0], ['walk', 'shift'], true)) $event['payload']['movementKind'] = $kinds[0];
+            }
             $this->insertEvent($event);
             $this->journalUndoSteps($state, $undoChanges, $command, $actorId, $revision, $normalized['operationId']);
             $this->updateWorldState($revision, $state, $serverTime);
@@ -2166,9 +2194,10 @@ final class SyncV2Store
             $collisionPlan=null;
             if($restore===null && $normalized['forcedDestination']!==null){
                 $collisionPlan=ForcedMovement::plan($current,$next,$normalized['forcedDestination'],$normalized['movementKind'],$state['placements'][$sceneId],$movementConfig);
+                $next['column']=$collisionPlan['column'];$next['row']=$collisionPlan['row'];
             }
-            if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
-            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$isGm,null,$normalized['climbLow']);
+            if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') $next=ForcedMovement::clearSquare($current,$next,$state['placements'][$sceneId],$movementConfig);
+            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$isGm,null,$normalized['climbLow'],$normalized['moveAnyway']);
             $floor = $restore !== null
                 ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
                 : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], FloorSupport::surfaces($movementConfig['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$movementConfig));
@@ -2190,6 +2219,7 @@ final class SyncV2Store
             if($restore===null){
                 if($normalized['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
                 $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$floor['cause']);
+                if($fall&&!empty($fall['landsOn'])){$next=[...$next,'levelId'=>$fall['landsOn']['levelId'],'_supportSurfaceId'=>$fall['landsOn']['id'],'_floorTraversal'=>null];$event['payload']['_supportSurfaceId']=$next['_supportSurfaceId'];$floor['levelId']=$next['levelId'];$floor['traversal']=null;}
                 if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$normalized['movementKind']]);}
             }
             if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan,'',$breakDamage);
@@ -2300,6 +2330,8 @@ final class SyncV2Store
             'wall' => $through['wall'],
             'walls' => count($through['breaks']),
             'stopped' => ['column' => $through['stopped']['column'], 'row' => $through['stopped']['row'], 'damage' => $through['stopped']['damage']],
+            // A slide's later legs that paid for some of it: what is left of them.
+            ...(isset($through['intent']['beyond']) ? ['beyond' => $through['intent']['beyond']] : []),
         ];
     }
 
@@ -2374,7 +2406,7 @@ final class SyncV2Store
      * the map's own design by id, and the cubes of summoned walls. Walls that are gone or already whole are
      * left alone. Returns the first event, or null when nothing changed. The other half of breakWalls.
      */
-    private function mendWalls(string $sceneId,array $ids,string $actorId,string $operationId): ?array
+    private function mendWalls(string $sceneId,array $ids,string $actorId,string $operationId,?array &$all=null): ?array
     {
         if($this->findEventByOperationId($operationId)!==null)return null;
         $snapshot=$this->getSnapshot();$state=$snapshot['state'];$revision=$snapshot['revision'];$serverTime=$this->nowMilliseconds();$events=[];
@@ -2412,6 +2444,7 @@ final class SyncV2Store
         }
         $this->updateWorldState($revision,$state,$serverTime);
         $this->pruneEvents($revision);
+        $all=$events;
         return $events[0];
     }
 
@@ -2504,6 +2537,8 @@ final class SyncV2Store
         if ($edge === null || ($edge['secret'] ?? false) === true) throw new InvalidArgumentException('Portal does not exist.');
         if (($edge['interaction'] ?? 'none') !== 'door' || ($edge['broken'] ?? false) === true) throw new InvalidArgumentException('Only the GM can change that.');
         if (($edge['locked'] ?? false) === true) throw new InvalidArgumentException('That door is locked.');
+        // Asked first and answered "Open anyway", or "Open and go" on a walk through it (Brandon, November 8, 2026: never block).
+        if (($payload['anyway'] ?? false) === true) return;
         $nodes = array_column($model['nodes'] ?? [], null, 'id'); $a = $nodes[$edge['a']] ?? null; $b = $nodes[$edge['b']] ?? null;
         if ($a === null || $b === null) throw new InvalidArgumentException('Portal does not exist.');
         $movementConfig = WallCubes::withTemplates($config, $state['templates'][$sceneId] ?? []);
@@ -2876,6 +2911,8 @@ final class SyncV2Store
             'undoRevision' => isset($command['payload']['undoRevision']) ? (int) $command['payload']['undoRevision'] : null,
             // The mover said yes to climbing over a low barrier (a rail, a fence): WallMovement::LOW_BARRIER.
             'climbLow' => ($command['payload']['climbLow'] ?? false) === true,
+            // The mover was asked about a wall or a shut door on the way and said "Move anyway" (Brandon, November 8, 2026: never block).
+            'moveAnyway' => ($command['payload']['moveAnyway'] ?? false) === true,
         ];
     }
 
@@ -3391,6 +3428,9 @@ final class SyncV2Store
                 $entry['path'] = $this->normalizeMovementPath($action['path'] ?? []);
                 $entry['forcedDestination'] = $action['forcedDestination'] ?? null;
                 $entry['teleportChoice']=$action['teleportChoice']??null;
+                // Each token of a group move carries its own answers (Brandon, November 8, 2026: each token worked out separately).
+                $entry['climbLow']=($action['climbLow']??false)===true;
+                $entry['moveAnyway']=($action['moveAnyway']??false)===true;
                 $entry['collisionDamageType'] = $action['collisionDamageType'] ?? '';
                 if(!is_string($entry['collisionDamageType'])||strlen($entry['collisionDamageType'])>64)throw new InvalidArgumentException('Invalid collision damage type.');
                 if($entry['forcedDestination']!==null && (count($command['payload']['actions'])!==1 || isset($action['patch']['levelId']) || $entry['movementKind']!=='forced'))throw new InvalidArgumentException('Collision intent requires one forced movement without an explicit floor override.');

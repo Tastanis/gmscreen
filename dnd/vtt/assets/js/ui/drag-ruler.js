@@ -837,31 +837,45 @@ function ensureRulerDetail(ruler) {
 // The app's own corners for the drag in hand: by a stair the hero stands at the end of (stair-assume.mjs, asked
 // of terrain-prototype.js). Only while he has dropped no corner of his own, and never for a forced move.
 function assumedCorners(state) {
-  if (state.mode !== 'external' || !state.measuring || state.points.length !== 1 || !state.hoverPoint) return null;
-  let corners = null;
-  // 3D board: a square-by-square walking search supplies the corners, so the
-  // drawn line, the ruler's cost and the submitted move are one route.
+  state.noRoute = false;
+  if (state.mode !== 'external' || !state.measuring || !state.points.length || !state.hoverPoint) return null;
+  // Alt held while dragging: a straight line, no route-finding (Brandon, November 8, 2026).
+  if (state.straight) { state.plannedRoute = null; return null; }
+  const start = state.points[0], metrics = getGridMetrics(state.grid, state.mapTransform), grid = metrics && metrics.size > 0 ? metrics.size : 64;
+  const at = (corner) => ({ ...start, column: corner.column, row: corner.row, mapX: start.mapX + (corner.column - start.column) * grid, mapY: start.mapY + (corner.row - start.row) * grid });
+  // 3D board: a square-by-square walking search supplies the corners, so the drawn line, the ruler's cost and the
+  // submitted move are one route. Each leg between his own corners is searched too: a corner never turns it off.
   const planner = window.vtt3dActive && state.measurementActor ? window.vtt3dPlanner : null;
   if (planner) {
     try {
-      const start = state.points[0], hover = state.hoverPoint, actor = state.measurementActor;
-      const dx = actor.column - start.column, dy = actor.row - start.row;
-      const planned = planner.plan(actor, { column: hover.column + dx, row: hover.row + dy, surfaceElevation: hover.surfaceElevation, levelId: hover.levelId ?? null, surfaceId: hover.surfaceId ?? null, rampId: hover.rampId ?? null }, movementKindOf(state));
-      state.plannedRoute = planned;
-      if (planned?.status === 'found') corners = planned.corners.map((p) => ({ column: p.column - dx, row: p.row - dy }));
+      const actor = state.measurementActor, dx = actor.column - start.column, dy = actor.row - start.row, ends = [...state.points.slice(1), state.hoverPoint];
+      const out = [];let from = start, status = 'found', cost = 0, last = null;
+      for (const [index, end] of ends.entries()) {
+        const mover = index ? { ...actor, column: from.column + dx, row: from.row + dy, _floorTraversal: null, _supportSurfaceId: null } : actor;
+        const planned = planner.plan(mover, { column: end.column + dx, row: end.row + dy, surfaceElevation: end.surfaceElevation, levelId: end.levelId ?? null, surfaceId: end.surfaceId ?? null, rampId: end.rampId ?? null }, movementKindOf(state));
+        last = planned;
+        if (planned?.status === 'found') { out.push(...planned.corners.map((p) => ({ column: p.column - dx, row: p.row - dy }))); cost += Number(planned.cost) || 0; }
+        else if (planned?.status === 'pending') status = 'pending';
+        else if (status !== 'pending') { status = planned?.status || 'none'; state.noRoute = planned?.status === 'unreachable'; }
+        if (index < ends.length - 1) out.push({ column: end.column, row: end.row });
+        from = end;
+      }
+      state.plannedRoute = ends.length === 1 ? last : { ...(last || {}), status, cost };
+      if (status === 'found' || out.length) return out.length ? out.map(at) : null;
     } catch (error) { console.error('[VTT 3D] route planner', error); state.plannedRoute = null; }
   }
-  if (!corners && state.plannedRoute?.status !== 'found') {
+  if (state.points.length !== 1) return null;
+  let corners = null;
+  if (state.plannedRoute?.status !== 'found') {
     try { corners = window.terrainPrototype?.stairRoute?.(state.points[0], state.hoverPoint, state.measurementActor) || null; } catch (error) { corners = null; }
   }
   if (!corners?.length) return null;
-  const start = state.points[0], metrics = getGridMetrics(state.grid, state.mapTransform), grid = metrics && metrics.size > 0 ? metrics.size : 64;
-  return corners.map((corner) => ({ ...start, column: corner.column, row: corner.row, mapX: start.mapX + (corner.column - start.column) * grid, mapY: start.mapY + (corner.row - start.row) * grid }));
+  return corners.map(at);
 }
 
-/** The route's fixed points: where it starts and its corners, his own or the app's. */
+/** The route's fixed points: where it starts and its corners, his own and the app's (which include his own, in order). */
 function routePoints(state) {
-  return state.assumed?.length && state.points.length === 1 ? [state.points[0], ...state.assumed] : state.points;
+  return state.assumed?.length ? [state.points[0], ...state.assumed] : state.points;
 }
 
 function getRenderablePoints(state) {
@@ -1330,8 +1344,35 @@ export function updateExternalMeasurement(point) {
     return;
   }
   sharedState.hoverPoint = snapshot;
+  sharedState.straight = altHeld;
   sharedState.assumed = assumedCorners(sharedState);
+  markNoRoute(sharedState);
   updateOverlay(sharedState);
+}
+
+// Alt held while dragging a token: a straight line with no route-finding (Brandon, November 8, 2026).
+let altHeld = false;
+if (typeof window !== 'undefined') {
+  const alt = (event) => {
+    const held = event.altKey === true || (event.type === 'keydown' && event.key === 'Alt');
+    if (event.key === 'Alt') { if (sharedState?.measuring) event.preventDefault(); if (event.type === 'keyup' && !event.altKey) altHeld = false; }
+    if (held === altHeld && event.key !== 'Alt') return;
+    altHeld = event.type === 'keyup' && event.key === 'Alt' ? false : held;
+    if (sharedState?.measuring && sharedState.mode === 'external' && sharedState.hoverPoint) {
+      sharedState.straight = altHeld; sharedState.assumed = assumedCorners(sharedState); markNoRoute(sharedState); updateOverlay(sharedState);
+    }
+  };
+  window.addEventListener('keydown', alt, true);
+  window.addEventListener('keyup', alt, true);
+  window.addEventListener('blur', () => { altHeld = false; });
+}
+
+// No way round: the straight line is drawn, marked as a warning (it can still be dropped; the walk is then asked about).
+function markNoRoute(state) {
+  const ruler = state?.ruler;
+  if (!ruler) return;
+  if (state.noRoute) { ruler.dataset.noRoute = 'true'; ruler.title = 'No way round: straight line'; }
+  else if (ruler.dataset.noRoute) { delete ruler.dataset.noRoute; ruler.removeAttribute('title'); }
 }
 
 export function finalizeExternalMeasurement(point) {

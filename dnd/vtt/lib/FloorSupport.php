@@ -177,6 +177,8 @@ final class FloorSupport {
  public const BOX_REACH=1.5;
  /** A box set climbable is of any height: stepped onto when its base is no more than this above his feet. Stepping off one that is taller than BOX_REACH is a drop, and the fall rule lands him. */
  public const BOX_FOOT=.5;
+ /** A climbable thing is got up onto when its base is no higher above his feet than his body (the rules table's bodyHeight): once he has said yes to the climb he is on its top, never inside it. */
+ public const CLIMB_FOOT=1.0;
  public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain,bool $enter=true):?array {
   if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
   $levels=self::levels($mapLevels);
@@ -196,7 +198,7 @@ final class FloorSupport {
     $p=[...$from,'column'=>$start['column']+$dx*$i/$steps,'row'=>$start['row']+$dy*$i/$steps];
     $height=$support['height']??$terrain($previous);
     // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
-    if($enter)foreach($boxes as $box)if(($support['id']??null)!==$box['id']&&$box['height']>$height+1e-6&&(!empty($box['climbable'])?$box['base']-$height<=self::BOX_FOOT+1e-6:$box['height']-$height<=self::BOX_REACH+1e-6)&&$overlap($p,$box)){$support=$box;$previous=$p;continue 2;}
+    if($enter)foreach($boxes as $box)if(($support['id']??null)!==$box['id']&&$box['height']>$height+1e-6&&(!empty($box['climbable'])?$box['base']-$height<=self::CLIMB_FOOT+1e-6:$box['height']-$height<=self::BOX_REACH+1e-6)&&$overlap($p,$box)){$support=$box;$previous=$p;continue 2;}
     if(!$support||!$overlap($p,$support)){
      $priorSupport=$support;$support=null;
      // The same test as ever, cheapest part first: a plate at another height is ruled out by its
@@ -207,7 +209,7 @@ final class FloorSupport {
      foreach($floors as $s){
       $cube=!empty($s['templateCube'])||!empty($priorSupport['templateCube']);
       $down=self::BOX_REACH;
-      if((!empty($s['boxTop'])?($s['height']>$height?(!empty($s['climbable'])?$s['base']-$height>self::BOX_FOOT+1e-6:$s['height']-$height>self::BOX_REACH+1e-6):$height-$s['height']>$down+1e-6):(!empty($priorSupport['boxTop'])?$s['height']-$height>self::PLATE_REACH+1e-6||$height-$s['height']>$down+1e-6:abs($s['height']-$height)>($cube?.1:self::PLATE_REACH)+1e-6))||($support&&$s['height']<=$support['height'])||(!$enter&&!empty($s['boxTop'])&&$s['height']>$height+1e-6))continue;
+      if((!empty($s['boxTop'])?($s['height']>$height?(!empty($s['climbable'])?$s['base']-$height>self::CLIMB_FOOT+1e-6:$s['height']-$height>self::BOX_REACH+1e-6):$height-$s['height']>$down+1e-6):(!empty($priorSupport['boxTop'])?$s['height']-$height>self::PLATE_REACH+1e-6||$height-$s['height']>$down+1e-6:abs($s['height']-$height)>($cube?.1:self::PLATE_REACH)+1e-6))||($support&&$s['height']<=$support['height'])||(!$enter&&!empty($s['boxTop'])&&$s['height']>$height+1e-6))continue;
       if($s['height']<($ground??=$terrain($p))-.1-1e-6||!$overlap($p,$s))continue;
       if(!$cube||!$overlap($previous,$s)||($priorSupport&&self::cubeTouches($priorSupport,$s)))$support=$s;
      }

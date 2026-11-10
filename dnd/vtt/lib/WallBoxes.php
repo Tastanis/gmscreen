@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/MapLabels.php';
 /**
  * Low objects that fill a square: a crate, a rim rock. Brandon, October 10, 2026: "We can treat full square
  * boxes like railings ... if you try to go over it, it gives you a one climb thing. But if you get like pushed,
@@ -14,7 +15,7 @@ declare(strict_types=1);
 final class WallBoxes
 {
     /** The tallest a box may be, in squares. The same number as WallMovement::LOW_BARRIER. */
-    public const BOX_HEIGHT = 1.0;
+    public const BOX_HEIGHT = 1.5;
     public const BOX_TOP = 'box-top:';
 
     private static function place(float $x, float $y): string
@@ -25,6 +26,7 @@ final class WallBoxes
     /** The boxes of a walls model: id, left, right, top, bottom, base, height (of its top), edges (wall ids). */
     public static function boxes(array $model): array
     {
+        if (MapLabels::labelled($model)) return self::labelledBoxes($model);
         $nodes = array_column($model['nodes'] ?? [], null, 'id');
         $sides = []; $tops = [];
         foreach ($model['segments'] ?? [] as $edge) {
@@ -67,6 +69,27 @@ final class WallBoxes
     }
 
     /**
+     * A labelled map's boxes: every object marked standOn whose walls stand (MapLabels builds them), at its own outline.
+     * Nothing is guessed from walls. A box with any wall broken is gone, as a broken ring is.
+     */
+    private static function labelledBoxes(array $model): array
+    {
+        $walls = [];
+        foreach ($model['segments'] ?? [] as $edge) if (is_string($edge['object'] ?? null) && str_starts_with((string) ($edge['id'] ?? ''), MapLabels::OBJECT_WALL)) $walls[$edge['object']][] = $edge;
+        $boxes = [];
+        foreach ($model['objects'] ?? [] as $object) {
+            $edges = $walls[$object['id']] ?? [];
+            if (($object['standOn'] ?? false) !== true || !$edges || array_filter($edges, static fn ($edge) => ($edge['broken'] ?? false) === true)) continue;
+            $ring = MapLabels::ring($object['points']); $base = (float) $edges[0]['base'];
+            $points = array_map(static fn ($p) => ['x' => (float) $p['x'], 'y' => (float) $p['y']], $ring);
+            $boxes[] = ['id' => self::BOX_TOP . MapLabels::OBJECT_WALL . $object['id'], 'left' => min(array_column($points, 'x')), 'right' => max(array_column($points, 'x')), 'top' => min(array_column($points, 'y')), 'bottom' => max(array_column($points, 'y')),
+                'base' => $base, 'height' => (float) $object['top'], 'edges' => array_column($edges, 'id'), 'points' => $points, 'object' => $object['id'], 'levelId' => $object['levelId'] ?? null,
+                ...(($object['climbable'] ?? false) === true ? ['climbable' => true] : [])];
+        }
+        return $boxes;
+    }
+
+    /**
      * The same model with its boxes worked in: each box's four walls marked `boxWall`, and a floor plate
      * marked `boxTop` at its top, on the floor the box stands on (the floor plate under its middle at its
      * base, else the ground). The model itself when it has no box.
@@ -81,14 +104,14 @@ final class WallBoxes
         $floors = array_values(array_filter(FloorSupport::surfaces($model), static fn ($roof) => ($roof['kind'] ?? '') === 'floor' && empty($roof['boxTop']) && count($roof['points'] ?? []) > 2));
         $model['roofs'] = $model['roofs'] ?? [];
         foreach ($boxes as $box) {
-            $x = ($box['left'] + $box['right']) / 2; $y = ($box['top'] + $box['bottom']) / 2; $level = 'level-0';
-            foreach ($floors as $roof) {
+            $x = ($box['left'] + $box['right']) / 2; $y = ($box['top'] + $box['bottom']) / 2; $level = $box['levelId'] ?? 'level-0';
+            if (empty($box['levelId'])) foreach ($floors as $roof) {
                 if (abs((float) ($roof['height'] ?? 0) - $box['base']) > 0.13 || !FloorSupport::contains($roof['points'], $x, $y)) continue;
                 foreach ($roof['holes'] ?? [] as $hole) if (FloorSupport::contains($hole, $x, $y)) continue 2;
                 $level = $roof['levelId'] ?? 'level-0'; break;
             }
             $model['roofs'][] = ['id' => $box['id'], 'kind' => 'floor', 'boxTop' => true, ...(!empty($box['climbable']) ? ['climbable' => true] : []), 'levelId' => $level, 'base' => $box['base'], 'height' => $box['height'],
-                'points' => [['x' => $box['left'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['bottom']], ['x' => $box['left'], 'y' => $box['bottom']]], 'holes' => []];
+                'points' => $box['points'] ?? [['x' => $box['left'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['bottom']], ['x' => $box['left'], 'y' => $box['bottom']]], 'holes' => [], ...(isset($box['object']) ? ['object' => $box['object']] : [])];
         }
         return $model;
     }

@@ -54,7 +54,7 @@ echo "PASS a type or a number makes each cube one breakable object; fire never; 
 // ---- pushed into one -----------------------------------------------------------------------
 $through = static fn (array $template, array $from, int $column, int $row) => ForcedMovement::through($from, ['column'=>$column, 'row'=>$row], [$from], WallCubes::withTemplates([], [$template]));
 $plan = $through($wall(['wallType'=>'wood']), $token(8, 5), 13, 5);
-summonCheck(count($plan['breaks']) === 4 && $plan['breakCost'] === 3 && $plan['breakDamage'] === 5 && $plan['column'] == 10, 'A wooden cube: 3 squares of the push, 5 damage, all four sides, and on through: ' . json_encode([count($plan['breaks']), $plan['breakCost'], $plan['breakDamage'], $plan['column']]));
+summonCheck(count($plan['breaks']) === 4 && $plan['breakCost'] === 3 && $plan['breakDamage'] === 5 && $plan['column'] == 11, 'A wooden cube: 3 squares of the push, 5 damage, all four sides, through it and on 1: ' . json_encode([count($plan['breaks']), $plan['breakCost'], $plan['breakDamage'], $plan['column']]));
 summonCheck($plan['steps'][0]['materials'] === ['wood'=>1], 'The pop-up names the type');
 $plan = $through($wall(['wallStamina'=>15]), $token(8, 5), 23, 5);
 summonCheck($plan['breaks'] === [] && $plan['wall'] === true, 'Stamina 15 with 14 squares left does not break');
@@ -95,7 +95,7 @@ try {
 
     // Asked first, then pushed through: Stamina 4, so 4 of the 6 squares left, and 6 damage.
     $offer = $store->forcedBreakOffer('scene', 't', ['column'=>15, 'row'=>5], false);
-    summonCheck($offer['destination'] == ['column'=>11, 'row'=>5] && $offer['breakDamage'] === 6 && $offer['steps'][0] === ['materials'=>['Stamina 4'=>1], 'cost'=>4, 'damage'=>6, 'left'=>6], 'The offer for a player\'s push: ' . json_encode($offer));
+    summonCheck($offer['destination'] == ['column'=>12, 'row'=>5] && $offer['breakDamage'] === 6 && $offer['steps'][0] === ['materials'=>['Stamina 4'=>1], 'cost'=>4, 'damage'=>6, 'left'=>6], 'The offer for a player\'s push: ' . json_encode($offer));
     $before = $store->getSnapshot();
     $store->acceptTokenMove(['type'=>'token.move','operationId'=>'summon-push-through','sceneId'=>'scene','entityId'=>'t','baseRevision'=>$before['revision'],'entityRevision'=>0,
         'payload'=>['column'=>11,'row'=>5,'movementKind'=>'forced','forcedDestination'=>['column'=>15,'row'=>5,'breakThrough'=>true]]], 'cal', false);

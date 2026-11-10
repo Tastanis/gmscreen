@@ -1,8 +1,9 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, abilityTerrainZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText} from './terrain-zones.mjs';
-import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise} from './terrain-math.mjs';
+import {sceneZones, abilityTerrainZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText, zonesAtSquare} from './terrain-zones.mjs';
+import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise, isClimb} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
+import {MOVEMENT_RULES} from './movement-rules.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {fallSquares} from './ruler-label-layout.mjs';
 
@@ -64,7 +65,14 @@ function paysForClimb(actor, kind = 'walk') {
 /** Movement multiplier for a mover entering this square (1 on ordinary ground, or when it is above the zone). */
 function stepMultiplier(actor, column, row, rawHeight) {
   const c = context(), index = current(c).index;
-  if (!index.size) return 1;
+  // An enemy's square costs one more, like difficult terrain, and does not stack with it (Brandon, November 8, 2026).
+  let enemy = 1;
+  try { const squares = window.vttEnemySquares?.(actor); if (squares?.size) for (let dx = 0; dx < Math.max(1, Math.round(actor?.width || 1)) && enemy === 1; dx++) for (let dy = 0; dy < Math.max(1, Math.round(actor?.height || 1)); dy++) if (squares.has(`${Math.floor(column) + dx},${Math.floor(row) + dy}`)) { enemy = 1 + MOVEMENT_RULES.cost.enemy; break; } } catch (error) { enemy = 1; }
+  // A prone creature crawls: one more for every square crawled (book, chapters 5 and 10), on top of what the square
+  // itself costs (Brandon, November 10, 2026: follow the book; crawling into difficult terrain costs 3).
+  let crawl = 0;
+  try { if (!['fly', 'hover'].includes(actor?.movementMode) && window.vttIsProne?.(actor)) crawl = 1; } catch (error) { /* no board */ }
+  if (!index.size) return enemy + crawl;
   const floors = elevations(c), levelId = actor?.levelId || c?.levelId || BASE_LEVEL_ID;
   const mover = {column, row, width: actor?.width || 1, height: actor?.height || 1, levelId, movementMode: actor?.movementMode, flightHeight: actor?.flightHeight};
   const airborne = ['fly', 'hover'].includes(mover.movementMode);
@@ -73,7 +81,7 @@ function stepMultiplier(actor, column, row, rawHeight) {
   // A swimmer, or a creature that walks on the liquid, is in the zone but pays nothing extra for it.
   const waiver = movementWaiver(actor);
   for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0, {onPlate: !airborne && onPlate(mover, feet, c)})) cost = Math.max(cost, zoneCostFor(zone, waiver));
-  return cost;
+  return Math.max(cost, enemy) + crawl;
 }
 function moverFor(c) {
   const id = c?.selectedIds?.[0] || window.visionPrototype?.viewerTokenId || c?.followId || null;
@@ -87,9 +95,11 @@ function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   const c = context(), active = terrain(), ignoreZones = kind === 'forced' || kind === 'teleport';
   const mover = actor === undefined ? moverFor(c) : actor;
   const ignoreClimb = !paysForClimb(mover, kind);
+  // A creature with a climb speed climbs for the squares it climbs, with nothing more (the rules table).
+  const climbFree = ignoreClimb && (kind === 'walk' || kind === 'shift') && !['fly', 'hover'].includes(mover?.movementMode) && hasMovementType(mover, 'climb');
   const carry = {}; // the previewed walker, handed from one leg to the next
   const stepsBetween = (a, b) => active
-    ? active.route(a, b, {ignoreZones, ignoreClimb, actor: mover || undefined, carry})
+    ? active.route(a, b, {ignoreZones, ignoreClimb, climbFree, actor: mover || undefined, carry})
     : routeSteps(a, b, () => 0, ignoreZones ? null : (column, row) => stepMultiplier(mover, column, row, undefined));
   const summary = summarizeRoute(points, stepsBetween);
   const start = points?.[0];
@@ -135,11 +145,20 @@ function forcedFall(points, {actor = undefined} = {}) {
  * neither height nor zones, so the plain square outline is already exact.
  */
 function cellInfoFor(target) {
-  const c = context(), active = terrain(), state = current(c), actor = placementOf(target, c);
-  if (!active && !state.zones.length) return null;
+  const c = context(), active = terrain(), state = current(c), actor = placementOf(target, c), walls = window.wallPrototype;
+  if (!active && !state.zones.length && typeof walls?.question !== 'function') return null;
   const airborne = ['fly', 'hover'].includes(actor?.movementMode);
   return {
-    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber', movementText(actor)].join('|'),
+    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber', movementText(actor), walls?.revision ?? 0, walls?.key ?? ''].join('|'),
+    // The walls, as the walk will be asked (wall-properties wallQuestion): a wall stops the outline, a shut door does
+    // not (it is opened), a climbable face is climbed at a climb's price (Brandon, November 8, 2026).
+    wall: typeof walls?.question === 'function' && !airborne ? (from, column, row) => {
+      const q = walls.question({...(actor || {}), column: from.column, row: from.row, ...(from.ghost || {}), column: from.column, row: from.row}, {column, row, path: []});
+      // A closed secret door is a wall to the outline, on the Director's screen too (a player's copy has it as plain wall).
+      if (q?.kind === 'wall' || (q?.kind === 'door' && q.edge?.secret === true && q.edge?.open !== true)) return null;
+      if (q?.kind === 'climb') { const r = Math.round(q.rise || 0); return Math.max(1, r) - 1 + (paysForClimb(actor) ? climbSurcharge(r) : 0); }
+      return 0;
+    } : null,
     at(column, row) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
       return {column, row, height: active ? groundSquare(raw) : 0, rawHeight: active ? raw : 0, multiplier: stepMultiplier(actor, column, row, raw)};
@@ -164,8 +183,9 @@ function cellInfoFor(target) {
     stepCost: (from, to) => {
       // The same measure of a step's height as the ruler: the real change, to the nearest square.
       const rise = Number.isFinite(from.rawHeight) && Number.isFinite(to.rawHeight) ? stepRise(from.rawHeight, to.rawHeight) : to.height - from.height;
-      const climb = !!active && rise > 0 && climbSurcharge(rise) > 0 && paysForClimb(actor) && active.climbFace(actor, from, to);
-      return stepCost({horizontal: 1, rise, multiplier: to.multiplier, climb});
+      const raw = Number.isFinite(from.rawHeight) && Number.isFinite(to.rawHeight) ? to.rawHeight - from.rawHeight : rise, free = !paysForClimb(actor);
+      const climb = !!active && rise > 0 && climbSurcharge(rise) > 0 && !['fly', 'hover'].includes(actor?.movementMode) && isClimb(raw, 1, raw < MOVEMENT_RULES.climbGrade - 1e-6 && active.climbFace(actor, from, to));
+      return stepCost({horizontal: 1, rise, multiplier: to.multiplier, climb, free});
     },
   };
 }
@@ -312,6 +332,8 @@ window.terrainZones = {
   zonesForPlacement,
   tagsForPlacement: (target, options) => zoneTags(zonesForPlacement(target, options)),
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
+  // A square the map labels no-climb (bumpy ground that is always a plain walk; MapLabels::KINDS).
+  noClimb: (column, row, levelId = BASE_LEVEL_ID) => zonesAtSquare(current().index, column, row, levelId).some((zone) => zone.kind === 'no-climb'),
   stepMultiplier,
   routeCost,
   forcedFall,

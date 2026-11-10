@@ -38,7 +38,8 @@ final class TeleportLanding {
   $to['levelId']=$landing['levelId'];$to['_floorTraversal']=null;$to['_supportSurfaceId']=$landing['surfaceId'];
   $fall=null;
   if(FloorGeometry::isAirborne($to)){$to['flightHeight']=$height;$to['_supportSurfaceId']=null;}
-  elseif($height-$landing['height']>=.999999)$fall=['squares'=>(int)floor($height-$landing['height']+1e-6),'fromHeight'=>$height,'landingHeight'=>$landing['height'],'forcedDown'=>false];
+  // To the nearest whole square, as every other fall (FallOutcome::plan; November 9, 2026: 2.6 was 2 by teleport, 3 otherwise).
+  elseif($height-$landing['height']>=.999999)$fall=['squares'=>max(1,(int)floor($height-$landing['height']+.5+1e-6)),'fromHeight'=>$height,'landingHeight'=>$landing['height'],'forcedDown'=>false];
   return ['placement'=>$to,'fall'=>$fall,'distance'=>$distance];
  }
  public static function retained(array $to,array $config):?array {

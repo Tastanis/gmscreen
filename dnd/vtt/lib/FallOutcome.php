@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/WallMovement.php';
 require_once __DIR__.'/WallObjects.php';
+require_once __DIR__.'/MapLabels.php';
 /** Server-owned fall geometry; damage remains an explicitly reviewed outcome. */
 final class FallOutcome {
  public static function plan(array $from,array $to,array $config,string $kind,array $path=[],?string $cause=null):?array {
@@ -27,28 +28,47 @@ final class FallOutcome {
   }
   // Teleport only checks its landing support; never treat the skipped chord as a fall.
   elseif($kind!=='teleport')$top=self::groundTop($from,[...$path,$to],$config);
+  // It lands on the highest thing below where it fell from: a box top, a step, a deck (Brandon, November 8, 2026),
+  // never on the ground inside an object it fell into.
+  $onto=$top!==null?self::surfaceBelow($to,$top,$config):null;
+  if($onto&&$onto['height']>$landing+1e-6)$landing=(float)$onto['height'];else $onto=null;
   if($top===null||$top-$landing<.999999)return null;
   // The nearest whole square, as a climb up the same face is counted (stepRise in terrain-math.mjs):
   // a 3.75-high face is 4 squares both ways. A drop of less than one square is still no fall.
-  return ['squares'=>max(1,(int)floor($top-$landing+.5+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false];
+  return ['squares'=>max(1,(int)floor($top-$landing+.5+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false,...($onto?['landsOn'=>['id'=>$onto['id'],'levelId'=>$onto['levelId']]]:[])];
+ }
+ /** The highest floor (a plate, a box top, a summoned cube) under a creature at or below a height, or null. */
+ public static function surfaceBelow(array $at,float $top,array $config):?array {
+  $surfaces=array_values(array_filter(FloorSupport::surfaces($config['environment']['walls']['value']??[]),fn($s)=>(($s['kind']??'')==='floor'||!empty($s['templateCube']))&&isset($s['id'])));
+  if(!$surfaces)return null;
+  $best=FloorSupport::landing($at,$surfaces,$config['mapLevels']??[],$top+1e-6,-INF);
+  return ($best['id']??null)!==null?['id'=>$best['id'],'levelId'=>$best['levelId']??'level-0','height'=>(float)$best['height']]:null;
  }
  /** The height a move over ground falls from: the top of the sharpest drop it crosses, or null when it crosses none. */
  private static function groundTop(array $from,array $points,array $config):?float {
   $terrain=fn($x,$y)=>WallMovement::terrain($x,$y,$config);$standing=fn($p)=>WallMovement::height($p,$config);
-  $previous=$from;$top=null;
+  $previous=$from;$top=null;$smooth=MapLabels::noClimbSquares($config);
   foreach($points as $point){
    $dx=$point['column']-$previous['column'];$dy=$point['row']-$previous['row'];$d=max(abs($dx),abs($dy));
    $at=fn($s)=>[...$previous,'column'=>$previous['column']+$dx*$s/$d,'row'=>$previous['row']+$dy*$s/$d];
-   $contact=$d>1e-7?TerrainContact::first($previous,$point,$terrain,$standing,-1):null;
+   // Ground the map marks no-climb is walked both ways (MapLabels::walkedBump): a sharp step down out of such a
+   // square is passed over, and the rest of the move is looked at for a real drop.
+   $contact=null;$skip=0;
+   while($d>1e-7&&$skip<$d-1e-7){
+    $hit=TerrainContact::first($at($skip),$point,$terrain,$standing,-1);if($hit===null)break;
+    $step=$skip+floor($hit+1e-6);
+    if(!MapLabels::walkedBump($at($step),$at(min($d,$step+1)),$standing,$smooth)){$contact=$step;break;}
+    $skip=$step+1;
+   }
    // The top of a fall is the middle of the square the creature left, the same place a climb up
    // the face is measured from, so one face is the same height going up and coming down.
-   if($contact!==null)$top=max($top??-INF,$standing($at(floor($contact+1e-6))));
+   if($contact!==null)$top=max($top??-INF,$standing($at($contact)));
    // A face gentler than the sharp drop looked for above can still be a climb of two squares or
    // more going up (a 1.9-high bank). Coming down it is then a fall of the same height.
    elseif($d>1e-7){
     for($i=0;$i<ceil($d-1e-6);$i++){
      $upper=$at($i);$lower=$at(min($d,$i+1));$high=$standing($upper);
-     if($high-$standing($lower)>=1.5-1e-6&&TerrainContact::first($lower,$upper,$terrain,$standing)!==null){$top=max($top??-INF,$high);break;}
+     if($high-$standing($lower)>=1.5-1e-6&&!MapLabels::walkedBump($upper,$lower,$standing,$smooth)&&TerrainContact::first($lower,$upper,$terrain,$standing)!==null){$top=max($top??-INF,$high);break;}
     }
    }
    $previous=[...$previous,...$point];

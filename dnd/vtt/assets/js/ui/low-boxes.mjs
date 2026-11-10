@@ -12,10 +12,14 @@
 // (wall-properties.mjs) is a box whatever its height. Paired with WallBoxes.php.
 
 /** The tallest a box may be, in squares. The same number as LOW_BARRIER in wall-properties.mjs. */
-export const BOX_HEIGHT = 1;
+export const BOX_HEIGHT = 1.5;
 /** What a box top's id starts with. */
 export const BOX_TOP = 'box-top:';
 
+/** What a labelled object's walls' ids start with (MapLabels.php). */
+export const OBJECT_WALL = 'obj:';
+/** An object's outline as a ring without a repeated last point (MapLabels::ring). */
+export const objectRing = (points) => { const ring = [...(points || [])]; if (ring.length > 3) { const a = ring[0], z = ring[ring.length - 1]; if (Math.abs(a.x - z.x) < 1e-9 && Math.abs(a.y - z.y) < 1e-9) ring.pop(); } return ring; };
 const place = (x, y) => `${Math.round(x * 1e4)},${Math.round(y * 1e4)}`;
 const inside = (p, ring) => { let hit = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) hit = !hit; } return hit; };
 
@@ -24,6 +28,7 @@ const inside = (p, ring) => { let hit = false; for (let i = 0, j = ring.length -
  * height of the box's top and `edges` are the ids of its four wall pieces.
  */
 export function lowBoxes(model) {
+  if (model?.labels === 1) return labelledBoxes(model);
   const nodes = new Map((model?.nodes || []).map((n) => [n.id, n])), sides = new Map(), tops = [];
   for (const edge of model?.segments || []) {
     if ((edge.interaction ?? 'none') !== 'none' || (edge.movement ?? 'block') !== 'block' || edge.broken === true || (edge.movementDirection ?? 'both') !== 'both') continue;
@@ -58,6 +63,24 @@ export function lowBoxes(model) {
 }
 
 /**
+ * A labelled map's boxes (MapLabels.php): every object marked standOn whose walls all stand, at its own outline.
+ * Nothing is guessed from walls. Paired with WallBoxes::labelledBoxes.
+ */
+function labelledBoxes(model) {
+  const walls = new Map();
+  for (const edge of model.segments || []) if (typeof edge.object === 'string' && String(edge.id).startsWith(OBJECT_WALL)) walls.set(edge.object, [...(walls.get(edge.object) || []), edge]);
+  const boxes = [];
+  for (const object of model.objects || []) {
+    const edges = walls.get(object.id) || [], ring = objectRing(object.points);
+    if (object.standOn !== true || edges.length !== ring.length || edges.some((edge) => edge.broken === true)) continue;
+    const points = ring.map((p) => ({ x: Number(p.x), y: Number(p.y) })), xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    boxes.push({ id: BOX_TOP + OBJECT_WALL + object.id, left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys), base: Number(edges[0].base), height: Number(object.top),
+      edges: edges.map((edge) => edge.id), points, object: object.id, levelId: object.levelId ?? null, ...(object.climbable === true ? { climbable: true } : {}) });
+  }
+  return boxes;
+}
+
+/**
  * The same model with its boxes worked in: each box's four walls marked `boxWall`, and a floor plate marked
  * `boxTop` at its top, on the floor the box stands on (the floor plate under its middle at its base, else
  * the ground). The model itself when it has no box.
@@ -68,6 +91,7 @@ export function withLowBoxes(model) {
   const walls = new Set(boxes.flatMap((box) => box.edges));
   const floors = (model.roofs || []).filter((roof) => roof.kind === 'floor' && !roof.boxTop && roof.points?.length > 2);
   const levelOf = (box) => {
+    if (box.levelId) return box.levelId;
     const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
     return floors.find((roof) => Math.abs(Number(roof.height) - box.base) <= 0.13 && inside(middle, roof.points) && !(roof.holes || []).some((hole) => inside(middle, hole)))?.levelId || 'level-0';
   };
@@ -75,6 +99,6 @@ export function withLowBoxes(model) {
     ...model,
     segments: model.segments.map((edge) => (walls.has(edge.id) ? { ...edge, boxWall: true } : edge)),
     roofs: [...(model.roofs || []), ...boxes.map((box) => ({ id: box.id, kind: 'floor', boxTop: true, ...(box.climbable ? { climbable: true } : {}), levelId: levelOf(box), base: box.base, height: box.height,
-      points: [{ x: box.left, y: box.top }, { x: box.right, y: box.top }, { x: box.right, y: box.bottom }, { x: box.left, y: box.bottom }], holes: [] }))],
+      points: box.points ?? [{ x: box.left, y: box.top }, { x: box.right, y: box.top }, { x: box.right, y: box.bottom }, { x: box.left, y: box.bottom }], holes: [], ...(box.object ? { object: box.object } : {}) }))],
   };
 }

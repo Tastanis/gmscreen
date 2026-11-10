@@ -120,9 +120,12 @@ test('a difficult square costs its multiplier; a climb is paid as well', () => {
   assert.equal(routeSteps({ column: 6, row: 2 }, { column: 7, row: 2 }, flat, multiplier).cost, 1);
   // A tag-only zone (cost 1) is free.
   assert.equal(routeSteps({ column: 0, row: 1 }, { column: 2, row: 1 }, flat, multiplier).cost, 2);
-  // Climbing 2 while stepping into a x2 square: 2 for the climb plus 1 extra.
+  // Rising 2 while stepping into a x2 square, with no climb test (a flier, a push): the square plus 1 extra (November 8, 2026).
   const climb = routeSteps({ column: 3, row: 2 }, { column: 4, row: 2 }, (column) => (column === 4 ? 2 : 0), multiplier);
-  assert.deepEqual([climb.cost, climb.extra], [3, 1]);
+  assert.deepEqual([climb.cost, climb.extra], [2, 1]);
+  // With the climb test, the 2-high face is a climb: 2 squares climbed, 2 more for climbing, 1 for the difficult square.
+  const climbed = routeSteps({ column: 3, row: 2 }, { column: 4, row: 2 }, (column) => (column === 4 ? 2 : 0), multiplier, () => true);
+  assert.deepEqual([climbed.cost, climbed.extra], [5, 3]);
   assert.equal(routeSteps({ column: 2, row: 2 }, { column: 2, row: 2 }, flat, multiplier).cost, 0, 'standing still costs nothing, even in a zone');
   assert.equal(routeSteps({ column: 3, row: 2 }, { column: 4, row: 2 }, flat, () => Number.NaN).cost, 1, 'a broken lookup never changes the cost');
 });
@@ -164,16 +167,17 @@ test('zones survive the client state normaliser and live environment events', ()
   assert.equal(sceneZones(next.sceneConfig, 'scene')[0]?.tag, 'blood', 'a zone save from the GM reaches open clients through the normal event');
 });
 
-test('one step is priced in one place: distance or height, whichever is larger, plus difficult terrain', () => {
+test('one step is priced in one place: one a square, a climb paid, plus difficult terrain (November 8, 2026)', () => {
   assert.equal(stepCost(), 1);
   assert.equal(stepCost({ horizontal: 1, rise: 1 }), 1, 'a one-square step up is ordinary movement');
-  assert.equal(stepCost({ horizontal: 1, rise: 3 }), 3);
-  assert.equal(stepCost({ horizontal: 1, rise: -3 }), 3, 'going down is priced like going up');
+  assert.equal(stepCost({ horizontal: 1, rise: 3 }), 1, 'a rise that is not a climb costs nothing more');
+  assert.equal(stepCost({ horizontal: 1, rise: -3 }), 1, 'downhill is ordinary movement');
+  assert.equal(stepCost({ horizontal: 1, rise: 3, climb: true }), 6, 'a climb: 3 squares climbed, 3 more for climbing');
   assert.equal(stepCost({ horizontal: 1, rise: 0, multiplier: 2 }), 2);
-  assert.equal(stepCost({ horizontal: 1, rise: 2, multiplier: 4 }), 5, 'difficult terrain adds to a climb, it does not multiply it');
-  // The ruler uses it: a 3-high ledge, then two x2 squares on top.
-  const route = routeSteps({ column: 0, row: 0 }, { column: 3, row: 0 }, (x) => (x >= 1 ? 3 : 0), (x) => (x >= 2 ? 2 : 1));
-  assert.equal(route.cost, 3 + 2 + 2);
+  assert.equal(stepCost({ horizontal: 1, rise: 2, multiplier: 4, climb: true }), 7, 'difficult terrain adds to a climb, it does not multiply it');
+  // The ruler uses it: a 3-high ledge (climbed), then two x2 squares on top.
+  const route = routeSteps({ column: 0, row: 0 }, { column: 3, row: 0 }, (x) => (x >= 1 ? 3 : 0), (x) => (x >= 2 ? 2 : 1), () => true);
+  assert.equal(route.cost, 6 + 2 + 2);
 });
 
 test('"in or next to" a zone: within one square of the token, sideways or above the surface', () => {

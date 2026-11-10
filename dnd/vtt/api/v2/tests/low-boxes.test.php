@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-// A low object that fills a square (a crate, a rim rock) is climbed onto on a yes, and stood on. Brandon,
-// October 10, 2026: "We can treat full square boxes like railings. A full square box ... can be like one
+// A low object that fills a square (a crate, a rim rock) is stood on. Brandon, November 8, 2026: a box up to the
+// rules table's stepUp (1.5) above the walker's feet is a plain step, no question. Before that, October 10, 2026: "We can treat full square boxes like railings. A full square box ... can be like one
 // square up. You can still see over it ... it can be broken, and if you try to go over it, it gives you a one
 // climb thing. But if you get like pushed, it can block your push ... if you go to move over it, it just says,
 // want to climb? And you say, sure." The browser's side is in low-boxes.test.mjs.
@@ -30,7 +30,7 @@ boxCheck(WallBoxes::BOX_HEIGHT===WallMovement::LOW_BARRIER,'A box is as tall as 
 boxCheck(count(WallBoxes::boxes(boxModel([boxRing('a',3,3,0,.86),boxRing('b',4,3,0,.86)])))===2,'Two boxes side by side are two boxes');
 boxCheck(count(WallBoxes::boxes(boxModel([boxRing('font',9,9,0,1.,[],2.)])))===1,'One that fills two squares by two');
 $none=function(array $ring,string $why){$model=boxModel([$ring]);boxCheck(WallBoxes::boxes($model)===[]&&WallBoxes::with($model)===$model,$why);};
-$none(boxRing('pillar',3,3,0,1.2),'Taller than a square is no box');
+$none(boxRing('pillar',3,3,0,1.6),'Taller than a plain step (rules table stepUp) is no box');
 $none(boxRing('door',3,3,0,.86,['interaction'=>'door']),'A ring of doors is no box');
 $none(boxRing('ghost',3,3,0,.86,['movement'=>'pass']),'Walls that stop nothing make no box');
 $none(boxRing('oneway',3,3,0,.86,['movementDirection'=>'left']),'One-way walls make no box');
@@ -58,30 +58,29 @@ $allowed=function(array $from,array $to,array $config,string $kind='walk',bool $
     try{WallMovement::assertAllowed($from,$to,WallCubes::withTemplates($config,[]),$kind,[],$gm,null,$climb);return true;}catch(InvalidArgumentException $e){return false;}
 };
 $hero=['id'=>'hero','name'=>'Cal','profileId'=>'cal','team'=>'ally','column'=>4,'row'=>2,'width'=>1,'height'=>1,'levelId'=>'level-0'];$into=[...$hero,'column'=>5];
-boxCheck(!$allowed($hero,$into,$config),'A walk into a box is refused until the walker says yes');
-boxCheck($allowed($hero,$into,$config,'walk',true)&&$allowed($hero,$into,$config,'shift',true),'On yes he climbs onto it');
-boxCheck($allowed($hero,[...$hero,'column'=>6],$config,'walk',true)&&!$allowed($hero,[...$hero,'column'=>6],$config),'A walk right across it is asked the same');
+boxCheck($allowed($hero,$into,$config)&&$allowed($hero,$into,$config,'shift'),'A walk onto a low box is a plain step: no question');
+boxCheck($allowed($hero,[...$hero,'column'=>6],$config),'A walk right across it too');
 boxCheck(!$allowed($hero,$into,$config,'forced',true),'A push into a box hits it');
 boxCheck($allowed($hero,$into,$config,'walk',false,true),'The Director\'s own walk passes, as always');
-boxCheck(!$allowed($hero,$into,boxScene([boxRing('pillar',5,2,0,1.2)]),'walk',true),'A taller ring refuses either way');
+boxCheck(!$allowed($hero,$into,boxScene([boxRing('pillar',5,2,0,1.6)]),'walk',true),'A ring taller than a plain step is a wall: Move anyway');
 $onTop=[...$into,'_supportSurfaceId'=>WallBoxes::BOX_TOP.'crate-east'];
 boxCheck(abs(WallMovement::height($onTop,$derived)-.86)<1e-9,'On it he stands at its top');
 boxCheck($allowed($onTop,[...$onTop,'column'=>6],$config)&&$allowed($onTop,[...$onTop,'column'=>4],$config),'From its top he steps off either way without being asked');
 $pair=boxScene([boxRing('a',5,2,0,.86),boxRing('b',6,2,0,.86)]);
 boxCheck($allowed([...$into,'_supportSurfaceId'=>WallBoxes::BOX_TOP.'a-east'],[...$into,'column'=>6],$pair),'And walks from one box onto the next of the same height');
 $higher=boxScene([boxRing('a',5,2,0,.4),boxRing('b',6,2,0,1.)]);
-boxCheck(!$allowed([...$into,'_supportSurfaceId'=>WallBoxes::BOX_TOP.'a-east'],[...$into,'column'=>6],$higher)&&$allowed([...$into,'_supportSurfaceId'=>WallBoxes::BOX_TOP.'a-east'],[...$into,'column'=>6],$higher,'walk',true),'A higher box beside it is asked again');
+boxCheck($allowed([...$into,'_supportSurfaceId'=>WallBoxes::BOX_TOP.'a-east'],[...$into,'column'=>6],$higher),'A higher box beside it is stepped up onto');
 // A box on rough ground: Dead Root's rocks stand at the ground's height where they are, and the square beside one
 // is a little lower or higher (one is 0.43 above its neighbour). A rail on a built floor keeps the strict rule.
 foreach([.02,.43,WallMovement::BOX_FOOT] as $base){
     $rough=boxScene([boxRing('rock',5,2,$base,1.)]);
-    boxCheck(!$allowed($hero,$into,$rough)&&$allowed($hero,$into,$rough,'walk',true),"A box whose base is $base above his feet is asked, and climbed on a yes");
+    boxCheck($allowed($hero,$into,$rough),"A box whose base is $base above his feet is stepped onto");
     $on=FloorSupport::walkContact($hero,$into,[],FloorSupport::surfaces(WallCubes::withTemplates($rough,[])['environment']['walls']['value']),[],fn($p)=>0.);
     boxCheck(($on['id']??null)===WallBoxes::BOX_TOP.'rock-east',"And he stands on it (base $base)");
 }
 boxCheck(!$allowed($hero,$into,boxScene([boxRing('ledge',5,2,.6,1.)]),'walk',true),'A box 0.6 above his feet is not on his floor');
-boxCheck(abs(FloorSupport::BOX_REACH-(WallMovement::LOW_BARRIER+WallMovement::BOX_FOOT))<1e-9,'Its top is reached from as far as its walls are low');
-echo "PASS a box's walls ask like a rail, stop a push, and are nothing to whoever stands on its top\n";
+boxCheck(abs(FloorSupport::BOX_REACH-WallMovement::LOW_BARRIER)<1e-9,'Its top is reached from as far as a plain step goes');
+echo "PASS a box's walls are a plain step, stop a push, and are nothing to whoever stands on its top\n";
 
 // ---- through the store
 $run=function(array $config,array $hero,callable $steps): void {
@@ -104,16 +103,15 @@ $run=function(array $config,array $hero,callable $steps): void {
 $walk=fn(int $column,int $row,bool $yes=false)=>['column'=>$column,'row'=>$row,'movementKind'=>'walk',...($yes?['climbLow'=>true]:[])];
 $top=WallBoxes::BOX_TOP.'crate-east';
 $run($config,$hero,function(callable $move)use($walk,$top){
-    $r=$move($walk(5,2));boxCheck($r['refused']!==null&&str_contains($r['refused'],'blocked by a wall')&&$r['column']===4,'Without the answer the player\'s walk into the crate is refused and he stays');
-    $r=$move($walk(5,2,true));boxCheck($r['refused']===null&&$r['column']===5&&$r['support']===$top&&abs($r['height']-.86)<1e-9,'With the answer he stands on the crate, at its top');
+    $r=$move($walk(5,2));boxCheck($r['refused']===null&&$r['column']===5&&$r['support']===$top&&abs($r['height']-.86)<1e-9,'He steps onto the crate with no question and stands at its top');
     $r=$move($walk(6,2));boxCheck($r['refused']===null&&$r['column']===6&&$r['support']===null&&$r['height']===0.&&$r['fall']===null,'He steps off the far side onto the ground: no question, and less than a square is no fall');
-    $r=$move($walk(4,2,true));boxCheck($r['refused']===null&&$r['column']===4&&$r['support']===null,'A walk right across it, on a yes, ends on the ground beyond');
-    $r=$move(['column'=>5,'row'=>2,'movementKind'=>'forced'],true);boxCheck($r['refused']!==null&&$r['column']===4,'A push into the crate is stopped by it');
+    $r=$move($walk(4,2));boxCheck($r['refused']===null&&$r['column']===4&&$r['support']===null,'A walk right across it ends on the ground beyond');
+    $r=$move(['column'=>5,'row'=>2,'movementKind'=>'forced'],true);boxCheck($r['column']===4,'A push into the crate is stopped by it (the server\'s own answer, not a refusal)');
     $r=$move($walk(5,2),true);boxCheck($r['refused']===null&&$r['support']===$top,'The Director\'s walk puts him on it without the question');
     $r=$move($walk(4,2),true);boxCheck($r['support']===null&&$r['height']===0.,'And off it');
     $r=$move(['column'=>5,'row'=>2,'movementKind'=>'teleport','teleportChoice'=>['height'=>0]]);boxCheck($r['refused']===null&&$r['support']===$top&&abs($r['height']-.86)<1e-9,'A teleport into its square lands on its top, not on the floor inside it');
 });
-echo "PASS through the store: refused without the yes, on its top with it, off again, a push stopped, a teleport on top\n";
+echo "PASS through the store: onto it with no question, off again, a push stopped, a teleport on top\n";
 
 // A box exactly one square high: stepping off it is a drop of one square, as off any ledge that high.
 $run(boxScene([boxRing('crate',5,2,0,1.)]),$hero,function(callable $move)use($walk,$top){
@@ -127,16 +125,14 @@ $rim=boxScene([boxRing('rock',5,41,12,.57)],[$island],$levels);$rock=WallBoxes::
 $islander=[...$hero,'column'=>7,'row'=>41,'levelId'=>'mid-level','_supportSurfaceId'=>'mid'];
 $run($rim,$islander,function(callable $move)use($walk,$rock){
     $r=$move($walk(6,41));boxCheck($r['support']==='mid'&&$r['height']===12.,'Beside the rock he is on the island');
-    $r=$move($walk(5,41));boxCheck($r['refused']!==null&&$r['column']===6,'The rim rock refuses a walk without the answer');
-    $r=$move($walk(5,41,true));boxCheck($r['refused']===null&&$r['support']===$rock&&$r['level']==='mid-level'&&abs($r['height']-12.57)<1e-9,'With it he stands on the rock, still on the island\'s floor');
+    $r=$move($walk(5,41));boxCheck($r['refused']===null&&$r['support']===$rock&&$r['level']==='mid-level'&&abs($r['height']-12.57)<1e-9,'He steps onto the rock with no question, still on the island\'s floor');
     $r=$move($walk(6,41));boxCheck($r['support']==='mid'&&$r['level']==='mid-level'&&$r['height']===12.&&$r['fall']===null,'He steps back down onto the island, not through it');
-    $move($walk(5,41,true));
+    $move($walk(5,41));
     $r=$move($walk(4,41));boxCheck($r['refused']===null&&$r['level']==='level-0'&&$r['support']===null&&$r['fall']===13,'Off the rock over the island\'s edge is a drop, from the rock\'s top');
 });
 $run($rim,[...$islander,'column'=>6],function(callable $move)use($walk){
-    $r=$move($walk(4,41));boxCheck($r['refused']!==null&&$r['column']===6,'Over the rim rock and off the island in one walk is asked too');
-    $r=$move($walk(4,41,true));boxCheck($r['refused']===null&&$r['level']==='level-0'&&$r['fall']===12,'On yes he goes over it and falls');
+    $r=$move($walk(4,41));boxCheck($r['refused']===null&&$r['level']==='level-0'&&$r['fall']===12,'Over the rim rock and off the island in one walk: he goes over it and falls');
 });
 // A walker on the ground under the island is not stopped by a rock twelve squares over his head.
 boxCheck($allowed([...$hero,'column'=>6,'row'=>41],[...$hero,'column'=>5,'row'=>41],$rim),'A rock on the island is nothing to a walker on the ground under it');
-echo "PASS a rim rock: onto it on a yes, back onto the island, and over the edge is a drop\n";
+echo "PASS a rim rock: onto it, back onto the island, and over the edge is a drop\n";

@@ -30,12 +30,12 @@ test('grab geometry: the grabbed creature keeps step with its grabber, or the ne
   assert.equal(footprintGap({ column: 0, row: 0, width: 2 }, { column: 2, row: 1 }), 0, 'corners touch');
 });
 
-test('grabs after a move: the grabber walks and drags; a hand move of the grabbed one ends it; a push apart ends it', async () => {
+test('grabs after a move: the grabber walks and drags; a hand move of the grabbed one or a push apart asks to end it (November 9, 2026)', async () => {
   const store = new Map([
     ['ogre', { id: 'ogre', name: 'Ogre', column: 5, row: 5 }],
     ['cal', { id: 'cal', name: 'Cal', column: 2, row: 5, conditions: [{ name: 'Grabbed', sourceId: 'ogre' }] }],
   ]);
-  const moves = [], ended = [];
+  const moves = [], ended = [], asked = [];
   const deps = {
     getPlacementsForActiveScene: () => [...store.values()],
     getPlacementFromStore: (id) => store.get(id),
@@ -46,6 +46,7 @@ test('grabs after a move: the grabber walks and drags; a hand move of the grabbe
     updatePlacementById: (id, fn) => { const p = store.get(id); fn(p); moves.push([id, p.column, p.row]); return { updated: true }; },
     awaitSuccessfulPlacementSave: async () => {}, renderTokens() {}, boardApi: {}, tokenLayer: null, viewState: {},
     footprintGap, followSquare, Map,
+    askMoveQuestion: async (info) => { asked.push(info.why); return 'end'; },
   };
   const make = () => new Function('deps', `with (deps) { ${section('  function grabsOnScene() {', '  // Undoing the grabber')}; return { grabsAfterMove, grabFollows }; }`)(deps);
   let grabs = make();
@@ -53,12 +54,14 @@ test('grabs after a move: the grabber walks and drags; a hand move of the grabbe
   assert.deepEqual(moves, [['cal', 4, 5]], 'dragged along');
   assert.deepEqual(grabs.grabFollows.get('op1')[0].from, { column: 2, row: 5, levelId: null }, 'kept for Undo');
   await grabs.grabsAfterMove(['cal'], { dragAlong: true, origins: new Map([['cal', { column: 4, row: 5 }]]) });
-  assert.deepEqual(ended, ['cal'], 'moved by hand: the grab ends');
+  assert.deepEqual(ended, ['cal'], 'moved by hand: asked, and on End the grab ends');
+  assert.match(asked[0], /^Cal is (still|no longer) next to Ogre\. End the grab\?$/);
   store.get('cal').conditions = [{ name: 'Grabbed', sourceId: 'ogre' }];
   store.get('ogre').column = 9;
   grabs = make();
   await grabs.grabsAfterMove(['ogre'], { dragAlong: false });
-  assert.deepEqual(ended, ['cal', 'cal'], 'the grabber pushed apart: ends');
+  assert.deepEqual(ended, ['cal', 'cal'], 'the grabber pushed apart: asked, and ends on End');
+  assert.equal(asked.length, 2);
   assert.match(board, /await grabsAfterMove\(movedIds, \{ dragAlong: movementKind === 'walk' \|\| movementKind === 'shift', origins, operationIds \}\);/);
   assert.match(board, /if \(!last\.groupMove\) await undoGrabFollows\(last\.operationId\);/);
 });

@@ -19,10 +19,11 @@ export function normalMovementDetail(sceneId, placementId, previous, placement, 
     ? { ...previous, column: receipt.from.column, row: receipt.from.row, levelId: receipt.from.levelId || previous.levelId }
     : previous;
   const from = footprint(began), to = footprint(placement);
-  if (from.column === to.column && from.row === to.row && from.levelId === to.levelId) return null;
   const corners = Array.isArray(event.payload?.path)
     ? event.payload.path.filter((point) => Number.isFinite(Number(point?.column)) && Number.isFinite(Number(point?.row))).map((point) => ({ column: Number(point.column), row: Number(point.row) }))
     : [];
+  // Back where it began: a move all the same when it went somewhere on the way (left an enemy and came back).
+  if (from.column === to.column && from.row === to.row && from.levelId === to.levelId && !corners.some((point) => point.column !== from.column || point.row !== from.row)) return null;
   return { placementId, sceneId, from, to, kind: kind === 'walk' ? 'normal' : kind, ...(corners.length ? { path: corners } : {}),
     movementOperationId:event.operationId ?? null,movementRevision:event.revision ?? null };
 }

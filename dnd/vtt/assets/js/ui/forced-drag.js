@@ -22,11 +22,12 @@ export function resolveForcedDrag(from, to, others, { wallBlocked = () => false,
     if(lo<stop-1e-8){stop=lo;collidedIds=[];}
     collidedIds.push(other.id);
   }
-  if (wallBlocked(from,at(stop))) {
-    let lo=0,hi=stop;
+  // The wall is found along the whole push, not only up to the first creature: a creature right behind a wall is met
+  // at the same moment the wall is, and the wall comes first. Paired with ForcedMovement::resolve.
+  if (wallBlocked(from,at(1))) {
+    let lo=0,hi=1;
     for(let i=0;i<32;i++){const mid=(lo+hi)/2;if(wallBlocked(from,at(mid)))hi=mid;else lo=mid;}
-    if(lo<stop-1e-6)collidedIds=[];
-    stop=lo;wall=true;
+    if(lo<=stop+1e-6){collidedIds=[];stop=lo;wall=true;}
   }
   if(wall){
     const travel=distance*stop,whole=Math.floor(travel+1e-6);let steps=whole+(travel-whole>=.75-1e-6?1:0);

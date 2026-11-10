@@ -65,7 +65,7 @@ test('whole-map view shows projected ordinary symbols while GM retains existing 
   model.segments[1].secret = true;
   editor.portals();
   assert.equal(document.querySelector('[data-portal-id="near-door"]').disabled, false);
-  assert.equal(document.querySelector('[data-portal-id="far-window"]').textContent, '?');
+  assert.match(document.querySelector('[data-portal-id="far-window"]').dataset.portalKind, /^secret-/, 'a secret door has its own dashed mark (November 8, 2026), not a question mark');
 });
 
 test('player never gets all-scene markers before the vision renderer has a valid viewpoint', () => {

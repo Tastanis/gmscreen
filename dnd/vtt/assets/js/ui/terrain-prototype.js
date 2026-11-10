@@ -283,6 +283,8 @@ function rulerGroundNow(column,row,actor){
 // A cliff is a face steep enough to stop forced movement, so this is that same test.
 function climbFace(actor,a,b){
  const from={width:1,height:1,...(actor||{}),column:a.column,row:a.row};if(['fly','hover'].includes(from.movementMode))return false;
+ // Ground the map labels no-climb is walked, however bumpy (Brandon, November 8, 2026).
+ if(window.terrainZones?.noClimb?.(b.column,b.row,from.levelId||'level-0'))return false;
  const d=dimensions(),ground=(x,y)=>heightAt((ctx.view.gridOffsets.left||0)+x*d.grid,(ctx.view.gridOffsets.top||0)+y*d.grid);
  if(terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null)return true;
  // Or up onto a thing set climbable that he will stand on (low-boxes.mjs): charged as a cliff of its height is.
@@ -291,7 +293,7 @@ function climbFace(actor,a,b){
 }
 function route(start,end,options={}){
  if(!pass.active)return routeNow(start,end,options);
- const key=[start.column,start.row,end.column,end.row,options.ignoreZones?1:0,options.ignoreClimb?1:0,passActorKey(options.actor||rulerActor()),passActorKey(options.carry?.ghost)].join(';');
+ const key=[start.column,start.row,end.column,end.row,options.ignoreZones?1:0,options.ignoreClimb?1:0,options.climbFree?1:0,passActorKey(options.actor||rulerActor()),passActorKey(options.carry?.ghost)].join(';');
  const walk=pass.route(key,()=>{
   // Walked with its own carry, so where the walker ended up is kept with the walk.
   const carry={ghost:options.carry?.ghost};
@@ -317,11 +319,11 @@ function routeNow(start,end,options={}){
    return trajectory.samples[Math.min(trajectory.samples.length-1,Math.round(t*(trajectory.samples.length-1)))].height;
   };
   const zones=window.terrainZones,squareCost=zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null;
-  const face=options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b),walked=routeSteps(start,start,height,squareCost,face);
+  const face=options.ignoreClimb&&!options.climbFree?null:(a,b)=>climbFace(actor,a,b),free={free:options.climbFree===true},walked=routeSteps(start,start,height,squareCost,face,free);
   let previous=start;
   for(let i=1;i<=count;i++){
    const p={column:start.column+(end.column-start.column)*i/count,row:start.row+(end.row-start.row)*i/count};
-   const part=routeSteps(previous,p,height,squareCost,face);
+   const part=routeSteps(previous,p,height,squareCost,face,free);
    walked.points.push(...part.points.slice(1));walked.cost+=part.cost;walked.extra+=part.extra;walked.climbExtra+=part.climbExtra;walked.cliff||=part.cliff;previous=p;
   }
   for(const p of walked.points)p.exactWalk=true;
@@ -334,7 +336,9 @@ function routeNow(start,end,options={}){
   terrain:p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid),
   plainHeight:(column,row,who)=>rulerGround(column,row,who),carried:options.carry?.ghost||null,standing:rampStanding(design)});
  const zones=options.ignoreZones?null:window.terrainZones;
- const walked=routeSteps(start,end,(column,row)=>walker.height(column,row),zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
+ // Which squares the walker is carried by a stair, ramp or vine on: coming down a steep one is climbing down.
+ const onStair=new Map(),walkHeight=(column,row)=>{const h=walker.height(column,row);onStair.set(column+','+row,!!walker.ghost?._floorTraversal||walker.ghost?._stairEnd===true);return h;};
+ const walked=routeSteps(start,end,walkHeight,zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb&&!options.climbFree?null:(a,b)=>climbFace(actor,a,b),{free:options.climbFree===true,carried:(column,row)=>onStair.get(column+','+row)===true});
  if(options.carry)options.carry.ghost=walker.ghost;
  return walked;
 }

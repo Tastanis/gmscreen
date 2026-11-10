@@ -20,7 +20,9 @@ export function breakThroughText({ name = 'Token', offer, others = [] } = {}) {
   return {
     title: `${name}: break through?`,
     lines,
-    yes: `Break: ${offer?.breakDamage ?? 0} damage${on ? `, ${plural(on, 'more square')}` : ''}`,
+    // The whole of it on the button: breaking, and what the rest of the push then hits (the tester, November 9, 2026:
+    // "Break: 5 damage" beside a slam for 3 more was 8). Said too when the creature stays where it is.
+    yes: `Break: ${(offer?.breakDamage ?? 0) + (offer?.damage ?? 0)} damage${on ? `, ${plural(on, 'more square')}` : ', stays here'}`,
     no: `Stop: ${offer?.stopped?.damage ?? 0} damage`,
   };
 }
@@ -31,7 +33,8 @@ export async function forcedBreakOffer(sceneId, placementId, destination, { fetc
   try {
     const response = await fetchRef('/dnd/vtt/api/v2/forced-break.php', {
       method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sceneId, placementId, destination: { column: destination.column, row: destination.row } }),
+      // A slide's later legs (`beyond`) may pay for a break too (ForcedMovement::through).
+      body: JSON.stringify({ sceneId, placementId, destination: { column: destination.column, row: destination.row, ...(destination.beyond > 0 ? { beyond: destination.beyond } : {}) } }),
     });
     const data = await response.json();
     return response.ok && data.success && data.result?.steps?.length ? data.result : null;

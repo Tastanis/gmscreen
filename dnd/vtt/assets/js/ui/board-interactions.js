@@ -13,6 +13,9 @@ import {floorElevations as teleportFloorElevations} from '../state/normalize/flo
 import {mountFallReview, fallDamage} from './fall-review.js';
 import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './scene-routing-commands.mjs';
 import {askClimb} from './climb-prompt.js';
+import {askMoveQuestion, askClimbDownSquares} from './move-question.js';
+import {MOVEMENT_RULES} from './movement-rules.mjs';
+import {savePortal} from './environment-sync.mjs';
 import {offerBreakThrough} from './break-through-prompt.js';
 import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects,collisionDamageDealt} from '../services/collision-effects.js';
@@ -64,7 +67,7 @@ import {
 } from './drag-ruler.js';
 import { rightPressAt, rightPressPulls, rightPressClicked } from './right-press.mjs';
 import { slideLegs } from './forced-line.mjs';
-import { flashWall, blockedByWallText, blockedText, isWallRefusal } from './wall-flash.mjs';
+import { flashWall, blockedByWallText, blockedText, isWallRefusal, refusalKind } from './wall-flash.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -785,8 +788,38 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     return {view:viewState,state,levelId:terrainContextFor.levelId,userId,isGM:isGmUser(),followId:terrainContextFor.followId,selectedIds:[...selectedTokenIds],sightSquare:keyboardAhead.size?sightSquareOf:null};
   };
+  // The squares an enemy of this creature stands in (Brandon, November 8, 2026: "an enemy's square +1, like difficult
+  // terrain"): visible creatures of another side on its floor. The ruler, the route-finder and the reach outline price
+  // them through terrainZones.stepMultiplier. Kept for one board state and one mover.
+  let enemySquaresCache = { state: null, id: null, squares: null };
+  window.vttEnemySquares = (actor) => {
+    const state = boardApi.getState?.() ?? null, id = actor?.id ?? null;
+    if (!id) return null;
+    if (enemySquaresCache.state === state && enemySquaresCache.id === id) return enemySquaresCache.squares;
+    const squares = new Set();
+    try {
+      const level = (placement) => resolveTokenLevelId(placement, getActiveSceneTokenLevelState(state ?? {})) || BASE_MAP_LEVEL_ID;
+      const mover = getPlacementFromStore(id) || actor, team = getCombatantTeam(id), floor = level(mover);
+      // "Moves through creatures" from a trait, a condition or an ability's JSON (movementRulesFor): no enemy surcharge.
+      let rules = null;
+      try { rules = typeof globalThis.vttMovementRulesFor === 'function' ? globalThis.vttMovementRulesFor(mover) : null; } catch (error) { rules = null; }
+      if (rules?.moveThroughCreatures) { enemySquaresCache = { state, id, squares }; return squares; }
+      for (const other of getActiveScenePlacements(state ?? {}) ?? []) {
+        if (!other || other.id === id || other.hidden || other.isHidden || getCombatantTeam(other.id) === team || level(other) !== floor) continue;
+        for (let dx = 0; dx < Math.max(1, Math.round(other.width || 1)); dx++) for (let dy = 0; dy < Math.max(1, Math.round(other.height || 1)); dy++) squares.add(`${Math.floor(other.column) + dx},${Math.floor(other.row) + dy}`);
+      }
+    } catch (error) { /* no board yet: no enemies */ }
+    enemySquaresCache = { state, id, squares };
+    return squares;
+  };
+  // Creatures whose next fall was chosen beforehand as a climb all the way down (the ledge question, ledgeDrop): the
+  // fall panel takes "Climbing" for them by itself.
+  const climbDownChosen = new Set();
   // A creature that walked off an edge may have climbed down instead: no damage, more movement.
   const fallClimbing = {
+    chosen: (record) => climbDownChosen.delete(record.targetId),
+    // Climbing down costs as climbing does (the rules table): one more for each square.
+    perSquare: (record) => Math.max(0, Math.round(Number(record.details?.squares) || 0)) * MOVEMENT_RULES.cost.climbDown,
     // A creature with a climb speed climbs at full speed: walking off an edge is not a fall for it.
     free: (record, faller) => window.terrainZones?.paysForClimb?.({ ...faller, movementMode: 'ground' }, 'walk') === false,
     extra: (record, faller) => (fallClimbing.free(record, faller) ? 0 : climbSurcharge(record.details?.squares)),
@@ -1523,6 +1556,48 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
   }
+  /**
+   * A ledge on a walk (Brandon, November 8, 2026: "a ledge drop over 1.5 asks Fall / Climb down / Cancel"): the first
+   * place the walker's footing falls more than a plain step (the rules table's stepUp) within half a square, with the
+   * height it falls from and the height the walk ends at. Null when there is none. A stair or a slope comes down
+   * gently and is no ledge. Fliers have no ledges.
+   */
+  function ledgeDrop(origin, points) {
+    const terrain = window.terrainPrototype;
+    if (!origin || ['fly', 'hover'].includes(origin.movementMode) || typeof terrain?.movementPlacement !== 'function' || typeof terrain?.groundFor !== 'function') return null;
+    try {
+      const step = MOVEMENT_RULES.stepUp;
+      let ghost = { ...origin }, top = null;
+      // Ground the map marks no-climb is walked both ways (MapLabels::walkedBump): no ledge is asked about stepping
+      // down out of such a square, unless the drop is a cliff's height.
+      const window8 = [{ height: terrain.groundFor(ghost), at: ghost }];
+      for (const point of points.slice(1)) {
+        const dx = point.column - ghost.column, dy = point.row - ghost.row, n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 8));
+        const start = ghost;
+        for (let i = 1; i <= n; i++) {
+          ghost = terrain.movementPlacement(start, { ...start, column: start.column + dx * i / n, row: start.row + dy * i / n });
+          const height = terrain.groundFor(ghost);
+          window8.push({ height, at: ghost }); if (window8.length > 5) window8.shift();
+          const highest = window8.reduce((a, b) => (b.height > a.height ? b : a));
+          const high = highest.height;
+          if (top === null && high - height > step + 1e-6 && !(high - height < MOVEMENT_RULES.climbGrade - 1e-6 && window.terrainZones?.noClimb?.(Math.floor(highest.at.column + (highest.at.width || 1) / 2 + 1e-9), Math.floor(highest.at.row + (highest.at.height || 1) / 2 + 1e-9), highest.at.levelId || 'level-0') === true)) top = high;
+        }
+      }
+      if (top === null) return null;
+      const bottom = terrain.groundFor(ghost), squares = Math.round(top - bottom);
+      return squares >= 1 && top - bottom > step + 1e-6 ? { top, bottom, squares } : null;
+    } catch (error) {
+      return null;
+    }
+  }
+  // A forced move made by hand, told to the rules and triggers that wait for one: a straight Ctrl-drag is a push, one
+  // with corners a slide, with all its squares. The pusher is whoever's turn it is.
+  function announceHandForcedMove(id, moved, verb) {
+    const after = getPlacementFromStore(id), pusher = activeCombatantId && activeCombatantId !== id ? activeCombatantId : '';
+    const pushed = { placementId: id, targetId: id, targetName: tokenLabel(after) || '', sourceId: pusher, actorId: pusher, distance: moved, movedDistance: moved, requestedDistance: moved, verb, abilityName: 'Forced move by hand', manual: true };
+    triggerFire('forcedMovement', pushed);
+    triggerFire('forcedMovementDealt', pushed);
+  }
   // What the last move made here came to, for a slide to read between its legs.
   let lastMoveOutcome = null;
   async function commitCanonicalTokenMoves(options) {
@@ -1549,7 +1624,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return inUndoGroup('', () => commitCanonicalTokenMovesNow(options));
   }
 
-  async function commitCanonicalTokenMovesNow({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0 }) {
+  async function commitCanonicalTokenMovesNow({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0, presetAnswers = null, announce = true }) {
     const ruler = drawnRuler ?? (source === 'drag' ? getCurrentMeasurementPoints() : []);
     // A move made another way takes its turn among arrow presses (keyboard-movement-queue.js), so
     // this browser's moves reach the server in the order they were made. With no press waiting it
@@ -1581,17 +1656,37 @@ export function mountBoardInteractions(store, routes = {}) {
     if (movementKind === 'forced' && source === 'drag' && hasMatchingOrigin && ruler.length > 2 && moves.length === 1 && canonical[moves[0].placementId]) {
       const start = canonical[moves[0].placementId], id = moves[0].placementId;
       const legs = slideLegs(ruler.map((point) => clampPlacementToBounds(point.column + start.column - ruler[0].column, point.row + start.row - ruler[0].row, start.width || 1, start.height || 1)));
-      let made = false;
-      for (const [index, leg] of legs.entries()) {
+      let made = false, slid = 0, budget = null;
+      for (const [index, drawn] of legs.entries()) {
+        // What is left of the slide after a break paid for out of its later legs: they are cut short to fit.
+        let leg = drawn;
+        if (budget !== null) {
+          const from = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
+          const dx = drawn.to.column - (from?.column ?? drawn.to.column), dy = drawn.to.row - (from?.row ?? drawn.to.row), length = Math.max(Math.abs(dx), Math.abs(dy));
+          if (budget <= 0 || !from) break;
+          if (length > budget) leg = { ...drawn, to: { column: from.column + Math.round(dx * budget / length), row: from.row + Math.round(dy * budget / length) } };
+          leg = { ...leg, beyond: Math.max(0, budget - Math.min(length, budget)) };
+        }
         lastMoveOutcome = null;
-        made = await commitCanonicalTokenMoves({ sceneId, moves: [{ ...moves[0], column: leg.to.column, row: leg.to.row }], source, movementKind, originalPositions: index ? null : originalPositions, drawnRuler: [], inTurn: true, slideBeyond: leg.beyond });
+        const before = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
+        made = await commitCanonicalTokenMoves({ sceneId, moves: [{ ...moves[0], column: leg.to.column, row: leg.to.row }], source, movementKind, originalPositions: index ? null : originalPositions, drawnRuler: [], inTurn: true, slideBeyond: leg.beyond, announce: false });
+        if (Number.isFinite(lastMoveOutcome?.beyondLeft)) budget = lastMoveOutcome.beyondLeft;
+        else if (budget !== null) budget = leg.beyond;
+        const after = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
+        if (before && after) slid += Math.max(Math.abs((after.column || 0) - (before.column || 0)), Math.abs((after.row || 0) - (before.row || 0)));
         const now = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
-        const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome.fell && now && now.column === leg.to.column && now.row === leg.to.row;
+        // A slide that falls part-way stops there (Brandon, November 8, 2026). The server records the fall; here it is
+        // seen as the creature ending a square or more lower than the leg began (FallOutcome: a drop of one is a fall).
+        let dropped = false;
+        try { const height = (p) => window.terrainPrototype?.groundFor?.(p); dropped = Boolean(before && now) && height(before) - height(now) >= 1 - 1e-6; } catch (error) { dropped = false; }
+        const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome.fell && !dropped && now && now.column === leg.to.column && now.row === leg.to.row;
         if (!arrived || sceneId !== getActiveSceneId()) {
           if (index < legs.length - 1 && made !== false) updateStatus('Slide stopped short.');
           break;
         }
       }
+      // The slide is announced once, as a slide, with every square it went (Brandon, November 9, 2026), not as a push a leg.
+      if (slid > 0 && sceneId === getActiveSceneId()) announceHandForcedMove(id, slid, 'slide');
       return made;
     }
     if(movementKind==='teleport'){
@@ -1626,28 +1721,90 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
     }
-    // A walk that only a low barrier stops (a rail, a fence, a parapet: LOW_BARRIER in wall-properties.mjs): ask,
-    // with the climb pop-up. On yes the move is sent with the answer and the server lets it over; on no the token
-    // stays. What lies beyond is walked onto like any square, so a drop there is today's fall, asked after this.
-    // The Director's own walks are stopped by no wall, so he is asked nothing.
-    let climbLow = false;
-    if ((movementKind === 'walk' || movementKind === 'shift') && moves.length === 1 && !isGmUser() && typeof window.wallPrototype?.lowBarrier === 'function') {
+    // What each walker meets on its way (Brandon, November 8, 2026: "every hard refusal becomes a question or a
+    // warning ... warn and ask, never block, for players as well"; the Director too). A plain step (up to the rules
+    // table's stepUp) asks nothing. Each token is worked out on its own and the questions are grouped: one climb
+    // question, one door question, one wall question for the whole drag. Head room is only a warning. The answers
+    // travel with each move (climbLow, moveAnyway) and the server lets it through.
+    const wallAnswers = new Map();
+    if (presetAnswers) for (const move of moves) wallAnswers.set(move.placementId, { ...presetAnswers });
+    else if ((movementKind === 'walk' || movementKind === 'shift') && typeof window.wallPrototype?.question === 'function') {
+      const anchorOf = (id) => [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === id) ?? null;
+      const answer = (id, field) => wallAnswers.set(id, { ...(wallAnswers.get(id) || {}), [field]: true });
+      const stay = (words) => {
+        for (const item of moves) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        updateStatus(words);
+      };
+      const met = moves.map((move) => {
+        const origin = canonical[move.placementId];
+        if (!origin) return null;
+        const through = hasMatchingOrigin ? ruler.slice(1, -1).map((point) => ({ column: point.column + origin.column - ruler[0].column, row: point.row + origin.row - ruler[0].row })) : [];
+        const to = { column: move.column, row: move.row, path: through };
+        let question = null, head = null;
+        try { question = window.wallPrototype.question(origin, to); } catch (error) { question = null; }
+        try { head = window.wallPrototype.headRoom?.(origin, to) ?? null; } catch (error) { head = null; }
+        return { move, origin, through, question, head };
+      }).filter(Boolean);
+      const heads = met.filter((entry) => entry.head);
+      if (heads.length) { const words = `Not enough head room: ${heads.map((entry) => tokenLabel(entry.origin) || 'token').join(', ')}.`; window.UIKit?.toast?.(words, 'warning'); }
+      // The cliff question above was the yes to climbing for the whole drag.
+      if (climbAnswered) for (const entry of met) answer(entry.move.placementId, 'climbLow');
+      const climbers = met.filter((entry) => entry.question?.kind === 'climb');
+      if (climbers.length && !climbAnswered) {
+        const first = climbers[0], left = tokenMovementController?.getMovementLeft?.(first.move.placementId)?.left ?? null;
+        const cost = window.terrainZones?.routeCost ? window.terrainZones.routeCost([{ column: first.origin.column, row: first.origin.row }, ...first.through, { column: first.move.column, row: first.move.row }], { kind: movementKind, actor: first.origin }).cost : null;
+        const rise = Math.max(...climbers.map((entry) => entry.question.rise));
+        const yes = await askClimb({ name: first.origin.name || 'Token', over: rise, onto: climbers.some((entry) => entry.question.onto), tall: true, cost, left, others: climbers.length - 1 }, { anchor: anchorOf(first.move.placementId) });
+        if (!yes || sceneId !== getActiveSceneId()) { stay('Did not climb.'); return; }
+        for (const entry of climbers) answer(entry.move.placementId, 'climbLow');
+      }
+      const doors = met.filter((entry) => entry.question?.kind === 'door');
+      if (doors.length) {
+        const choice = await askMoveQuestion({ kind: 'door', locked: doors.every((entry) => entry.question.locked), names: doors.map((entry) => tokenLabel(entry.origin) || 'token') }, { anchor: anchorOf(doors[0].move.placementId) });
+        if (choice === 'cancel' || sceneId !== getActiveSceneId()) { stay('Did not move.'); return; }
+        if (choice === 'open') {
+          // Open each unlocked door met, then walk through; a locked one is gone through anyway.
+          const opened = new Set();
+          for (const entry of doors) {
+            const edge = entry.question.edge;
+            if (!edge || entry.question.locked) { answer(entry.move.placementId, 'moveAnyway'); continue; }
+            if (!opened.has(edge.id)) { try { await savePortal(edge.id, true, true); opened.add(edge.id); } catch (error) { answer(entry.move.placementId, 'moveAnyway'); } }
+          }
+        } else for (const entry of doors) answer(entry.move.placementId, 'moveAnyway');
+      }
+      const walled = met.filter((entry) => entry.question?.kind === 'wall');
+      if (walled.length) {
+        const choice = await askMoveQuestion({ kind: 'wall', names: walled.map((entry) => tokenLabel(entry.origin) || 'token') }, { anchor: anchorOf(walled[0].move.placementId) });
+        if (choice !== 'anyway' || sceneId !== getActiveSceneId()) { stay('Did not move.'); return; }
+        for (const entry of walled) answer(entry.move.placementId, 'moveAnyway');
+      }
+    }
+    // A ledge on the way, more than a plain step down (Brandon, November 8, 2026): "Climb down / Fall / Cancel", asked
+    // before the move. Fall is the move as it is (the fall panel follows). Climb down asks how far: all the way lands it
+    // for the climb's cost with no damage; fewer squares leave it clinging to the wall that far down (it hovers there,
+    // marked `clinging`; letting go later is a fall from that height).
+    let climbDown = null;
+    if ((movementKind === 'walk' || movementKind === 'shift') && moves.length === 1 && !presetAnswers) {
       const move = moves[0], origin = canonical[move.placementId];
       const through = origin && hasMatchingOrigin ? ruler.slice(1, -1).map((point) => ({ column: point.column + origin.column - ruler[0].column, row: point.row + origin.row - ruler[0].row })) : [];
-      let low = null;
-      try { low = origin ? window.wallPrototype.lowBarrier(origin, { column: move.column, row: move.row, path: through }) : null; } catch (error) { low = null; }
-      if (low) {
-        const left = tokenMovementController?.getMovementLeft?.(move.placementId)?.left ?? null;
+      const drop = origin ? ledgeDrop(origin, [{ column: origin.column, row: origin.row }, ...through, { column: move.column, row: move.row }]) : null;
+      if (drop) {
         const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === move.placementId) ?? null;
-        const cost = window.terrainZones?.routeCost ? window.terrainZones.routeCost([{ column: origin.column, row: origin.row }, ...through, { column: move.column, row: move.row }], { kind: movementKind, actor: origin }).cost : null;
-        const yes = climbAnswered || await askClimb({ name: origin.name || 'Token', over: low.rise, onto: low.onto === true, tall: low.tall === true, cost, left }, { anchor });
-        if (!yes || sceneId !== getActiveSceneId()) {
-          updatePlacementById(move.placementId, (placement) => Object.assign(placement, origin), { syncBoard: false });
-          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-          updateStatus('Did not climb.');
-          return;
+        const back = (words) => { updatePlacementById(move.placementId, (placement) => Object.assign(placement, origin), { syncBoard: false }); renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState); updateStatus(words); };
+        const choice = await askMoveQuestion({ kind: 'drop', squares: drop.squares }, { anchor });
+        if (choice === 'cancel' || sceneId !== getActiveSceneId()) { back('Did not move.'); return; }
+        if (choice === 'climb') {
+          const squares = await askClimbDownSquares({ max: drop.squares }, { anchor });
+          if (!squares || sceneId !== getActiveSceneId()) { back('Did not move.'); return; }
+          climbDown = { id: move.placementId, squares, all: squares >= drop.squares, top: drop.top };
+          if (climbDown.all) climbDownChosen.add(move.placementId);
+          else {
+            // Part-way: it goes over the edge at the height of the top, holding on, and is let down that many squares after.
+            try { await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: move.placementId, patch: { movementMode: 'hover', flightHeight: drop.top, clinging: true } }]); }
+            catch (error) { back(error?.message || 'Could not climb down.'); return; }
+          }
         }
-        climbLow = true;
       }
     }
     const collisions = new Map();
@@ -1659,12 +1816,21 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!anyway || sceneId !== getActiveSceneId()) { renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState); updateStatus('Did not shift.'); return; }
       }
     }
-    if (movementKind === 'forced' && moves.length !== 1) {updateStatus('Force move one token at a time.');renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState);return;}
+    // Several tokens pushed together: each is pushed in turn, with its own collisions and pop-ups (Brandon, November 8,
+    // 2026: never refused; each token worked out separately).
+    if (movementKind === 'forced' && moves.length > 1) {
+      let made = false;
+      for (const [index, move] of moves.entries()) {
+        if (sceneId !== getActiveSceneId()) break;
+        made = (await commitCanonicalTokenMovesNow({ sceneId, moves: [move], source, movementKind, originalPositions: index ? null : originalPositions, drawnRuler: [], inTurn: true })) || made;
+      }
+      return made;
+    }
     // A push that ends at a wall it could break: ask before anything is sent. Nothing breaks on "no".
     let breakThrough = null;
     if (movementKind === 'forced' && canonical[moves[0].placementId]) {
       const origin = canonical[moves[0].placementId];
-      breakThrough = await askForcedBreakThrough(sceneId, origin, moves[0], Object.values(canonical));
+      breakThrough = await askForcedBreakThrough(sceneId, origin, moves[0], Object.values(canonical), null, slideBeyond);
       if (sceneId !== getActiveSceneId()) return;
     }
     const intendedMoves = moves.map((move) => {
@@ -1685,7 +1851,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (breakThrough) return {...move,...breakThrough.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,breakThrough:true,...beyond}};
         return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,...beyond}};
       }
-      return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path, ...(climbLow ? { climbLow: true } : {}) };
+      return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path, ...(wallAnswers.get(move.placementId) || {}) };
     });
     let movementAccepted = false;
     // Warning only: nothing blocks a shift through difficult terrain.
@@ -1710,17 +1876,21 @@ export function mountBoardInteractions(store, routes = {}) {
         if(movementKind==='forced')await settleCollisionEffects(results[0]?.event?.operationId,(id,amount,type)=>applyAutomationCollisionDamage(id,amount,type,{movedId:moves[0].placementId}));
         // A push made by hand (Ctrl-drag) is a forced move like an ability's: rules and triggers that wait for one hear it
         // (Brandon, November 2026: Indigo's Clarity never came from a hand-made push). The pusher is whoever's turn it is.
-        if (source === 'drag' && movementKind === 'forced') {
+        if (source === 'drag' && movementKind === 'forced' && announce) {
           const id = moves[0].placementId, before = canonical[id], after = getPlacementFromStore(id);
           const moved = before && after ? Math.max(Math.abs((after.column || 0) - (before.column || 0)), Math.abs((after.row || 0) - (before.row || 0))) : 0;
-          const pusher = activeCombatantId && activeCombatantId !== id ? activeCombatantId : '';
-          if (moved > 0) {
-            const pushed = { placementId: id, targetId: id, targetName: tokenLabel(after) || '', sourceId: pusher, actorId: pusher, distance: moved, movedDistance: moved, requestedDistance: moved, verb: 'push', abilityName: 'Forced move by hand', manual: true };
-            triggerFire('forcedMovement', pushed);
-            triggerFire('forcedMovementDealt', pushed);
-          }
+          if (moved > 0) announceHandForcedMove(id, moved, 'push');
         }
         clearSyncFailure();
+        // Climbing down part-way: let down the squares chosen, and charged for them (climbing down costs as climbing).
+        if (climbDown && !climbDown.all) {
+          try {
+            const now = getPlacementFromStore(climbDown.id), ground = window.terrainPrototype?.groundFor?.({ ...now, movementMode: 'ground', flightHeight: null }) ?? 0;
+            await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: climbDown.id, patch: { flightHeight: Math.max(ground, climbDown.top - climbDown.squares) } }]);
+            const extra = climbDown.squares * MOVEMENT_RULES.cost.climbDown, counted = tokenMovementController?.addMovementCost?.(climbDown.id, extra);
+            updateStatus(`Climbed down ${climbDown.squares}, clinging to the wall: ${extra} more movement${counted ? '' : ' (not counted: not this creature\u2019s turn)'}.`);
+          } catch (error) { console.warn('[VTT] climb down failed', error); }
+        }
         const movedIds = moves.map((move) => move.placementId);
         const fallenIds = source === 'drag'
           ? processPlacementFalls(sceneId, movedIds)
@@ -1728,7 +1898,8 @@ export function mountBoardInteractions(store, routes = {}) {
         if (fallenIds.length) {
           triggerTokenFallAnimations(fallenIds);
         }
-        lastMoveOutcome = { fell: fallenIds.length > 0 };
+        // A break paid for partly out of a slide's later legs leaves this much of them (ForcedMovement::through).
+        lastMoveOutcome = { fell: fallenIds.length > 0, ...(breakThrough && Number.isFinite(breakThrough.beyond) ? { beyondLeft: breakThrough.beyond } : {}) };
         if (status) {
           const noun = moves.length === 1 ? 'token' : 'tokens';
           status.textContent = fallenIds.length
@@ -1754,11 +1925,23 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         return { accepted: true, operationIds: results.map(result => result?.event?.operationId).filter(Boolean) };
       })
-      .catch((error) => {
+      .catch(async (error) => {
         // A walk refused by a wall is not a fault of the connection: show which wall piece it met and say how
         // to go round (wall-flash.mjs), in the line and in a plain notice, and raise no error.
         if (!movementAccepted && isWallRefusal(error?.message)) {
           markWallMet(intendedMoves[0], canonical);
+          // This page saw nothing to ask about and the server did (Brandon, November 8, 2026: never block): ask now,
+          // and send the move again with the answer. Asked once; a second refusal is shown as before.
+          if (!presetAnswers && (movementKind === 'walk' || movementKind === 'shift')) {
+            const kind = refusalKind(error?.message), anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === moves[0]?.placementId) ?? null;
+            const yes = kind === 'climb' ? await askClimb({ name: canonical[moves[0]?.placementId]?.name || 'Token', over: 0, tall: true }, { anchor })
+              : (await askMoveQuestion({ kind: 'wall' }, { anchor })) === 'anyway';
+            if (yes && sceneId === getActiveSceneId()) return commitCanonicalTokenMovesNow({ sceneId, moves, source, originalPositions, movementKind, drawnRuler: ruler, inTurn: true, presetAnswers: kind === 'climb' ? { climbLow: true } : { moveAnyway: true } });
+            for (const item of moves) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
+            renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+            updateStatus('Did not move.');
+            return false;
+          }
           const hint = blockedText(lastWallMet?.edge, source === 'drag');
           updateStatus(hint);
           window.UIKit?.toast?.(hint, 'warning');
@@ -1997,7 +2180,10 @@ export function mountBoardInteractions(store, routes = {}) {
       isDrawModeActive() ||
       isDrawingInProgress() ||
       mapLevelCutoutEditorActive ||
-      isCustomConditionDialogOpen(),
+      isCustomConditionDialogOpen() ||
+      document.getElementById('wall-panel')?.hidden === false,
+    getSpeedRule: (tokenId) => speedRuleFor(tokenId),
+    getDragMovementKind: () => getCurrentMovementKind(),
   });
 
   // Vision switched on or off, or its heroes changed: draw the tokens again, and the turn tracker with them (it kept
@@ -2099,6 +2285,14 @@ export function mountBoardInteractions(store, routes = {}) {
         else if (tempKnown && tempWas !== tempIs) syncPlacementHitPointsToSheet(step.entityId, { current: step.before.hp?.current ?? step.after?.hp?.current, max: step.before.hp?.max ?? step.after?.hp?.max }, { before: Number.isFinite(was) ? was : is, ...temp });
       });
       await reverseSheetSteps(steps.filter((step) => step.kind === 'sheet'));
+      // A move undone gives its movement back (Brandon, November 9, 2026): only a placement step that moved the token,
+      // only if it is that token's last counted move this turn. Damage or a condition undone gives nothing back.
+      for (const step of steps) {
+        const before = step.before, after = step.after;
+        if (step.kind !== 'placement' || !before || !after || !Number.isFinite(Number(before.column)) || !Number.isFinite(Number(after.column))) continue;
+        if (Number(before.column) === Number(after.column) && Number(before.row) === Number(after.row)) continue;
+        try { tokenMovementController?.refundMove?.({ tokenId: step.entityId, from: { column: Number(before.column), row: Number(before.row) }, to: { column: Number(after.column), row: Number(after.row) } }); } catch (error) { /* the counter is a help, never a stop */ }
+      }
       const lines = undoChatLines(steps, { nameOf: undoTokenName, actorNameOf: undoActorName, whole, whose });
       lines.forEach((line) => announceToChat(line));
       const skipped = Array.isArray(undo.skipped) ? undo.skipped : [];
@@ -2655,6 +2849,32 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  /**
+   * What a creature's conditions do to its speed (Brandon, November 9, 2026: "Those should change speed for
+   * calculating how far they have moved, but of course still let you move them"). Book, chapter 5: Slowed is speed 2
+   * unless already lower; Grabbed and Restrained are speed 0; a creature grabbing one its own size or larger has its
+   * speed halved (rounded down: the book gives no rounding). Prone is a cost, not a speed (terrain-zones stepMultiplier).
+   */
+  function speedRuleFor(tokenId) {
+    const placement = getPlacementFromStore(tokenId);
+    if (!placement) return null;
+    const names = new Set(ensurePlacementConditions(placement.conditions ?? placement.condition ?? null).map((c) => String(c?.name || c?.id || c || '').trim().toLowerCase()));
+    const rule = { why: [] };
+    if (names.has('grabbed')) { rule.limit = 0; rule.why.push('Grabbed: speed 0'); }
+    if (names.has('restrained')) { rule.limit = 0; rule.why.push('Restrained: speed 0'); }
+    if (names.has('slowed')) { rule.limit = Math.min(rule.limit ?? Infinity, 2); rule.why.push('Slowed: speed 2'); }
+    const size = (p) => Math.max(Number(p?.width) || 1, Number(p?.height) || 1);
+    const held = grabsOnScene().filter((grab) => grab.grabberId === tokenId).map((grab) => getPlacementFromStore(grab.grabbedId)).filter((p) => p && size(placement) <= size(p));
+    if (held.length) { rule.halve = true; rule.why.push(`Grabbing ${held.map((p) => tokenLabel(p) || 'a creature').join(', ')}: speed halved`); }
+    if (!rule.why.length) return null;
+    return { ...rule, why: rule.why.join('; ') };
+  }
+  // A prone creature crawls: one more for every square (book, chapter 5), priced like difficult terrain.
+  window.vttIsProne = (actor) => {
+    const placement = actor?.id ? getPlacementFromStore(actor.id) || actor : actor;
+    return ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null).some((c) => String(c?.name || c?.id || c || '').trim().toLowerCase() === 'prone');
+  };
+
   // ---------- grabs (Brandon, October 2026) ----------
   // A grab is the grabbed condition on the grabbed creature with its grabber as the source. When the grabber
   // moves itself the grabbed creature comes along (Undo Move brings both back). When the grabbed creature is moved
@@ -2679,17 +2899,30 @@ export function mountBoardInteractions(store, routes = {}) {
     updateStatus(message);
   }
 
+  // Whoever made the move is asked (Brandon, November 9, 2026: "it should probably ask to end the grabbed condition
+  // instead of doing it without knowing"): ending is suggested when the two are no longer side by side, keeping when
+  // they still are.
+  async function askEndGrab(grab, reason) {
+    const grabbed = getPlacementFromStore(grab.grabbedId), grabber = getPlacementFromStore(grab.grabberId);
+    if (!grabbed || !grabber) { endGrab(grab, reason); return; }
+    const gap = footprintGap(grabber, grabbed);
+    const anchor = [...(tokenLayer?.querySelectorAll?.('[data-placement-id]') || [])].find((element) => element.dataset.placementId === grab.grabbedId) ?? null;
+    const choice = await askMoveQuestion({ kind: 'grab', squares: gap, why: `${tokenLabel(grabbed) || 'A creature'} is ${gap > 0 ? 'no longer next to' : 'still next to'} ${tokenLabel(grabber) || 'its grabber'}. End the grab?` }, { anchor });
+    if (choice === 'end') endGrab(grab, reason);
+    else updateStatus(`${tokenLabel(grabbed) || 'The creature'} is still grabbed by ${tokenLabel(grabber) || 'its grabber'}.`);
+  }
+
   const grabFollows = new Map(); // grabber's move operation id -> [{ followerId, from, to }]
   async function grabsAfterMove(movedIds, { dragAlong = false, origins = new Map(), operationIds = new Map() } = {}) {
     const moved = new Set(movedIds);
     for (const grab of grabsOnScene()) {
       const grabbedMoved = moved.has(grab.grabbedId), grabberMoved = moved.has(grab.grabberId);
-      if (grabbedMoved && !grabberMoved) { endGrab(grab, 'it was moved away'); continue; }
+      if (grabbedMoved && !grabberMoved) { await askEndGrab(grab, 'it was moved away'); continue; }
       if (!grabberMoved || grabbedMoved) continue;
       const grabber = getPlacementFromStore(grab.grabberId), grabbed = getPlacementFromStore(grab.grabbedId);
       if (!grabber || !grabbed) continue;
       if (!dragAlong) {
-        if (footprintGap(grabber, grabbed) > 0) endGrab(grab, `${tokenLabel(grabber)} was moved away`);
+        if (footprintGap(grabber, grabbed) > 0) await askEndGrab(grab, `${tokenLabel(grabber)} was moved away`);
         continue;
       }
       const grabberFrom = origins.get(grabber.id);
@@ -3438,7 +3671,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     for (const watcher of scenePlacements) {
       if (!watcher || !watcher.id || watcher.id === movingId) continue;
-      const { leaves, enters } = movementAdjacencyChanges(from, to, watcher, getActiveSceneTokenLevelState(state));
+      // A captive is not left by its own grabber: it comes along after this (grabsAfterMove), still on its old square now.
+      if (grabsOnScene().some((grab) => grab.grabberId === movingId && grab.grabbedId === watcher.id)) continue;
+      const { leaves, enters } = movementAdjacencyChanges(from, to, watcher, getActiveSceneTokenLevelState(state), detail.path || []);
       perWatcherMoveStates.set(watcher.id, { leaves, enters });
 
       // Built-in opp-attack: opposing-team watchers whose adjacency the mover
@@ -10019,7 +10254,7 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           // Undoing a push takes back what the push itself did: the wall it broke (mended by the server with the
           // move) and the damage its collisions dealt. What happened to the creature afterwards is left alone.
-          const givenBack = last.groupMove ? 0 : await giveBackCollisionDamage(last.operationId);
+          const givenBack = last.groupMove ? 0 : await giveBackCollisionDamage(last.operationId, placementId);
           if (!last.groupMove) await undoGrabFollows(last.operationId);
           updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.'
             : `Movement undone, including its floor change.${givenBack ? ` ${givenBack} Stamina given back.` : ''}`);
@@ -14592,6 +14827,20 @@ export function mountBoardInteractions(store, routes = {}) {
     return false;
   }
 
+  // Flying while prone or at speed 0 (Brandon, November 8, 2026: "Fly anyway / Cancel", never a refusal, the Director
+  // included). The server refuses ordinary flight then; "Fly anyway" sends it as hovering, which nothing stops.
+  async function submitFlightOps(sceneId, placementId, patch) {
+    try { return await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId, patch }]); }
+    catch (error) {
+      if (patch.movementMode !== 'fly' || !/prevent ordinary flight/i.test(error?.message || '')) throw error;
+      const placement = getPlacementFromStore(placementId);
+      const why = (placement?.conditions || []).map((c) => (typeof c === 'string' ? c : c?.name || c?.id || '')).filter((name) => /prone|grabbed|restrained|unconscious/i.test(name)).join(', ');
+      const choice = await askMoveQuestion({ kind: 'fly', why: why ? `${tokenLabel(placement) || 'It'} is ${why.toLowerCase()}.` : '' });
+      if (choice !== 'anyway') throw new Error('Did not fly.');
+      return tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId, patch: { ...patch, movementMode: 'hover' } }]);
+    }
+  }
+
   async function confirmBoardAction(message, options = {}) {
     if (typeof window !== 'undefined' && window.UIKit && typeof window.UIKit.confirm === 'function') {
       try {
@@ -17464,7 +17713,9 @@ export function mountBoardInteractions(store, routes = {}) {
     syncTokenHitPoints(tokenElement, placement, {isGm:isGmUser()});
     syncTriggeredActionIndicator(tokenElement, placement);
     paintTokenMarkIndicator(tokenElement, getPlacementMark(placement, 'judgment'), {interactive:true});
-    paintTokenConditionLabel(tokenElement, ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null), {interactive:true, configureConditionTooltip, detachConditionTooltip});
+    // Clinging to a wall part-way down a climb (the ledge question) shows with the conditions; it is not one.
+    const shownConditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    paintTokenConditionLabel(tokenElement, wholePlacement?.clinging === true && ['fly', 'hover'].includes(wholePlacement?.movementMode) ? [...shownConditions, { name: 'Clinging' }] : shownConditions, {interactive:true, configureConditionTooltip, detachConditionTooltip});
   }
 
 
@@ -21107,7 +21358,11 @@ export function mountBoardInteractions(store, routes = {}) {
     // moves another creature ("allies shift") moves it the same way: it is passed as its own source.
     const ownMove = Boolean(sourceSnapshot?.id) && sourceSnapshot.id === targetSnapshot?.id && request.movementKind !== 'teleport';
     // A square off the map is never a destination.
-    const onMap = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
+    const listed = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
+    // A push, pull or slide offers only the squares it really reaches along its own straight line (Brandon, November 8,
+    // 2026): one a wall or a rising face would stop it short of is not offered. Any square can still be picked, with a warning.
+    const forcedLine = (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
+    const onMap = forcedLine ? listed.filter((cell) => { try { return !globalThis.wallPrototype.forcedBlockedMove(targetSnapshot, { ...targetSnapshot, column: cell.column, row: cell.row }); } catch (error) { return true; } }) : listed;
     pendingAutomationMove = {
       ...request,
       sceneId:getActiveSceneId(),
@@ -21123,6 +21378,9 @@ export function mountBoardInteractions(store, routes = {}) {
       },
       // Nor, for a creature's own move, is a square another creature stands in.
       legalCells: ownMove ? onMap.filter((cell) => !creatureInTheWay(cell, targetSnapshot)) : onMap,
+      // Squares on the push's own line that a wall or a rising face stops it short of: picking one is pushing it into
+      // that wall (a slam, or the break question), the book's way, not an off-line pick to be warned about.
+      wallCells: onMap === listed ? [] : listed.filter((cell) => !onMap.includes(cell)),
     };
     // A pull that cannot bring the target any closer does nothing: there is no square to pick.
     if (baseVerb === 'pull' && !pendingAutomationMove.legalCells.length) {
@@ -21353,7 +21611,8 @@ export function mountBoardInteractions(store, routes = {}) {
     // warns in its own landing question.
     const lined = false, wholeLine = null;
     if (!collisionPlacement && request.movementKind !== 'teleport'
-      && !request.legalCells.some((square) => square.column === destination.column && square.row === destination.row)) {
+      && !request.legalCells.some((square) => square.column === destination.column && square.row === destination.row)
+      && !(request.wallCells || []).some((square) => square.column === destination.column && square.row === destination.row)) {
       request.committing = true;
       const anyway = await confirmBoardAction(automationMoveWarning(request, destination), { title: request.verbLabel || 'Move', confirmText: 'Move it anyway', cancelText: 'Pick again' });
       if (pendingAutomationMove !== request || request.sceneId !== getActiveSceneId()) return true;
@@ -21551,13 +21810,17 @@ export function mountBoardInteractions(store, routes = {}) {
   // broke through is healed again when the push is undone: to the creature pushed and to any it struck, by the
   // amounts the server recorded for that move, with the same weakness and immunity as when they were dealt.
   // Never more than the creature's maximum. A fall's damage and conditions are not touched. Returns the total.
-  async function giveBackCollisionDamage(operationId) {
+  async function giveBackCollisionDamage(operationId, movedId = '') {
     let total = 0;
     try {
       for (const dealt of await collisionDamageDealt(operationId)) {
         if (!getPlacementFromStore(dealt.targetId)) continue;
+        // What it really took: the pushed creature's own cut to forced-movement damage first, as when it was dealt
+        // (applyAutomationCollisionDamage), then weakness and immunity. Never more than that is given back.
+        let recorded = Math.max(0, Number(dealt.amount) || 0);
+        if (movedId && dealt.targetId === movedId) { const cut = await forcedMovementDamageReduction(dealt.targetId); if (cut.amount > 0) recorded = Math.max(0, recorded - cut.amount); }
         const adjustment = await getAutomationDamageAdjustment(dealt.targetId, dealt.damageType);
-        const amount = resolveAutomationDamageAmount({ amount: dealt.amount, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity }).amount;
+        const amount = recorded > 0 ? resolveAutomationDamageAmount({ amount: recorded, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity }).amount : 0;
         const result = amount > 0 ? applyDamageHealToPlacement(dealt.targetId, 'heal', amount) : null;
         if (!result) continue;
         await awaitSuccessfulPlacementSave(result);
@@ -22575,7 +22838,7 @@ export function mountBoardInteractions(store, routes = {}) {
    * For a push the browser has found ends at a wall: asks the server what it could break and, if
    * anything, asks the person. Resolves the server's offer on "break through", otherwise null.
    */
-  async function askForcedBreakThrough(sceneId, origin, intent, others, known = null) {
+  async function askForcedBreakThrough(sceneId, origin, intent, others, known = null, beyond = 0) {
     const stopped = known || resolveForcedDrag(origin, intent, others, {
       wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
       height:token=>window.terrainPrototype?.groundFor(token)??0,
@@ -22584,7 +22847,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!stopped.wall) return null;
     const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === origin.id) ?? null;
     try {
-      return await offerBreakThrough({ sceneId, placement: origin, intent: { column: intent.column, row: intent.row }, nameOf: (id) => tokenLabel(getPlacementFromStore(id)), anchor });
+      return await offerBreakThrough({ sceneId, placement: origin, intent: { column: intent.column, row: intent.row, ...(beyond > 0 ? { beyond } : {}) }, nameOf: (id) => tokenLabel(getPlacementFromStore(id)), anchor });
     } catch (error) { console.warn('[VTT] break-through offer failed', error); return null; }
   }
 
@@ -23732,7 +23995,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const requested=input.valueAsNumber,current=window.terrainPrototype.groundFor(token);
       if(!Number.isInteger(requested)||requested===groundSquare(current)){input.value=groundSquare(current);return;}
       errorLabel.hidden=true;errorLabel.textContent='';input.disabled=true;
-      try{await window.terrainPrototype.setTokenHeight(token,requested);}
+      try{await window.terrainPrototype.setTokenHeight(token,requested);tokenMovementController?.recordHeightChange?.(token.id,current,requested);}
       catch(error){if(activeTokenSettingsId===token.id){errorLabel.textContent='Height was not saved. '+(error?.message||'Check the current height before trying again.');errorLabel.hidden=false;}}
       finally{input.disabled=false;if(activeTokenSettingsId===token.id)input.value=groundSquare(window.terrainPrototype.groundFor(getPlacementFromStore(token.id)));}
     });
@@ -23744,7 +24007,7 @@ export function mountBoardInteractions(store, routes = {}) {
       menu.movementMode.disabled = true;
       updateStatus('Saving movement mode…');
       try {
-        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId, patch: { movementMode: mode } }]);
+        await submitFlightOps(sceneId, placementId, { movementMode: mode, ...(mode === 'ground' ? { clinging: null } : {}) });
         updateStatus(`Movement mode: ${mode}.`);
       } catch (error) { updateStatus(error?.message || 'Movement mode was not saved.'); }
       finally {
@@ -29909,13 +30172,16 @@ function createTemplateTool() {
       const placement = coordinatePlacement(id), sceneId = getActiveSceneId();
       if (!placement || !sceneId || !canCurrentUserMovePlacement(placement) || !Number.isFinite(z) || z < 0) return false;
       const patch = landed
-        ? { movementMode: 'ground', flightHeight: null }
+        ? { movementMode: 'ground', flightHeight: null, clinging: null }
         : { flightHeight: z, ...(['fly', 'hover'].includes(placement.movementMode) ? {} : { movementMode: 'fly' }) };
       try {
         // Brought down first, then set to walking: switched to walking from its old height in one step, the server
         // counts it as a fall from that height (damage, prone).
         if (landed && ['fly', 'hover'].includes(placement.movementMode)) await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch: { flightHeight: z } }]);
-        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch }]);
+        const before = window.terrainPrototype?.groundFor?.(placement);
+        await submitFlightOps(sceneId, id, patch);
+        // Let go at its new height: on its own turn the height counts (the counter keeps the once-only rule).
+        tokenMovementController?.recordHeightChange?.(id, before, z);
         return true;
       } catch (error) {
         const words = error?.message || 'The height was not saved.';

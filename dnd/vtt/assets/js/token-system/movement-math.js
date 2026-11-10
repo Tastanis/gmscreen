@@ -112,12 +112,15 @@ export function buildSquareMovementShape({ origin, remaining, blockers = [], bou
  * Returns the plain square shape when nothing changes the cost, so flat maps
  * without difficult terrain look as they always have.
  */
-export function buildReachableMovementShape({ origin, remaining, cellInfo = null, stepCost = null, enter = null, blockers = [], bounds = null } = {}) {
+// `wall(from, column, row)`: what the walls ask of one step (Brandon, November 8, 2026: the reach area goes round walls
+// like the ruler): null when a wall stops it, else the extra a climb over something costs (0 for nothing in the way).
+export function buildReachableMovementShape({ origin, remaining, cellInfo = null, stepCost = null, enter = null, wall = null, blockers = [], bounds = null } = {}) {
   const square = buildSquareMovementShape({ origin, remaining, blockers, bounds });
   const walked = typeof enter === 'function';
-  if (!square || (typeof cellInfo !== 'function' && !walked)) {
+  if (!square || (typeof cellInfo !== 'function' && !walked && typeof wall !== 'function')) {
     return square;
   }
+  if (typeof cellInfo !== 'function' && !walked) cellInfo = (column, row) => ({ column, row, height: 0, multiplier: 1 });
   const footprint = normalizeFootprint(origin);
   const movement = Math.max(0, toGridInt(remaining, 0));
   const minColumn = square.outer.column;
@@ -182,7 +185,9 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
         const nextRow = here.row + dy;
         if (nextColumn < minColumn || nextColumn > maxColumn || nextRow < minRow || nextRow > maxRow) continue;
         const there = step(here, nextColumn, nextRow);
-        const next = cost + price(here, there);
+        let walled = 0;
+        if (typeof wall === 'function') { try { walled = wall(here, nextColumn, nextRow); } catch (error) { walled = 0; } if (walled === null) continue; }
+        const next = cost + price(here, there) + (Number(walled) || 0);
         const key = nodeKey(there);
         if (next > movement || next >= (bestNode.get(key) ?? Infinity)) continue;
         bestNode.set(key, next);

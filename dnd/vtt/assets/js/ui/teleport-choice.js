@@ -25,7 +25,8 @@ export function teleportSurfaces({from,to,context,ground}){
 export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false,preferredSurface=null}){
  const unique=teleportSurfaces({from,to,context,ground}),x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2;
  const picked=preferredSurface&&unique.find(c=>Math.abs(c.height-preferredSurface.surfaceElevation)<.55&&(!preferredSurface.levelId||c.levelId===preferredSurface.levelId)&&(!preferredSurface.surfaceId||c.surfaceId===preferredSurface.surfaceId));
- if(preferredSurface&&Number.isFinite(preferredSurface.surfaceElevation)&&!picked)throw new Error('The picked surface is not a supported teleport landing. Choose a supported floor or ground surface.');
+ // A picked surface that is not a landing here is not refused (Brandon, November 8, 2026): the choices are shown instead.
+ if(preferredSurface&&Number.isFinite(preferredSurface.surfaceElevation)&&!picked)preferredSurface=null;
  const display=z=>Math.round(z)+1,air=['fly','hover'].includes(from.movementMode);
  // One place to land, at the height it starts at, within range: nothing to ask (Brandon, November 6, 2026). Past its
  // range it still asks, as a warning that can be gone past (out-of-range choices stay clickable).

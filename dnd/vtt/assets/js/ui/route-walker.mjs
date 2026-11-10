@@ -50,7 +50,8 @@ export function stepGhost({ ghost, column, row, actor, surfaces = [], mapLevels 
     const stair = stairStep(ghost, { column, row }, mapLevels);
     if (stair?.fired) {
       // Off the far end: on the other floor now.
-      const landed = { ...ghost, column, row, levelId: stair.levelId, _floorTraversal: null, _supportSurfaceId: null, _viaStair: true };
+      // `_stairEnd`: walked off the stair's own end, not its side (a step down a vine's last square is still climbing down).
+      const landed = { ...ghost, column, row, levelId: stair.levelId, _floorTraversal: null, _supportSurfaceId: null, _viaStair: true, _stairEnd: true };
       return { ghost: landed, height: standing(landed) };
     }
     if (stair) {

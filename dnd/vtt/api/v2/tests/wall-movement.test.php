@@ -18,7 +18,8 @@ checkWall(allowedWall($from,[...$from,'column'=>2],$config),'Touching wall is al
 checkWall(allowedWall([...$from,'column'=>2],[...$from,'column'=>2,'row'=>4],$config),'Slide along wall');
 checkWall(!allowedWall([...$from,'width'=>2],[...$to,'column'=>2],$config),'Large footprint clips wall before center');
 checkWall(allowedWall([...$from,'movementMode'=>'fly','flightHeight'=>3],$to,$config),'Flight above wall');
-checkWall(!allowedWall([...$from,'movementMode'=>'fly','flightHeight'=>1],$to,$config),'Low flight blocked');
+checkWall(!allowedWall([...$from,'movementMode'=>'fly','flightHeight'=>.25],$to,$config),'Low flight blocked: the wall stands more than a plain step above it');
+checkWall(allowedWall([...$from,'movementMode'=>'fly','flightHeight'=>1],$to,$config),'A flier a square up goes over a 2-high wall like a plain step (rules table stepUp)');
 $upper=$config;$upper['mapLevels']=['levels'=>[['id'=>'upper','elevationSquares'=>5]]];
 checkWall(allowedWall([...$from,'levelId'=>'upper'],$to,$upper),'Upper floor clears lower wall');
 foreach(['door','window'] as $interaction){$open=$config;$open['environment']['walls']['value']['segments'][0]+=['interaction'=>$interaction,'open'=>true];checkWall(allowedWall($from,$to,$open),'Open '.$interaction.' passable');}

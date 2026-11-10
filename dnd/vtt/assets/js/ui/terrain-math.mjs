@@ -1,3 +1,4 @@
+import {MOVEMENT_RULES} from './movement-rules.mjs';
 export const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export const brushRate=moving=>moving?16:8;
 export function slopeColor(slope){
@@ -49,17 +50,26 @@ export const CLIMB_MIN_HEIGHT=2;
  * round. A fall counts its squares the same way (FallOutcome.php), so a face is the same height
  * going up and coming down. */
 export const stepRise=(fromHeight,toHeight)=>{const change=(Number(toHeight)||0)-(Number(fromHeight)||0);return Math.sign(change)*Math.floor(Math.abs(change)+.5)||0;};
-/** Extra movement for climbing (up or down) a face this many squares high: its full height again. 0 means it is not a climb. */
-export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return height>=CLIMB_MIN_HEIGHT?height:0;}
-/** Movement cost of one step: the larger of the squares moved and the height change, plus
- * (multiplier - 1) for difficult terrain, plus the climb surcharge when `climb` says this step
- * goes up a cliff face. `rise` is signed (up is positive). The ruler, the turn counter and the
- * reach outline all charge through here. */
-export function stepCost({horizontal=1,rise=0,multiplier=1,climb=false}={}){return Math.max(horizontal,Math.abs(rise))+multiplier-1+(climb&&rise>0?climbSurcharge(rise):0);}
+/** Extra movement for climbing (up or down) a face this many squares high: one more for each square climbed (the rules
+ * table's cost.climb). 0 means it is not a climb. */
+export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return height>=CLIMB_MIN_HEIGHT?height*MOVEMENT_RULES.cost.climb:0;}
+/** Movement cost of one step (Brandon, November 8, 2026, by the book): 1 a square, diagonals too; downhill, a step up
+ * to a square and a half and a slope gentler than 2 up for 1 across all cost nothing more; plus (multiplier - 1) for
+ * water, difficult terrain or an enemy's square (they do not stack); a climb (`climb`: up a face steeper than that
+ * and over a plain step) is the squares climbed plus one more for each. `rise` is signed (up is positive). The ruler,
+ * the turn counter and the reach outline all charge through here. Before, any rise cost its height and a drop too. */
+// `free`: a creature with a climb speed climbs for the squares it climbs, with nothing more.
+export function stepCost({horizontal=1,rise=0,multiplier=1,climb=false,free=false}={}){const up=climb&&rise>0;return (up?Math.max(horizontal,Math.abs(rise)):horizontal)+multiplier-1+(up&&!free?climbSurcharge(rise):0);}
+/** A climb, by the rules table: a rise of more than a plain step (stepUp) up a face (`face`, the terrain test) or up a
+ * stair, ramp or vine steeper than climbGrade up for each square across. Gentler and lower is walked. */
+export const isClimb=(rawRise,horizontal,face)=>rawRise>MOVEMENT_RULES.stepUp+1e-6&&(face||rawRise>=MOVEMENT_RULES.climbGrade*Math.max(1,horizontal)-1e-6);
 /** `isFace(from,to)` says whether a rising step runs into a cliff face (the forced-movement test).
  * It is asked only when the rise is tall enough to cost extra. Each point gets `climb`: the
  * surcharge paid on the step into it. `extra` is everything paid beyond the plain distance. */
-export function routeSteps(start,end,height,squareCost=null,isFace=null){
+// `carried(column,row)`: the walker is on a stair, ramp or vine there. Coming down one steeper than climbGrade is climbing
+// down (Brandon, November 8, 2026: "Climbing down: same as climbing, +1 per square"); stepping off a ledge is a drop,
+// walked over at one a square (the ledge question asks Fall or Climb down).
+export function routeSteps(start,end,height,squareCost=null,isFace=null,{free=false,carried=null}={}){
  let x=start.column,y=start.row;const first=height(x,y),points=[{column:x,row:y,height:groundSquare(first),rawHeight:first}];
  const dx=end.column-x,dy=end.row-y,count=Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
  for(let i=1;i<=count;i++){
@@ -69,8 +79,10 @@ export function routeSteps(start,end,height,squareCost=null,isFace=null){
  let cost=0,extra=0,climbExtra=0,cliff=false;
  for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],horizontal=Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row));
    const raw=horizontal>0&&squareCost?Number(squareCost(b.column,b.row,b.rawHeight)):1,multiplier=Number.isFinite(raw)&&raw>1?Math.floor(raw):1;
-   const rise=stepRise(a.rawHeight,b.rawHeight),climb=!!isFace&&rise>0&&climbSurcharge(rise)>0&&!!isFace(a,b);
-   b.multiplier=multiplier;b.climb=climb?climbSurcharge(rise):0;b.rise=rise;cost+=stepCost({horizontal,rise,multiplier,climb});extra+=multiplier-1+b.climb;climbExtra+=b.climb;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
+   const rise=stepRise(a.rawHeight,b.rawHeight),rawRise=b.rawHeight-a.rawHeight,climb=!!isFace&&rise>0&&climbSurcharge(rise)>0&&isClimb(rawRise,horizontal,rawRise<MOVEMENT_RULES.climbGrade*Math.max(1,horizontal)-1e-6&&!!isFace(a,b));
+   const down=!!isFace&&!!carried&&rise<0&&climbSurcharge(rise)>0&&isClimb(-rawRise,horizontal,false)&&!!carried(b.column,b.row);
+   const climbDown=down&&!free?Math.round(Math.abs(rise))*MOVEMENT_RULES.cost.climbDown:0;
+   b.multiplier=multiplier;b.climb=(climb&&!free?climbSurcharge(rise):0)+climbDown;b.rise=rise;cost+=stepCost({horizontal,rise,multiplier,climb,free})+(down?Math.max(horizontal,Math.abs(rise))-horizontal+climbDown:0);extra+=multiplier-1+b.climb;climbExtra+=b.climb;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
  return {points,cost,cliff,extra,climbExtra};
 }
 export function barycentric(p,a,b,c){

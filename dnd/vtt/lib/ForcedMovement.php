@@ -29,7 +29,10 @@ final class ForcedMovement
    if($lo<$stop-1e-8){$stop=$lo;$ids=[];}$ids[]=$other['id'];
   }
   $blocked=function($point)use($from,$config,$travel){try{WallMovement::assertAllowed($from,$point,$config,'forced',[],true,$travel);return false;}catch(InvalidArgumentException $e){return true;}};
-  if($blocked($at($stop))){$lo=0.;$hi=$stop;for($i=0;$i<32;$i++){$mid=($lo+$hi)/2;if($blocked($at($mid)))$hi=$mid;else $lo=$mid;}if($lo<$stop-1e-6)$ids=[];$stop=$lo;$wall=true;}
+  // The wall is found along the whole push, not only up to the first creature: a creature standing right behind a
+  // wall is met at the same moment the wall is, and the wall comes first (November 9, 2026: it was hit through it).
+  if($blocked($at(1.))){$lo=0.;$hi=1.;for($i=0;$i<32;$i++){$mid=($lo+$hi)/2;if($blocked($at($mid)))$hi=$mid;else $lo=$mid;}
+   if($lo<=$stop+1e-6){$ids=[];$stop=$lo;$wall=true;}}
   if($wall){
    $went=$distance*$stop;$whole=floor($went+1e-6);$steps=(int)($whole+($went-$whole>=.75-1e-6?1:0));
    // A push stopped by rising ground is not left standing part-way up it. Rounding to a whole square could put
@@ -80,7 +83,11 @@ final class ForcedMovement
  public static function through(array $from,array $to,array $others,array $config): array {
   $stopped=self::resolve($from,$to,$others,$config);
   $dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];$distance=max(abs($dx),abs($dy));
-  $plan=$stopped;$intent=['column'=>$to['column'],'row'=>$to['row']];$spent=0;$damage=0;$breaks=[];$steps=[];$open=$config;
+  // `beyond`: the squares of a slide still to come after this leg. A break may be paid for out of them too (book,
+  // chapter 10: what is left after the object is destroyed carries the creature on), the later legs first, so this leg
+  // still reaches its corner; what is left of them is handed back in `intent`.
+  $beyond=max(0,(int)($to['beyond']??0));
+  $plan=$stopped;$intent=['column'=>$to['column'],'row'=>$to['row']];$spent=0;$damage=0;$breaks=[];$steps=[];$open=$config;$crossed=0;
   for($n=0;$n<8&&$distance&&$plan['wall'];$n++){
    $model=$open['environment']['walls']['value']??[];
    if(empty($model['segments']))break;
@@ -90,22 +97,39 @@ final class ForcedMovement
    // The wall must be what stopped it; a slope or a cliff ahead of the wall is not broken through.
    if($struck===null||$struck['distance']>$travelled+.75+1e-6)break;
    $need=0;$hurt=0;$materials=[];
-   foreach($struck['walls'] as $wall){
-    if(!WallObjects::breakable($wall['edge'])){$need=null;break;}
-    // A wall with a stated Stamina is priced the way the book prices its four materials.
-    $stamina=WallObjects::stamina($wall['edge']);$name=$wall['edge']['breakLabel']??$wall['edge']['material'];
-    $need+=$stamina*$wall['squares'];$hurt+=($stamina+self::BREAK_EXTRA)*$wall['squares'];
-    $materials[$name]=($materials[$name]??0)+$wall['squares'];
+   foreach($struck['walls'] as $wall)if(!WallObjects::breakable($wall['edge'])){$need=null;break;}
+   if($need!==null){
+    // A creature pays for as many squares of wall as it is wide, whatever the angle (Brandon, November 9, 2026: "use
+    // the book"): one square wide, one piece, even where a diagonal push meets two; a large creature meeting two
+    // squares pays for each. The dearest pieces are paid for first. A wall with a stated Stamina is priced the way
+    // the book prices its four materials.
+    $pay=max(1,(int)ceil(max((float)($from['width']??1),(float)($from['height']??1))-1e-9));
+    $walls=$struck['walls'];usort($walls,fn($a,$b)=>WallObjects::stamina($b['edge'])<=>WallObjects::stamina($a['edge']));
+    foreach($walls as $wall){
+     if($pay<=0)break;
+     $stamina=WallObjects::stamina($wall['edge']);$name=$wall['edge']['breakLabel']??$wall['edge']['material'];$squares=min($wall['squares'],$pay);$pay-=$squares;
+     $need+=$stamina*$squares;$hurt+=($stamina+self::BREAK_EXTRA)*$squares;
+     $materials[$name]=($materials[$name]??0)+$squares;
+    }
    }
-   $left=(int)round(max(abs($intent['column']-$from['column']),abs($intent['row']-$from['row']))-$travelled);
+   $legLeft=(int)round(max(abs($intent['column']-$from['column']),abs($intent['row']-$from['row']))-$travelled);$left=$legLeft+$beyond;
    if($need===null||$left<$need-1e-6)break;
    $whole=WallObjects::whole(array_column($struck['walls'],'edge'),$open);$ids=array_column($whole,'id');
    foreach($open['environment']['walls']['value']['segments'] as $i=>$edge)if(in_array($edge['id'],$ids,true))$open['environment']['walls']['value']['segments'][$i]['broken']=true;
    $breaks=[...$breaks,...$whole];$spent+=$need;$damage+=$hurt;
    $steps[]=['materials'=>$materials,'cost'=>$need,'damage'=>$hurt,'left'=>$left];
-   // What is left of the push carries the creature on from where it would have ended, less the cost.
-   $reach=$distance-$spent;
-   $intent=['column'=>(int)round($from['column']+$dx*$reach/$distance),'row'=>(int)round($from['row']+$dy*$reach/$distance)];
+   // What is left of the push carries the creature on from where it would have ended, less the cost. The cost pays
+   // for breaking the piece and going through it (the book's example: push 5, move 1, 3 through the wood, 1 left),
+   // so each break carries the creature one square on with no further charge.
+   // Only into a square that is open now: the rest of an object whose sides break one by one still stands there.
+   $gap=[...$from,'column'=>round($from['column']+$dx*min($distance,$travelled+1)/$distance),'row'=>round($from['row']+$dy*min($distance,$travelled+1)/$distance)];
+   $through=WallObjects::under($gap,$open)?0:1;$crossed+=$through;
+   // From the wall: through it for free, then on by what is left of the whole push (this leg and the slide's later
+   // legs) after the cost, as far as this leg's corner; what is still left goes back to the later legs.
+   $rest=$legLeft+$beyond-$need;
+   $reach=min($distance,$travelled+$through+max(0,min($rest,$legLeft-$through)));
+   $beyond=max(0,$rest-max(0,$legLeft-$through));
+   $intent=['column'=>(int)round($from['column']+$dx*$reach/$distance),'row'=>(int)round($from['row']+$dy*$reach/$distance),...(isset($to['beyond'])?['beyond'=>$beyond]:[])];
    $plan=self::resolve($from,[...$from,...$intent],$others,$open);
   }
   return [...$plan,'breaks'=>$breaks,'breakDamage'=>$damage,'breakCost'=>$spent,'intent'=>$intent,'steps'=>$steps,'stopped'=>$stopped];
@@ -155,12 +179,18 @@ final class ForcedMovement
   if($kind!=='forced')throw new InvalidArgumentException('Invalid forced destination.');
   self::assertIntent($intent);
   self::assertLine($from,$intent,$others);
+  // Where the push really ends is the server's answer; a browser that worked it out differently is not refused for
+  // it (Brandon, November 8, 2026). The caller moves the creature to the plan's square.
   $plan=self::resolve($from,$intent,$others,$config);
-  if(abs($plan['column']-$to['column'])>1e-6||abs($plan['row']-$to['row'])>1e-6)throw new InvalidArgumentException('Collision changed. Recalculate the forced move.');
   // A slide is made leg by leg (forced-line.mjs). `beyond` is what was still to come after this leg: when
   // the leg is stopped short by a creature or a wall, the slide ends there and those squares are left over too.
   if(($intent['beyond']??0)>0&&($plan['wall']||$plan['collidedIds']))$plan['damage']+=$intent['beyond'];
   return $plan;
+ }
+ /** Where a forced move with no stated aim really ends (walls, slopes, creatures): the server's answer, used as it is. */
+ public static function clearSquare(array $from,array $to,array $others,array $config): array {
+  $r=self::resolve($from,$to,$others,$config);
+  return [...$to,'column'=>$r['column'],'row'=>$r['row']];
  }
  public static function assertClear(array $from,array $to,array $others,array $config): void {
   $r=self::resolve($from,$to,$others,$config);

@@ -1,3 +1,4 @@
+import {MOVEMENT_RULES} from './movement-rules.mjs';
 export const defaults={sight:'block',movement:'block',sightDirection:'both',movementDirection:'both',baseMode:'terrain',base:0,height:2,topMode:'follow',interaction:'none',open:false,locked:false,secret:false,climbable:false};
 export const presets={solid:{},terrain:{sight:'limited'},transparent:{sight:'pass'},curtain:{movement:'pass'},door:{interaction:'door'},window:{interaction:'window',sight:'pass'}};
 // A barrier this many squares high or less (a rail, a fence, a parapet, a low wall). Brandon, October 10, 2026,
@@ -5,16 +6,24 @@ export const presets={solid:{},terrain:{sight:'limited'},transparent:{sight:'pas
 // players to be able to click yes and move to the top. Instead of it knocking them back like a wall. Those
 // railings shouldn't block vision ... they should be able to just jump over them since they are only one
 // square high or less."
-export const LOW_BARRIER=1;
+// Brandon, November 8, 2026: "up to 1.5 squares is a plain step with no question". A wall this far or less above
+// the mover's feet is walked over: the rules table's stepUp (movement-rules.mjs). Paired with WallMovement::LOW_BARRIER.
+export const LOW_BARRIER=MOVEMENT_RULES.stepUp;
+// A wall this low that says nothing about sight lets it through (unchanged by the step rule).
+const SIGHT_LOW=1;
 // A low box (low-boxes.mjs) stands on rough ground: its wall is still low when its base is no more than this above the walker's feet.
-export const BOX_FOOT=.5;
+export const BOX_FOOT=MOVEMENT_RULES.boxFoot;
+// How tall a mover's body is for walls in its way (the rules table's bodyHeight); above that is head room, a warning only.
+export const BODY=MOVEMENT_RULES.bodyHeight;
+// True when a climbable wall may be climbed from this side: either side, or its `climbSide` (left of a to b). Paired with WallMovement::climbableFrom.
+export const climbableFrom=(edge,a,b,p)=>{if(!climbable(edge))return false;const only=edge.climbSide;if(!only)return true;const side=(b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);return Math.abs(side)<1e-8||(only==='left'?side>0:side<0);};
 // The setting `climbable` (Brandon, October 10, 2026: "we need a wall type called climbable ... any thing outside
 // like a large rock ... We can just make that a setting instead of trying to make sure every block is the right
 // height"): a wall that says so is climbed on a yes whatever its height, and a closed ring of them is stood on at
 // its real top (low-boxes.mjs). A door or a window is opened, not climbed. Paired with WallMovement::climbable.
 export const climbable=edge=>edge?.climbable===true&&(edge.interaction??'none')==='none';
 // A wall that low lets sight through unless the wall itself says it blocks. A wall with no height is 2 squares.
-export const properties=e=>{const p={...defaults,...e};if(e?.sight===undefined&&p.height<=LOW_BARRIER)p.sight='pass';return p;};
+export const properties=e=>{const p={...defaults,...e};if(e?.sight===undefined&&p.height<=SIGHT_LOW)p.sight='pass';return p;};
 // Breakable walls. A wall with a `material` can be broken; `broken:true` means it has been.
 // A broken wall stays in the scene (so it can be repaired) but blocks nothing. Unmarked walls
 // are never breakable, and a one-way wall (a cliff edge) can never be given a material.
@@ -61,8 +70,12 @@ export const onGridLine=(a,b)=>(Math.abs(a.x-b.x)<1e-6&&Math.abs(a.x-Math.round(
 // above his feet (`rise`), and `low` when it is a low barrier all the way: a plain wall along a square's edge,
 // or one of a low box's own (low-boxes.mjs), standing on his floor, no more than LOW_BARRIER above his feet; or a wall of any height that is set climbable. `lifts` are low barriers already found: while
 // he is over one he is at its top, so what is above it there is met. `first` stops at the first wall met.
-function wallsMet(model,from,to,groundFor,groundAt,{first=false,lifts=null,skip=null}={}){
+// Each wall met also says what it is to the mover (`kind`, paired with WallMovement::entry): 'step' (no higher than a
+// plain step above his feet), 'climb' (climbable from his side and higher), 'door' (shut) or 'wall'. A mover is
+// `body` tall to walls (BODY, or its size when smaller); `tall` asks with another height (head room).
+function wallsMet(model,from,to,groundFor,groundAt,{first=false,lifts=null,skip=null,tall=null}={}){
  const met=[],w=from.width||1,h=from.height||1,origin={x:from.column+w/2,y:from.row+h/2},dx=to.column-from.column,dy=to.row-from.row;if(!dx&&!dy)return met;
+ const body=tall??Math.min(Math.max(w,h),BODY);
  const nodes=new Map(model.nodes.map(n=>[n.id,n]));
  for(const edge of model.segments){if(skip?.has(edge))continue;const e=restrictions(edge),a=nodes.get(e.a),b=nodes.get(e.b);if(e.movement==='pass'||!applies(e.movementDirection,a,b,origin))continue;
   let lo=0,hi=1;const vx=b.x-a.x,vy=b.y-a.y;
@@ -70,37 +83,77 @@ function wallsMet(model,from,to,groundFor,groundAt,{first=false,lifts=null,skip=
    if(Math.abs(d)<1e-9){if(c<=min||c>=max){hi=-1;break;}}else{const q=(min-c)/d,s=(max-c)/d;lo=Math.max(lo,Math.min(q,s));hi=Math.min(hi,Math.max(q,s));}
   }
   if(lo>=hi||hi<0||lo>1)continue;
-  const steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)*(hi-lo)*8)),can=climbable(e),plain=can||e.interaction==='none'&&(onGridLine(a,b)||edge.boxWall===true);let hit=false,low=plain,top=-Infinity,rise=0;
+  // A summoned wall's cubes (wall-cubes.js) are walls whatever their height: never a plain step.
+  const steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)*(hi-lo)*8)),can=climbableFrom(e,a,b,origin);let hit=false,step=e.interaction==='none'&&!String(edge.id).startsWith('template-cube:'),top=-Infinity,rise=0;
   for(let i=0;i<=steps;i++){const t=lo+(hi-lo)*(i+.5)/(steps+1),token={...from,column:from.column+dx*t,row:from.row+dy*t},p={x:token.column+w/2,y:token.row+h/2},u=Math.max(0,Math.min(1,((p.x-a.x)*vx+(p.y-a.y)*vy)/(vx*vx+vy*vy))),q={x:a.x+vx*u,y:a.y+vy*u},range=wallHeights(e,a,b,q,groundAt);
    let z=groundFor(token,from);if(lifts)for(const lift of lifts)if(t>=lift.lo-1e-9&&t<=lift.hi+1e-9&&lift.top>z)z=lift.top;
-   if(z<range.top-1e-7&&z+Math.max(w,h)>range.base+1e-7){hit=true;const foot=edge.boxWall===true||can?Math.min(BOX_FOOT,Math.max(0,range.base-z)):0;if((!can&&range.top-z-foot>LOW_BARRIER+1e-6)||range.base>z+foot+1e-6)low=false;if(range.top>top)top=range.top;if(range.top-z>rise)rise=range.top-z;if(first)break;}
+   if(z<range.top-1e-7&&z+body>range.base+1e-7){hit=true;const foot=edge.boxWall===true||can||typeof edge.object==='string'?Math.min(BOX_FOOT,Math.max(0,range.base-z)):0;if(range.top-z-foot>LOW_BARRIER+1e-6||range.base>z+foot+1e-6)step=false;if(range.top>top)top=range.top;if(range.top-z>rise)rise=range.top-z;if(first)break;}
   }
-  if(hit){met.push({edge,lo:Math.max(0,lo),hi:Math.min(1,hi),low,top,rise});if(first)return met;}
+  if(hit){const kind=e.interaction!=='none'?'door':step?'step':can?'climb':'wall';met.push({edge,lo:Math.max(0,lo),hi:Math.min(1,hi),low:kind==='step'||kind==='climb',kind,top,rise});if(first)return met;}
  }
  return met;
 }
-// `climb`: the mover has said yes to climbing over low barriers, so only something else stops him.
+// What a walk meets, for the question it is asked (Brandon, November 8, 2026: "every hard refusal becomes a question or
+// a warning"): {kind:'none'|'climb'|'door'|'wall', rise (tallest climb), edge (first wall or door met), locked}.
+// Paired with WallMovement::question.
+export function wallQuestion(model,from,to,groundFor,groundAt,resolvePosition=(_from,to)=>to){
+ const rank={none:0,climb:1,door:2,wall:3};let answer={kind:'none',rise:0,edge:null,locked:false,onto:false},previous=from;
+ for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
+  if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
+  const next={...previous,column:point.column,row:point.row},met=wallsMet(model,previous,next,groundFor,groundAt);
+  for(const wall of met){if(wall.kind==='step')continue;if(wall.kind==='climb'){answer.rise=Math.max(answer.rise,wall.rise);answer.onto=answer.onto||wall.edge.boxWall===true;}
+   if(rank[wall.kind]>rank[answer.kind])answer={...answer,kind:wall.kind,edge:wall.edge,locked:wall.edge.locked===true};}
+  // Over steps and climbs he is at their top: what stands above them there is a wall.
+  if(answer.kind!=='wall'&&met.length&&met.every(wall=>wall.kind==='step'||wall.kind==='climb')&&wallsMet(model,previous,next,groundFor,groundAt,{first:true,lifts:met,skip:new Set(met.map(wall=>wall.edge))}).length){const over=wallsMet(model,previous,next,groundFor,groundAt,{first:true,lifts:met,skip:new Set(met.map(wall=>wall.edge))})[0];answer={...answer,kind:'wall',edge:over.edge};}
+  previous=resolvePosition(previous,next);
+ }
+ return answer;
+}
+// Head room (a warning only): the first wall this walk passes under that is below the mover's size but above its body
+// (a size 2 creature under an arch's span), or null. Paired with WallMovement::headRoom.
+export function headRoomOnPath(model,from,to,groundFor,groundAt,resolvePosition=(_from,to)=>to){
+ const size=Math.max(from.width||1,from.height||1);if(size<=BODY+1e-9)return null;let previous=from;
+ for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
+  if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
+  const next={...previous,column:point.column,row:point.row},body=new Set(wallsMet(model,previous,next,groundFor,groundAt).map(wall=>wall.edge));
+  const over=wallsMet(model,previous,next,groundFor,groundAt,{tall:size}).find(wall=>wall.kind!=='step'&&!body.has(wall.edge));
+  if(over)return over.edge;
+  previous=resolvePosition(previous,next);
+ }
+ return null;
+}
+// Any wall in the way at all (a push: rails and boxes stop it too). With `climb`, a walk: plain steps are walked
+// over, climbs are climbed (the mover said yes), and only a wall, a shut door or what stands over them stops it.
 export function movementBlocked(model,from,to,groundFor,groundAt,climb=false){
  if(!climb)return wallsMet(model,from,to,groundFor,groundAt,{first:true}).length>0;
- return lowBarrier(model,from,to,groundFor,groundAt)===null&&wallsMet(model,from,to,groundFor,groundAt,{first:true}).length>0;
+ return walkBlocked(model,from,to,groundFor,groundAt,true);
 }
-// When low barriers are the only walls in the way of this step: how high the tallest stands above the mover's
-// feet ({rise}). Null when nothing is in the way, or when something that is not a low barrier is.
+// A walk's own rule (Brandon, November 8, 2026): plain steps never stop it; a climb stops it until the mover says yes.
+// Paired with WallMovement::assertAllowed for walks.
+export function walkBlocked(model,from,to,groundFor,groundAt,climb=false){
+ const met=wallsMet(model,from,to,groundFor,groundAt);
+ if(!met.length)return false;
+ if(met.some(wall=>wall.kind==='wall'||wall.kind==='door'||(wall.kind==='climb'&&!climb)))return true;
+ return wallsMet(model,from,to,groundFor,groundAt,{first:true,lifts:met,skip:new Set(met.map(wall=>wall.edge))}).length>0;
+}
+// When climbs are the only things in the way of this step (plain steps aside): how high the tallest stands above the
+// mover's feet ({rise}). Null when nothing needs climbing, or when something that is not a climb is in the way.
 export function lowBarrier(model,from,to,groundFor,groundAt){
  const met=wallsMet(model,from,to,groundFor,groundAt);
- if(!met.length||met.some(wall=>!wall.low))return null;
- // Over a low barrier he is at its top: a wall above it there (a window over a sill) still stops him.
+ if(!met.some(wall=>wall.kind==='climb')||met.some(wall=>!wall.low))return null;
+ // Over a step or a climb he is at its top: a wall above it there (a window over a sill) still stops him.
  if(wallsMet(model,from,to,groundFor,groundAt,{first:true,lifts:met,skip:new Set(met.map(wall=>wall.edge))}).length)return null;
- return {rise:Math.max(...met.map(wall=>wall.rise)),onto:met.some(wall=>wall.edge.boxWall===true),tall:met.some(wall=>climbable(wall.edge)&&wall.rise>LOW_BARRIER+1e-6)};
+ const climbs=met.filter(wall=>wall.kind==='climb');
+ return {rise:Math.max(...climbs.map(wall=>wall.rise)),onto:climbs.some(wall=>wall.edge.boxWall===true),tall:climbs.some(wall=>wall.rise>LOW_BARRIER+1e-6)};
 }
 
-// Check the submitted waypoints in order, not the chord between their endpoints.
+// Check the submitted waypoints in order, not the chord between their endpoints. A walk's rule (walkBlocked).
 export function movementPathBlocked(model,from,to,groundFor,groundAt,resolvePosition=(_from,to)=>to,climb=false){
  let previous=from;
  for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
   if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
   const next={...previous,column:point.column,row:point.row};
-  if(movementBlocked(model,previous,next,groundFor,groundAt,climb))return true;
+  if(walkBlocked(model,previous,next,groundFor,groundAt,climb))return true;
   previous=resolvePosition(previous,next);
  }
  return false;
@@ -111,7 +164,7 @@ export function firstWallMet(model,from,to,groundFor,groundAt,resolvePosition=(_
  const nodes=new Map(model.nodes.map(n=>[n.id,n]));let previous=from;
  for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
   if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
-  const next={...previous,column:point.column,row:point.row},met=wallsMet(model,previous,next,groundFor,groundAt);
+  const next={...previous,column:point.column,row:point.row},met=wallsMet(model,previous,next,groundFor,groundAt).filter(wall=>wall.kind!=='step');
   if(met.length){const first=met.reduce((best,wall)=>wall.lo<best.lo?wall:best),a=nodes.get(first.edge.a),b=nodes.get(first.edge.b),range=wallHeights(restrictions(first.edge),a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt);return {edge:first.edge,a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},base:range.base,top:range.top};}
   previous=resolvePosition(previous,next);
  }
@@ -124,7 +177,7 @@ export function lowBarrierOnPath(model,from,to,groundFor,groundAt,resolvePositio
  for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
   if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
   const next={...previous,column:point.column,row:point.row};
-  if(movementBlocked(model,previous,next,groundFor,groundAt)){const low=lowBarrier(model,previous,next,groundFor,groundAt);if(!low)return null;rise=Math.max(rise,low.rise);onto=onto||low.onto;tall=tall||low.tall;}
+  if(walkBlocked(model,previous,next,groundFor,groundAt)){const low=lowBarrier(model,previous,next,groundFor,groundAt);if(!low)return null;rise=Math.max(rise,low.rise);onto=onto||low.onto;tall=tall||low.tall;}
   previous=resolvePosition(previous,next);
  }
  return rise>0?{rise,onto,tall}:null;

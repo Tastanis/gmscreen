@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/MapLabels.php';
 
 /** Shared map design. Revisions belong to each independently editable field. */
 final class SceneEnvironment
@@ -26,6 +27,12 @@ final class SceneEnvironment
             if (($edge['broken'] ?? false) !== true) unset($edge['material'], $edge['group']);
             $environment['walls']['value']['segments'][$i] = $edge;
         }
+        // A labelled map's objects: a player's page needs their outlines and tops to stand on them, never what breaks.
+        foreach ($environment['walls']['value']['objects'] ?? [] as $i => $object) {
+            unset($object['material'], $object['group']);
+            $environment['walls']['value']['objects'][$i] = $object;
+        }
+        unset($environment['walls']['value']['checks']);
         // GM-only zones never reach a player browser.
         if (isset($environment['zones']['value']['zones']) && is_array($environment['zones']['value']['zones'])) {
             $environment['zones']['value']['zones'] = array_values(array_filter($environment['zones']['value']['zones'], static fn($zone)=>!is_array($zone) || ($zone['gmOnly'] ?? false) !== true));
@@ -76,7 +83,7 @@ final class SceneEnvironment
         }
         return $environment;
     }
-    public static function apply(array $current, array $payload): array
+    public static function apply(array $current, array $payload, array $mapLevels = []): array
     {
         $field = $payload['field'] ?? '';
         if (!in_array($field, ['terrain', 'walls', 'exploration', 'zones'], true)) throw new InvalidArgumentException('Invalid environment field.');
@@ -85,6 +92,11 @@ final class SceneEnvironment
         $value = $payload['value'] ?? null;
         if (!is_array($value)) throw new InvalidArgumentException('Missing map design.');
         self::validate($field, $value);
+        // A labelled map's objects are the one record of each object: their walls are built afresh on every save.
+        if ($field === 'walls' && (isset($value['objects']) || MapLabels::labelled($value))) {
+            $value = MapLabels::expand($value, ['environment'=>$current, 'mapLevels'=>$mapLevels]);
+            self::validate($field, $value);
+        }
         $current[$field] = ['revision'=>$revision + 1, 'value'=>$value];
         return $current;
     }
@@ -133,6 +145,10 @@ final class SceneEnvironment
             foreach (['sight'=>['block','pass','limited'],'movement'=>['block','pass'],'interaction'=>['none','door','window'],'baseMode'=>['fixed','terrain'],'topMode'=>['follow','level'],'sightDirection'=>['both','left','right'],'movementDirection'=>['both','left','right']] as $key=>$allowed) if (isset($edge[$key])&&!in_array($edge[$key],$allowed,true)) throw new InvalidArgumentException('Invalid wall property.');
             foreach (['open','locked','secret','climbable'] as $key) if (isset($edge[$key])&&!is_bool($edge[$key])) throw new InvalidArgumentException('Invalid wall flag.');
             if (($edge['open'] ?? false)&&($edge['locked'] ?? false)) throw new InvalidArgumentException('Locked wall cannot be open.');
+            // Labelled maps (MapLabels): the side a wall is climbed from, the object a wall belongs to, a display name.
+            if (isset($edge['climbSide'])&&!in_array($edge['climbSide'],['left','right'],true)) throw new InvalidArgumentException('Invalid wall climb side.');
+            if (isset($edge['object'])&&(!is_string($edge['object'])||!preg_match(self::WALL_GROUP,$edge['object']))) throw new InvalidArgumentException('Invalid wall object.');
+            if (isset($edge['label'])&&(!is_string($edge['label'])||strlen($edge['label'])>128)) throw new InvalidArgumentException('Invalid wall label.');
             // Breakable walls: a material marks a wall as breakable, `broken` says it has been broken.
             // A one-way wall (a cliff edge) can never be given a material.
             if (array_key_exists('material',$edge)) {
@@ -182,7 +198,44 @@ final class SceneEnvironment
             foreach (['left','right','top','bottom','base','height'] as $key) self::number($ramp[$key] ?? null);
             if ($ramp['right']<=$ramp['left']||$ramp['bottom']<=$ramp['top']||!in_array($ramp['direction'] ?? 'north',['north','south','east','west'],true)) throw new InvalidArgumentException('Invalid ramp.');
         }
+        self::labels($value);
         self::passive($value);
+    }
+
+    /**
+     * The fields of a labelled map (MapLabels): `labels: 1`, the objects list (the one record of each object; its walls
+     * are built from it), and `checks`, the load check's lines kept with the map for the map maker.
+     */
+    private static function labels(array $value): void
+    {
+        if (array_key_exists('labels',$value)&&$value['labels']!==1) throw new InvalidArgumentException('Invalid map labels version.');
+        if (array_key_exists('checks',$value)) {
+            if (!is_array($value['checks'])||!array_is_list($value['checks'])||count($value['checks'])>200) throw new InvalidArgumentException('Invalid map checks.');
+            foreach ($value['checks'] as $line) if (!is_string($line)||strlen($line)>400) throw new InvalidArgumentException('Invalid map check line.');
+        }
+        if (!array_key_exists('objects',$value)) return;
+        $objects=$value['objects'];
+        if (!is_array($objects)||!array_is_list($objects)||count($objects)>5000) throw new InvalidArgumentException('Invalid object list.');
+        $ids=[];
+        foreach ($objects as $object) {
+            if (!is_array($object)||array_is_list($object)||array_diff(array_keys($object),['id','kind','label','points','base','top','standOn','levelId','climbable','material','group','sight'])) throw new InvalidArgumentException('Invalid object record.');
+            $id=$object['id'] ?? null;
+            if (!is_string($id)||!preg_match(self::WALL_GROUP,$id)||isset($ids[$id])) throw new InvalidArgumentException('Invalid object ID.');
+            $ids[$id]=true;
+            $points=$object['points'] ?? null;
+            if (!is_array($points)||!array_is_list($points)||count($points)<3||count($points)>256) throw new InvalidArgumentException('An object needs an outline of 3 to 256 points.');
+            foreach ($points as $point) {self::number($point['x'] ?? null);self::number($point['y'] ?? null);}
+            self::number($object['top'] ?? null);
+            if (array_key_exists('base',$object)) {self::number($object['base']);if ($object['base']>$object['top']) throw new InvalidArgumentException('An object\'s base is above its top.');}
+            foreach (['standOn','climbable'] as $key) if (array_key_exists($key,$object)&&!is_bool($object[$key])) throw new InvalidArgumentException('Invalid object flag.');
+            foreach (['kind','label','levelId'] as $key) if (array_key_exists($key,$object)&&(!is_string($object[$key])||$object[$key]===''||strlen($object[$key])>128)) throw new InvalidArgumentException('Invalid object '.$key.'.');
+            if (array_key_exists('sight',$object)&&!in_array($object['sight'],['block','pass','limited'],true)) throw new InvalidArgumentException('Invalid object sight.');
+            if (array_key_exists('material',$object)&&!in_array($object['material'],self::WALL_MATERIALS,true)) throw new InvalidArgumentException('Invalid object material.');
+            if (array_key_exists('group',$object)) {
+                if (!is_string($object['group'])||!preg_match(self::WALL_GROUP,$object['group'])) throw new InvalidArgumentException('Invalid object group.');
+                if (!isset($object['material'])) throw new InvalidArgumentException('An object group needs a material.');
+            }
+        }
     }
 
     /** All nested coordinates and media references must remain passive data. */
@@ -218,7 +271,9 @@ final class SceneEnvironment
         if (!is_array($zones)||!array_is_list($zones)||count($zones)>self::ZONE_LIMIT) throw new InvalidArgumentException('Invalid zone list.');
         $ids=[];$total=0;
         foreach ($zones as $zone) {
-            if (!is_array($zone)||array_is_list($zone)||array_diff(array_keys($zone),['id','tag','label','levelId','surfaceHeight','cost','gmOnly','squares'])) throw new InvalidArgumentException('Invalid zone record.');
+            if (!is_array($zone)||array_is_list($zone)||array_diff(array_keys($zone),['id','tag','label','levelId','surfaceHeight','cost','gmOnly','squares','kind'])) throw new InvalidArgumentException('Invalid zone record.');
+            // Labelled maps: what the squares are for movement (MapLabels::KINDS). Water and difficult cost one extra; no-climb is bumpy ground walked as plain.
+            if (array_key_exists('kind',$zone)&&!in_array($zone['kind'],['water','difficult','no-climb'],true)) throw new InvalidArgumentException('Invalid zone kind.');
             $id=$zone['id'] ?? null;
             if (!is_string($id)||$id===''||strlen($id)>128||isset($ids[$id])) throw new InvalidArgumentException('Invalid zone ID.');
             $ids[$id]=true;

@@ -71,7 +71,7 @@ test('going up: the token rises with the stair, though its own floor still lies 
   // How it was: held at the lower floor's height to the top, then the whole rise in the last step.
   const before = price(token(16, 13, 'level-0', 'ground'), [[16, 13], [16, 9]], false);
   assert.deepEqual(before.heights, [0, 0, 0, 0, 2]);
-  assert.equal(before.cost, 5, 'the 5 the tester measured');
+  assert.equal(before.cost, 4, 'the tester measured 5; since November 8, 2026 a rise that is not a climb costs nothing more');
 });
 
 test('going down the same stair costs its length too', () => {

@@ -20,13 +20,12 @@ foreach ($cases as [$to, $other, $column, $row, $damage]) {
     $label = "to {$to[0]},{$to[1]}";
     wholeSquare(abs($result['column'] - $column) < 1e-9 && abs($result['row'] - $row) < 1e-9, "$label stops at $column,$row (got {$result['column']},{$result['row']})");
     wholeSquare($result['damage'] === $damage && $result['collidedIds'] === ['b'] && $result['wall'] === false, "$label deals $damage to each");
-    // The server accepts the square the browser computed, and refuses a square between squares.
+    // The server's own square is the browser's.
     ForcedMovement::plan($cal, [...$cal, 'column'=>$column, 'row'=>$row], ['column'=>$to[0], 'row'=>$to[1]], 'forced', [$cal, $other], []);
 }
-$refused = false;
-try { ForcedMovement::plan($cal, [...$cal, 'column'=>23, 'row'=>18.5], ['column'=>26, 'row'=>20], 'forced', [$cal, ['id'=>'b', 'column'=>24, 'row'=>19, 'width'=>1, 'height'=>1]], []); }
-catch (InvalidArgumentException $error) { $refused = true; }
-wholeSquare($refused, 'A stop between squares is refused');
+// A browser that sent a stop between squares is not refused (Brandon, November 8, 2026): the server's own square, a whole one, is used.
+$plan = ForcedMovement::plan($cal, [...$cal, 'column'=>23, 'row'=>18.5], ['column'=>26, 'row'=>20], 'forced', [$cal, ['id'=>'b', 'column'=>24, 'row'=>19, 'width'=>1, 'height'=>1]], []);
+wholeSquare(floor($plan['column']) == $plan['column'] && floor($plan['row']) == $plan['row'], 'A stop between squares is never used: the server\'s whole square is');
 // Nothing in the way: the move is unchanged.
 $clear = ForcedMovement::resolve($cal, ['column'=>25, 'row'=>20], [$cal], []);
 wholeSquare(abs($clear['column'] - 25) < 1e-9 && abs($clear['row'] - 20) < 1e-9 && $clear['damage'] === 0, 'A clear forced move ends where it was aimed');

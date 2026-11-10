@@ -273,6 +273,7 @@ export function createTokenMovementRuntime({
           ...(move.teleportChoice ? {teleportChoice:move.teleportChoice} : {}),
           ...(move.forcedDestination ? {forcedDestination:move.forcedDestination} : {}),
           ...(move.climbLow === true ? {climbLow:true} : {}),
+          ...(move.moveAnyway === true ? {moveAnyway:true} : {}),
           ...(move.undoRevision !== undefined ? { undoRevision: move.undoRevision } : {}),
           ...(move.undoRevision === undefined ? currentUndoTag() : {}),
         },
@@ -321,6 +322,9 @@ export function createTokenMovementRuntime({
             movementKind: move.movementKind || 'walk',
             path: move.path || [],
             ...(move.teleportChoice?{teleportChoice:move.teleportChoice}:{}),
+            // Each token's own answers to the wall questions (board-interactions.js).
+            ...(move.climbLow === true ? {climbLow:true} : {}),
+            ...(move.moveAnyway === true ? {moveAnyway:true} : {}),
           }))
         );
         return [result];
@@ -384,6 +388,8 @@ export function createTokenMovementRuntime({
             patch,
             movementKind: op.movementKind || (op.type === 'placement.move' ? 'walk' : 'forced'),
             ...(op.teleportChoice ? {teleportChoice:op.teleportChoice} : {}),
+            ...(op.climbLow === true ? {climbLow:true} : {}),
+            ...(op.moveAnyway === true ? {moveAnyway:true} : {}),
             ...(op.forcedDestination ? {forcedDestination:op.forcedDestination,collisionDamageType:op.collisionDamageType||''} : {}),
             path: op.path || [],
             entityRevision: Number(current?._entityRevision) || 0,

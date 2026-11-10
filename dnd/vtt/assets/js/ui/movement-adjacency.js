@@ -9,7 +9,10 @@ export function adjacencyGap(a, b, levels) {
   return Math.max(dx, dy);
 }
 
-export function movementAdjacencyChanges(from, to, watcher, levels) {
+// `path`: the corners the walk went round (the move's own route, November 9, 2026). Walked leg by leg, so an enemy met
+// only at a corner, or left and come back to, is seen, and a route drawn wide round an enemy is not taken for the
+// straight line between its ends.
+export function movementAdjacencyChanges(from, to, watcher, levels, path = []) {
   const empty = { leaves: false, enters: false };
   if (!from || !to || !watcher || ![from.column, from.row, to.column, to.row, watcher.column, watcher.row].every(Number.isFinite)) return empty;
   const start = { ...from, levelId: from.levelId || 'level-0' };
@@ -20,18 +23,21 @@ export function movementAdjacencyChanges(from, to, watcher, levels) {
   const result = { leaves: fromAdjacent && !toAdjacent, enters: !fromAdjacent && toAdjacent };
   // A stairs/fall transition has no confirmed intermediate floor path.
   if (start.levelId !== end.levelId || result.leaves) return result;
+  const corners = (Array.isArray(path) ? path : []).filter((point) => Number.isFinite(point?.column) && Number.isFinite(point?.row));
   let current = { ...start };
   let previousAdjacent = fromAdjacent;
-  // Preserve the existing square-step walk, with bounded fractional final steps.
+  // Square by square along each leg, with bounded fractional final steps.
   // Endpoint checks above remain valid even for a path beyond this safety bound.
-  for (let step = 0; step < 200 && (current.column !== end.column || current.row !== end.row); step++) {
-    const dx = end.column - current.column;
-    const dy = end.row - current.row;
-    current.column = Math.abs(dx) <= 1 ? end.column : current.column + Math.sign(dx);
-    current.row = Math.abs(dy) <= 1 ? end.row : current.row + Math.sign(dy);
-    const nextAdjacent = adjacent(current);
-    if (previousAdjacent && !nextAdjacent) { result.leaves = true; break; }
-    previousAdjacent = nextAdjacent;
+  for (const target of [...corners, end]) {
+    for (let step = 0; step < 200 && (current.column !== target.column || current.row !== target.row); step++) {
+      const dx = target.column - current.column;
+      const dy = target.row - current.row;
+      current.column = Math.abs(dx) <= 1 ? target.column : current.column + Math.sign(dx);
+      current.row = Math.abs(dy) <= 1 ? target.row : current.row + Math.sign(dy);
+      const nextAdjacent = adjacent(current);
+      if (previousAdjacent && !nextAdjacent) { result.leaves = true; return result; }
+      previousAdjacent = nextAdjacent;
+    }
   }
   return result;
 }

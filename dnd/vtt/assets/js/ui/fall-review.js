@@ -48,6 +48,10 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    const details=record.details||{};
    // A creature with a climb speed that walked itself off the edge climbed down. No pop-up, no damage.
    const breaks=fallBreaks(details);
+   // Asked before the walk and answered "Climb down" all the way (board-interactions.js, the ledge question): taken as a climb, no pop-up.
+   if(climbing?.chosen&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&climbing.chosen(record)){
+    try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,climbing.perSquare?climbing.perSquare(record):Math.max(0,Math.trunc(Number(climbing.extra(record,faller))||0)));}catch{}return;}catch{}
+   }
    if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&climbing.free(record,faller)){
     try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,0);}catch{}return;}catch{}
    }

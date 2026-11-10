@@ -20,13 +20,14 @@ export async function saveShared(field,value,expectedRevision,sceneId=null){
  const descriptor={type,sceneId:sceneId||c.state.boardState.activeSceneId,payload};
  queue=queue.catch(()=>{}).then(()=>window.submitEnvironmentCommand(descriptor));return queue;
 }
-export function savePortal(segmentId,open){
+export function savePortal(segmentId,open,anyway=false){
  // A player may work an ordinary door his hero stands at; the server decides (SyncV2Store::assertPlayerDoor).
+ // `anyway`: he was asked and said "Open anyway" (or "Open and go" on a walk through it), so he need not stand there.
  // With no board to speak for, the answer is a refusal like any other, not an error thrown at the click.
  const c=window.terrainContext?.();if(!c)return Promise.reject(Error('The map is not ready.'));
  const sceneId=c.state.boardState.activeSceneId;
  queue=queue.catch(()=>{}).then(()=>{
    if(window.terrainContext?.()?.state.boardState.activeSceneId!==sceneId)throw Error('Scene changed before door action.');
-   return window.submitEnvironmentCommand({type:'environment.portal.set',sceneId,payload:{segmentId,open,expectedRevision:sharedField('walls')?.revision??0}});
+   return window.submitEnvironmentCommand({type:'environment.portal.set',sceneId,payload:{segmentId,open,...(anyway?{anyway:true}:{}),expectedRevision:sharedField('walls')?.revision??0}});
  });return queue;
 }

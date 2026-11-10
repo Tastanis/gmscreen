@@ -1,4 +1,5 @@
-import {routeSteps} from '../assets/js/ui/terrain-math.mjs';
+import {routeSteps,climbSurcharge} from '../assets/js/ui/terrain-math.mjs';
+import {MOVEMENT_RULES} from '../assets/js/ui/movement-rules.mjs';
 
 // Walking route planner for the 3D board. It searches square by square over the states the
 // native walker can be in (square, floor, plate, stair progress) and returns
@@ -9,7 +10,12 @@ import {routeSteps} from '../assets/js/ui/terrain-math.mjs';
 // route is checked once more with the whole-command endpoint rule.
 // Nothing here writes scene state; the server still accepts or refuses.
 const DIRS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-const FALL=1.05; // A drop larger than this off a plate or stair is a fall, not a walk.
+// A drop larger than a plain step (the rules table's stepUp) is a fall or a climb down. Brandon, November 8, 2026 (one
+// square off a ledge became a walk round the whole map): drops are steps the search may take. The way round is taken
+// only when it is at most detourLimit squares longer than going off the ledge; otherwise the route goes off it and
+// the ledge question (Fall / Climb down / Cancel) is asked when the move is made. Each drop weighs that much in the
+// search order (never in the cost shown).
+const DROP_WEIGHT=MOVEMENT_RULES.detourLimit+.5;
 const SLICE_MS=6,SYNC_MS=8,MAX_NODES=8000,MAX_SEARCHES=16,MAX_STEPS=120000;
 // A route may be at most half as long again as the straight distance, and never less than two squares more
 // (Brandon, October 16, 2026: "when moving x squares, it shouldnt search past like 1/2 x squares away ... I want it
@@ -103,8 +109,15 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
   // that transition). Stepping off its side is a fall like any other edge.
   const delivered=!ghost._trajectoryStairTransition&&next._trajectoryStairTransition===true;
   const onStair=!!next._floorTraversal||delivered;
-  if(!plain(ghost)&&!onStair&&Number.isFinite(fromHeight)&&fromHeight-toHeight>FALL)return null;
-  if(wallNear(geo,from,to,w,h)){stats.wallChecks++;if(wp()?.wallMet?.(ghost,{column:to.column,row:to.row,path:[]}))return null;}
+  // Ground the map marks no-climb is walked both ways: a step down out of it, under a cliff's height, is no drop.
+  const walkedDown=fromHeight-toHeight<MOVEMENT_RULES.climbGrade-1e-6&&zones()?.noClimb?.(from.column,from.row,ghost.levelId||'level-0')===true;
+  const drop=!onStair&&!walkedDown&&Number.isFinite(fromHeight)&&fromHeight-toHeight>MOVEMENT_RULES.stepUp+1e-6;
+  // What is in the way, as the walk itself will be asked (wall-properties wallQuestion): a wall is gone round; a shut
+  // door is walked through (the door question opens it); a climbable face is climbed, at a climb's price.
+  if(wallNear(geo,from,to,w,h)){stats.wallChecks++;const ask=wp()?.question;
+   if(typeof ask==='function'){const q=ask(ghost,{column:to.column,row:to.row,path:[]});if(q?.kind==='wall'||(q?.kind==='door'&&q.edge?.secret===true&&q.edge?.open!==true))return null;
+    if(q?.kind==='climb'&&!(actor.movementMode==='fly'||actor.movementMode==='hover')){const r=Math.round(q.rise||0);cost+=Math.max(1,r)-1+climbSurcharge(r);}}
+   else if(wp()?.wallMet?.(ghost,{column:to.column,row:to.row,path:[]}))return null;}
   delete next._viaStair; // Kept: _trajectoryStairTransition, which limits a command to one stair as the server does.
   // Prefer gentle ground: a steep drop on bare terrain is allowed but costs
   // a little in the search order so routes follow slopes when they can.
@@ -112,7 +125,7 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
   const changedFloor=(next.levelId||'level-0')!==(ghost.levelId||'level-0');
   // Only a stair counts toward the server's one stair a command: stepping between a floor plate and the ground level
   // with it (a hall floor over a cellar beside its stair) is walking, not a change of floor (FloorGeometry::move).
-  return {ghost:next,cost,height:toHeight,changedFloor,stairHop:changedFloor&&(onStair||!!ghost._floorTraversal),steep};
+  return {ghost:next,cost,height:toHeight,changedFloor,stairHop:changedFloor&&(onStair||!!ghost._floorTraversal),steep,drop};
  }
  function actorKey(a,kind){return JSON.stringify([a.id,a.column,a.row,a.width||1,a.height||1,a.levelId||'level-0',a._supportSurfaceId||a.supportSurfaceId||null,a._floorTraversal||null,a.movementMode||'ground',kind]);}
  const targetKey=t=>JSON.stringify([t.column,t.row,Number.isFinite(t.surfaceElevation)?Math.round(t.surfaceElevation*20)/20:null,t.levelId||null,t.surfaceId||null,t.rampId||null]);
@@ -121,11 +134,11 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
  // (every square costs at least 1), so the first goal taken is the cheapest.
  // Equal costs prefer fewer steep drops (slopes over cliff faces), then
  // squares nearer the goal, then fewer turns.
- const order=(n,h)=>n.cost*1e7+Math.min(9999,Math.round(n.steep*100))*1e3+h*10+Math.min(9,n.turns);
+ const order=(n,h)=>(n.cost+(n.drops||0)*DROP_WEIGHT)*1e7+Math.min(9999,Math.round(n.steep*100))*1e3+h*10+Math.min(9,n.turns);
  function start(actor,target,kind){
   buildGeometry();const key=actorKey(actor,kind)+'#'+targetKey(target)+'#'+geometry.key;
   let s=searches.get(key);if(s){searches.delete(key);searches.set(key,s);return s;}
-  const ghost=slim(actor),root={ghost,cost:0,height:tp().groundFor(actor),hops:0,parent:null,key:stateKey(ghost,0),turns:0,steep:0,squares:0};
+  const ghost=slim(actor),root={ghost,cost:0,height:tp().groundFor(actor),hops:0,parent:null,key:stateKey(ghost,0),turns:0,steep:0,squares:0,drops:0};
   s={key,actor,target,kind,actorKey:actorKey(actor,kind),open:new Heap(),closed:new Set(),best:new Map([[root.key,root]]),done:false,goal:null,expanded:0,limit:detourLimit(heuristic(ghost,target))};
   s.open.push({key:order(root,heuristic(root.ghost,target)),node:root});stats.searches++;
   searches.set(key,s);while(searches.size>MAX_SEARCHES)searches.delete(searches.keys().next().value);
@@ -146,7 +159,7 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
    for(const [dx,dy] of DIRS){
     const edge=step({actor:s.actor,actorKey:s.actorKey,ghost:node.ghost},dx,dy);if(!edge)continue;
     const hops=node.hops+(edge.stairHop?1:0);if(hops>1)continue; // The server takes one stair per command.
-    const dir=dx+','+dy,child={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,dir,turns:node.turns+(node.dir&&node.dir!==dir?1:0),steep:node.steep+edge.steep,squares:(node.squares||0)+1,key:stateKey(edge.ghost,hops)};
+    const dir=dx+','+dy,child={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,dir,turns:node.turns+(node.dir&&node.dir!==dir?1:0),steep:node.steep+edge.steep,squares:(node.squares||0)+1,drops:(node.drops||0)+(edge.drop?1:0),key:stateKey(edge.ghost,hops)};
     if(s.closed.has(child.key))continue;const h=heuristic(child.ghost,s.target),prior=s.best.get(child.key);
     if(child.squares+h>s.limit)continue; // a detour longer than the limit is not looked for
     if(prior&&order(prior,h)<=order(child,h))continue;
@@ -172,8 +185,8 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
    const moves=[];const straight=Math.abs(dx)>Math.abs(dy)?[sx,0]:[0,sy],rest=Math.max(Math.abs(dx),Math.abs(dy))-diag;
    const d=Array(diag).fill([sx,sy]),st=Array(rest).fill(straight);moves.push(...(diagFirst?[...d,...st]:[...st,...d]));
    let node=from,list=[];
-   for(const [mx,my] of moves){const edge=step({actor:search.actor,actorKey:search.actorKey,ghost:node.ghost},mx,my);if(!edge)return null;const hops=node.hops+(edge.stairHop?1:0);if(hops>1)return null;node={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,steep:(node.steep||0)+edge.steep};list.push(node);}
-   const end=list.at(-1);if(!end||end.cost>to.cost+1e-9||end.steep>(to.steep||0)+1e-9||stateKey(end.ghost,end.hops)!==stateKey(to.ghost,to.hops))return null;
+   for(const [mx,my] of moves){const edge=step({actor:search.actor,actorKey:search.actorKey,ghost:node.ghost},mx,my);if(!edge)return null;const hops=node.hops+(edge.stairHop?1:0);if(hops>1)return null;node={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,steep:(node.steep||0)+edge.steep,drops:(node.drops||0)+(edge.drop?1:0)};list.push(node);}
+   const end=list.at(-1);if(!end||end.cost>to.cost+1e-9||end.steep>(to.steep||0)+1e-9||(end.drops||0)>(to.drops||0)||stateKey(end.ghost,end.hops)!==stateKey(to.ghost,to.hops))return null;
    return list;
   };
   const out=[path[0]];let i=0;

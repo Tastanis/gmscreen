@@ -1,3 +1,4 @@
+import { MOVEMENT_RULES } from './movement-rules.mjs';
 // Tagged terrain zones ("blood", "water"): shared read helpers for the board.
 // A scene without zone data has no zones; nothing here invents any.
 import { intersectsFloor, resolveSupportSurfaces } from './floor-support.js';
@@ -26,7 +27,10 @@ export function normalizeZones(field) {
       levelId: typeof zone.levelId === 'string' && zone.levelId ? zone.levelId : BASE_LEVEL_ID,
       // null means "the floor's own height"; callers resolve it against the scene's floors.
       surfaceHeight: Number.isFinite(zone.surfaceHeight) ? zone.surfaceHeight : null,
-      cost: Number.isInteger(zone.cost) && zone.cost >= 1 ? zone.cost : ZONE_DEFAULT_COST,
+      // A labelled map says what the squares are (MapLabels::KINDS, Brandon, November 8, 2026): water and difficult
+      // terrain cost one more a square (the rules table), and do not stack; no-climb is bumpy ground walked as plain.
+      cost: zone.kind === 'water' || zone.kind === 'difficult' ? 1 + MOVEMENT_RULES.cost[zone.kind] : zone.kind === 'no-climb' ? 1 : Number.isInteger(zone.cost) && zone.cost >= 1 ? zone.cost : ZONE_DEFAULT_COST,
+      ...(zone.kind === 'water' || zone.kind === 'difficult' || zone.kind === 'no-climb' ? { kind: zone.kind } : {}),
       gmOnly: zone.gmOnly === true,
       squares,
     });
@@ -289,7 +293,7 @@ export function movementWaiver(placement) {
 }
 /** The movement multiplier this zone charges this mover: 1 when its movement waives the zone. */
 export function zoneCostFor(zone, waiver = null) {
-  return waiver && (waiver.all || (waiver.liquids && isLiquidTag(zone.tag)) || waiver.tags?.has(zone.tag)) ? 1 : zone.cost;
+  return waiver && (waiver.all || (waiver.liquids && (isLiquidTag(zone.tag) || zone.kind === 'water')) || waiver.tags?.has(zone.tag)) ? 1 : zone.cost;
 }
 
 /**

@@ -59,24 +59,26 @@ function price(actor, squares, { follow = true } = {}) {
   let carried = null, cost = 0; const heights = [], steps = [];
   for (let k = 1; k < squares.length; k++) {
     const walker = createRouteWalker({ actor, surfaces: plates, mapLevels, terrain: () => 0, plainHeight, carried, standing: follow ? standing : null });
-    const leg = routeSteps({ column: squares[k - 1][0], row: squares[k - 1][1] }, { column: squares[k][0], row: squares[k][1] }, (c, r) => walker.height(c, r));
+    // A walker's route (November 8, 2026): climbs and climbing down a steep ramp or vine are paid; a drop is walked over.
+    const onStair = new Map(), height = (c, r) => { const v = walker.height(c, r); onStair.set(`${c},${r}`, !!walker.ghost?._floorTraversal || walker.ghost?._stairEnd === true); return v; };
+    const leg = routeSteps({ column: squares[k - 1][0], row: squares[k - 1][1] }, { column: squares[k][0], row: squares[k][1] }, height, null, () => false, { carried: (c, r) => onStair.get(`${c},${r}`) === true });
     carried = walker.ghost; cost += leg.cost;
     for (const [i, point] of leg.points.entries()) { if (i || k === 1) heights.push(+point.rawHeight.toFixed(3)); if (i) steps.push(Math.max(1, Math.abs(point.rise))); }
   }
   return { cost, heights, steps, ghost: carried };
 }
 
-test('before: the ruler priced the last step off a ramp as a drop to the ground', () => {
-  // These are the numbers the Map maker's test recorded on the real app.
-  assert.equal(price(token(10, 18, 'high'), [[10, 18], [10, 9]], { follow: false }).cost, 20, 'arch down: 8 steps and a 12-square drop');
-  assert.equal(price(token(10, 9, 'mid'), [[10, 9], [10, 18]], { follow: false }).cost, 21, 'arch up');
-  assert.equal(price(token(14, 7, 'mid'), [[14, 7], [16, 7]], { follow: false }).cost, 12, 'vine down');
+test('a ruler that does not follow the ramp walks over the drop at one a square (November 8, 2026: drops are walked over)', () => {
+  // Before November 8, 2026 these were 20, 21 and 12 (the Map maker's readings): the drop was charged its height.
+  assert.equal(price(token(10, 18, 'high'), [[10, 18], [10, 9]], { follow: false }).cost, 9, 'arch down: 8 steps and the drop as one square');
+  assert.equal(price(token(10, 9, 'mid'), [[10, 9], [10, 18]], { follow: false }).cost, 9, 'arch up');
+  assert.equal(price(token(14, 7, 'mid'), [[14, 7], [16, 7]], { follow: false }).cost, 2, 'vine down, not following the vine: a drop');
   // The Map maker also recorded 12 for the vine going up. The old ruler got that by the rule that a
   // creature beside the foot of any ramp was standing on it. A vine no longer holds a creature that
   // has not climbed onto it (travel-height.test.mjs), so that old reading cannot be made any more.
   // The single step the Map maker measured: on the foot of the arch, one square onto the mid island.
   const onFoot = token(10, 10, 'high', { _floorTraversal: { stairId: 'arch', entry: 'green' } });
-  assert.equal(price(onFoot, [[10, 10], [10, 9]], { follow: false }).cost, 12);
+  assert.equal(price(onFoot, [[10, 10], [10, 9]], { follow: false }).cost, 1);
 });
 
 test('the arch costs its length, both ways, in one drag or square by square', () => {
@@ -112,17 +114,17 @@ test('the last step down, measured from where the token stands on the ramp', () 
   assert.equal(price(climbing, [[10, 13], [10, 9]]).cost, 4, 'and back down to the island it came from');
 });
 
-test('the vine costs its height once: 3 and 3, up or down', () => {
+test('the vine is climbed: each square climbed costs two, up or down (November 8, 2026: climbing down is climbing)', () => {
   const down = price(token(14, 7, 'mid'), [[14, 7], [16, 7]]);
   assert.deepEqual(down.heights, [12, 9, 6]);
   assert.deepEqual(down.steps, [3, 3]);
-  assert.equal(down.cost, 6);
+  assert.equal(down.cost, 12);
   const up = price(token(16, 7, 'low'), [[16, 7], [14, 7]]);
   assert.deepEqual(up.heights, [6, 9, 12]);
-  assert.equal(up.cost, 6);
+  assert.equal(up.cost, 12);
   // The single last step the Map maker measured.
   const onVine = token(15, 7, 'mid', { _floorTraversal: { stairId: 'vine', entry: 'green' } });
-  assert.equal(price(onVine, [[15, 7], [16, 7]]).cost, 3);
+  assert.equal(price(onVine, [[15, 7], [16, 7]]).cost, 6);
 });
 
 test('a size 2 token on the two-wide arch', () => {
@@ -134,11 +136,11 @@ test('a size 2 token on the two-wide arch', () => {
   assert.equal(price(big(10, 8, 'mid'), [[10, 8], [10, 18]]).cost, 10);
 });
 
-test('stepping off the side of a ramp is still priced as the drop it is', () => {
+test('stepping off the side of a ramp is a drop, walked over at one a square', () => {
   const half = token(11, 15, 'high', { _floorTraversal: { stairId: 'arch', entry: 'green' } });
   const off = price(half, [[11, 15], [13, 15]]);
   assert.deepEqual(off.heights, [16.125, 0, 0]);
-  assert.equal(off.cost, 17, 'a 16-square drop, then one more square');
+  assert.equal(off.cost, 2, 'a 16-square drop is walked over (the ledge question asks Fall or Climb down), then one more square');
   // Walking off an island's edge away from any ramp is unchanged by any of this.
   assert.equal(price(token(13, 20, 'high'), [[13, 20], [15, 20]]).cost, price(token(13, 20, 'high'), [[13, 20], [15, 20]], { follow: false }).cost);
 });

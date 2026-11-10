@@ -40,8 +40,8 @@ test('a rock taller than a square: a wall as before without the tick, climbed on
   const low = lowBarrier(ticked, hero, into, z, ground);
   assert.ok(Math.abs(low.rise - 1.58) < 1e-9); assert.equal(low.onto, true); assert.equal(low.tall, true);
   for (const height of [3, 10]) assert.equal(movementBlocked(withLowBoxes(model(ring('tor', 5, 2, { height, climbable: true }))), hero, into, z, ground, true), false, `any height: ${height}`);
-  // The low things keep working without the tick, and are not "tall".
-  assert.equal(lowBarrier(withLowBoxes(model(ring('crate', 5, 2, { height: 0.86 }))), hero, into, z, ground).tall, false);
+  // A low thing is a plain step (November 8, 2026): no climb question at all.
+  assert.equal(lowBarrier(withLowBoxes(model(ring('crate', 5, 2, { height: 0.86 }))), hero, into, z, ground), null);
 });
 
 test('a ring of climbable walls is a box of any height, with its top at its real height', () => {
@@ -71,10 +71,13 @@ test('he stands on its top; stepping off a tall one is a drop, which the fall ru
   // A climbable thing far above or below him is not his: on the ground under the island he walks under it.
   assert.equal(walkFloorContact({ ...hero }, { ...hero, column: 5 }, [], surfaces, levels, ground), null);
   assert.equal(BOX_FOOT, 0.5);
-  // One whose base is more than half a square above his feet is not stepped onto.
+  // One whose base is above his feet (a ledge) is climbed on a yes, and he is on its top (November 8, 2026: never refused, never inside it).
   const high = withLowBoxes(model(ring('ledge', 5, 2, { base: 0.6, height: 2, climbable: true })));
-  assert.equal(walkFloorContact(hero, { ...hero, column: 5 }, [], high.roofs, { levels: [] }, ground), null);
-  assert.equal(movementBlocked(high, hero, into, z, ground, true), true, 'and its walls refuse');
+  assert.equal(walkFloorContact(hero, { ...hero, column: 5 }, [], high.roofs, { levels: [] }, ground)?.id, BOX_TOP + 'ledge-east');
+  assert.equal(movementBlocked(high, hero, into, z, ground, true), false, 'its walls are climbed on a yes');
+  assert.equal(movementBlocked(high, hero, into, z, ground), true, 'and stop a push');
+  const above = withLowBoxes(model(ring('shelf', 5, 2, { base: 1.2, height: 2, climbable: true })));
+  assert.equal(walkFloorContact(hero, { ...hero, column: 5 }, [], above.roofs, { levels: [] }, ground), null, 'one wholly above his body is not his to stand on');
 });
 
 test('a climbable line (a fence, a wall along an edge) is crossed on a yes whatever its height', () => {
@@ -119,7 +122,8 @@ test('one question for the whole drag, and the words', () => {
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   // A yes to the cliff question is the yes to any low or climbable wall on the same drag: he is not asked twice.
   assert.match(board, /climbAnswered = climb === true;/);
-  assert.match(board, /const yes = climbAnswered \|\| await askClimb\(/);
+  assert.match(board, /if \(climbAnswered\) for \(const entry of met\) answer\(entry\.move\.placementId, 'climbLow'\);/);
+  assert.match(board, /if \(climbers\.length && !climbAnswered\) \{/);
 });
 
 test('the Walls panel has the tick, and takes it away cleanly', () => {

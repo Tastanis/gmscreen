@@ -108,5 +108,5 @@ test('the ruler, the terrain and the board read a forced drag through these rule
   // A slide is made leg by leg, and each leg is sent as a plain forced move with no route of its own.
   assert.match(board, /movementKind === 'forced' && source === 'drag' && hasMatchingOrigin && ruler\.length > 2 && moves\.length === 1/);
   assert.match(board, /drawnRuler: \[\], inTurn: true, slideBeyond: leg\.beyond/);
-  assert.match(board, /const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome\.fell && now && now\.column === leg\.to\.column && now\.row === leg\.to\.row;/);
+  assert.match(board, /const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome\.fell && !dropped && now && now\.column === leg\.to\.column && now\.row === leg\.to\.row;/);
 });

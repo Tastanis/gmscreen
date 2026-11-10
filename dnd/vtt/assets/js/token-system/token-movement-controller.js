@@ -34,6 +34,12 @@ export function createTokenMovementController({
   // Extra squares of speed a token has right now (a minion while its captain is up). Asked every
   // time, never remembered, so the bonus ends the moment its cause does.
   getSpeedBonus = () => 0,
+  // What a condition does to the speed right now (Brandon, November 9, 2026: it changes the ring and the count, never
+  // refuses a move): null, or {limit} (Slowed 2, Grabbed and Restrained 0), {halve} (grabbing a creature its size or
+  // larger) and {why}, the words shown beside the count. Asked every time, like the bonus.
+  getSpeedRule = () => null,
+  // The kind of the move being dragged now ('walk', 'shift', 'forced', 'teleport'), when the board knows it.
+  getDragMovementKind = () => null,
   windowRef = typeof window === 'undefined' ? undefined : window,
   documentRef = typeof document === 'undefined' ? undefined : document,
 } = {}) {
@@ -47,6 +53,22 @@ export function createTokenMovementController({
     try { bonus = Number(getSpeedBonus(tokenId)); } catch (error) { bonus = 0; }
     return Number.isFinite(bonus) ? Math.trunc(bonus) : 0;
   };
+  // A creature's speed this moment: its own, plus any bonus, then what its conditions do to it, with the reason.
+  const speedNow = (tokenId, base) => {
+    let speed = Math.max(0, Math.trunc(Number(base) || 0) + speedBonus(tokenId)), rule = null;
+    try { rule = getSpeedRule(tokenId); } catch (error) { rule = null; }
+    if (rule && Number.isFinite(rule.limit)) speed = Math.min(speed, Math.max(0, Math.trunc(rule.limit)));
+    if (rule?.halve) speed = Math.floor(speed / 2);
+    return { speed, why: typeof rule?.why === 'string' ? rule.why : '' };
+  };
+  // A flier's height on its own turn (Brandon, November 9, 2026): movement is counted once, the larger of the squares
+  // moved across and the squares moved up or down. Height counts only on a finished move (the token let go), and a
+  // stretch between sideways moves counts the furthest it went from where the stretch began, not every up and down:
+  // up 3 then straight back down is 3; up 3, over, down 3 is 6. Kept for the running turn only.
+  const flightTurns = new Map();
+  const flightKey = (tokenId, context) => [context.sceneId, context.round, context.activeCombatantId, tokenId].join('|');
+  const heightSpent = (tokenId, context) => { const turn = flightTurns.get(flightKey(tokenId, context)); return turn ? Math.round(turn.closed + turn.stretch) : 0; };
+  const spentNow = (tokenId, context) => Math.max(movementState.getSpent(tokenId, context), heightSpent(tokenId, context));
   let cancelingForTurnChange = false;
   let undoPending = false;
 
@@ -54,6 +76,7 @@ export function createTokenMovementController({
     const previousSession = dragSession;
     const context = getTurnContext();
     movementState.syncTurn(context);
+    for (const key of flightTurns.keys()) if (!key.startsWith([context.sceneId, context.round, context.activeCombatantId].join('|') + '|')) flightTurns.delete(key);
     if (previousSession && !canTrackPlacement(previousSession.tokenId)) {
       hideDragUi();
       if (!cancelingForTurnChange) {
@@ -77,14 +100,15 @@ export function createTokenMovementController({
     const placement = getPlacementById(tokenId) ?? primaryToken;
     const original = originalPositions?.get?.(tokenId) ?? primaryToken;
     const context = getTurnContext();
-    const spent = movementState.getSpent(tokenId, context);
-    const speed = Math.max(0, speedResolver.getInitialSpeed(placement) + speedBonus(tokenId));
+    const spent = spentNow(tokenId, context);
+    const { speed, why } = speedNow(tokenId, speedResolver.getInitialSpeed(placement));
 
     dragSession = {
       tokenId,
       placement,
       original: normalizeFootprint(original),
       speed,
+      why,
       spentBeforeDrag: spent,
       resolveVersion: 0,
     };
@@ -98,7 +122,8 @@ export function createTokenMovementController({
       if (Number.isFinite(result?.speed)) {
         const base = Math.max(0, Math.trunc(result.speed));
         knownSpeeds.set(tokenId, base);
-        dragSession.speed = Math.max(0, base + speedBonus(tokenId));
+        const now = speedNow(tokenId, base);
+        dragSession.speed = now.speed; dragSession.why = now.why;
         renderDragSession(currentDragCost());
       }
     });
@@ -126,7 +151,9 @@ export function createTokenMovementController({
   }
 
   function recordCommittedMove(tokenId, sceneId, from, to, movementKind) {
-    if (!from || !to) {
+    // Being pushed, pulled or slid, or teleporting, is not the creature's own movement (Brandon, November 9, 2026:
+    // "oops teleports should not count as movement").
+    if (!from || !to || movementKind === 'forced' || movementKind === 'teleport') {
       return;
     }
     const cost = moveCost(from, to, movementKind, tokenId);
@@ -144,6 +171,20 @@ export function createTokenMovementController({
       },
       getTurnContext()
     );
+    // A finished sideways move closes a flier's height stretch: a height change after it counts again.
+    const turn = flightTurns.get(flightKey(tokenId, getTurnContext()));
+    if (turn) { turn.closed += turn.stretch; turn.stretch = 0; turn.base = turn.height; }
+  }
+
+  /** A flier let go at a new height on its own turn (from `before` to `after`, in squares). */
+  function recordHeightChange(tokenId, before, after) {
+    const context = getTurnContext();
+    if (!tokenId || !context.active || context.activeCombatantId !== tokenId || !Number.isFinite(before) || !Number.isFinite(after)) return;
+    const key = flightKey(tokenId, context);
+    let turn = flightTurns.get(key);
+    if (!turn) { turn = { base: before, height: before, stretch: 0, closed: 0 }; flightTurns.set(key, turn); }
+    turn.height = after;
+    turn.stretch = Math.max(turn.stretch, Math.abs(after - turn.base));
   }
 
   /** Speed, movement spent and movement left for a token during its turn; null when no turn is being counted. */
@@ -152,9 +193,23 @@ export function createTokenMovementController({
     if (!tokenId || !context.active || context.activeCombatantId !== tokenId) {
       return null;
     }
-    const speed = Math.max(0, (knownSpeeds.get(tokenId) ?? speedResolver.getInitialSpeed(getPlacementById(tokenId))) + speedBonus(tokenId));
-    const spent = movementState.getSpent(tokenId, context);
-    return { speed, spent, left: Math.max(0, speed - spent) };
+    const { speed, why } = speedNow(tokenId, knownSpeeds.get(tokenId) ?? speedResolver.getInitialSpeed(getPlacementById(tokenId)));
+    const spent = spentNow(tokenId, context);
+    return { speed, spent, left: Math.max(0, speed - spent), ...(why ? { why } : {}) };
+  }
+
+  /**
+   * The turn undo (Ctrl+Z, board-interactions performTurnUndo) put a token back from `to` to `from`: the move it undid
+   * is given back when it is that token's last counted move this turn. True when something was given back.
+   */
+  function refundMove({ tokenId, from, to } = {}) {
+    const context = getTurnContext(), last = tokenId ? movementState.peekLastMove(tokenId, context) : null;
+    if (!last || !from || !to) return false;
+    const same = (a, b) => Math.abs((a?.column ?? NaN) - b.column) < 1e-6 && Math.abs((a?.row ?? NaN) - b.row) < 1e-6;
+    if (!same(last.from, from) || !same(last.to, to)) return false;
+    movementState.undoLastMove(tokenId, context);
+    clearRulerSupplement();
+    return true;
   }
 
   /** Adds movement to the token's last move this turn (a climb chosen on the fall review). */
@@ -204,7 +259,7 @@ export function createTokenMovementController({
     }
 
     const context = getTurnContext();
-    const spent = movementState.getSpent(dragSession.tokenId, context);
+    const spent = spentNow(dragSession.tokenId, context);
     dragSession.spentBeforeDrag = spent;
 
     const remaining = Math.max(0, dragSession.speed - spent);
@@ -222,6 +277,7 @@ export function createTokenMovementController({
         cellInfo: typeof cells?.at === 'function' ? cells.at : null,
         stepCost: typeof cells?.stepCost === 'function' ? cells.stepCost : null,
         enter: typeof cells?.enter === 'function' ? cells.enter : null,
+        wall: typeof cells?.wall === 'function' ? cells.wall : null,
         blockers,
         bounds: {
           minColumn: 0,
@@ -237,6 +293,7 @@ export function createTokenMovementController({
       spent,
       dragCost,
       speed: dragSession.speed,
+      why: dragSession.why,
     }));
   }
 
@@ -273,6 +330,9 @@ export function createTokenMovementController({
     if (!position) {
       return 0;
     }
+    let kind = null;
+    try { kind = getDragMovementKind(); } catch (error) { kind = null; }
+    if (kind === 'forced' || kind === 'teleport') return 0;
     return moveCost(dragSession.original, position);
   }
 
@@ -302,6 +362,11 @@ export function createTokenMovementController({
     }
     const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
     if (key !== 'z' || (!event.ctrlKey && !event.metaKey) || event.shiftKey) {
+      return;
+    }
+    // A held key, Alt, or a panel that owns Ctrl+Z (the walls panel, by isUndoSuppressed) is not a move undo
+    // (November 9, 2026: these fell through and undid every move of the turn).
+    if (event.repeat || event.altKey) {
       return;
     }
     if (isEditableEventTarget(event.target)) {
@@ -361,20 +426,24 @@ export function createTokenMovementController({
     handleDragCommitted,
     getMovementLeft,
     addMovementCost,
+    refundMove,
+    recordHeightChange,
     undoSelectedMove: () => undoMove(getUndoMove(), getTurnContext().activeCombatantId, getTurnContext()),
     dispose,
   };
 }
 
-export function formatMovementSummary({ spent = 0, dragCost = 0, speed = 0 } = {}) {
+export function formatMovementSummary({ spent = 0, dragCost = 0, speed = 0, why = '' } = {}) {
   const current = Math.max(0, Math.trunc(spent + dragCost));
   const total = Math.max(0, Math.trunc(speed));
   const left = Math.max(0, total - current);
   const over = Math.max(0, current - total);
+  // Why the speed is what it is, when a condition changed it ("Slowed: speed 2").
+  const reason = why ? ` (${why})` : '';
   if (over > 0) {
-    return `Moved ${current} / ${total} - ${over} over`;
+    return `Moved ${current} / ${total} - ${over} over${reason}`;
   }
-  return `Moved ${current} / ${total} - ${left} left`;
+  return `Moved ${current} / ${total} - ${left} left${reason}`;
 }
 
 function isEditableEventTarget(target) {

@@ -29,30 +29,36 @@ $through = static fn (array $from, int $column, int $row, array $others = []) =>
 $ids = static function (array $plan): array { $list = array_column($plan['breaks'], 'id'); sort($list); return $list; };
 
 // ---- the book's own example ----------------------------------------------------------
-// Slid 5: moved 1, then into a wooden wall. 3 of the 4 squares left break it, for 5 damage, and
-// the 1 square still left carries the creature through.
+// Slid 5: moved 1, then into a wooden wall. 3 of the 4 squares left break it and take the creature through it, for 5
+// damage (Brandon, November 9, 2026: follow the book; the step across is paid for by the break), and the 1 square still
+// left carries it on.
 $plan = $through($token(8, 5), 13, 5);
 hurlCheck($ids($plan) === ['piece-5'] && $plan['breakCost'] === 3 && $plan['breakDamage'] === 5, 'Wood: 3 squares of the push, 5 damage: ' . json_encode([$ids($plan), $plan['breakCost'], $plan['breakDamage']]));
-hurlCheck([$plan['column'], $plan['row']] == [10, 5] && $plan['damage'] === 0 && $plan['wall'] === false, 'It ends 2 squares on, 1 past the wall, with no slam: ' . json_encode([$plan['column'], $plan['row'], $plan['damage']]));
+hurlCheck([$plan['column'], $plan['row']] == [11, 5] && $plan['damage'] === 0 && $plan['wall'] === false, 'It ends 3 squares on: 1, through the wall, 1 more, with no slam: ' . json_encode([$plan['column'], $plan['row'], $plan['damage']]));
 hurlCheck($plan['steps'] === [['materials'=>['wood'=>1], 'cost'=>3, 'damage'=>5, 'left'=>4]], 'The pop-up is told: wood, 4 squares left, costs 3, 5 damage: ' . json_encode($plan['steps']));
 hurlCheck([$plan['stopped']['column'], $plan['stopped']['row'], $plan['stopped']['damage']] == [9, 5, 6], 'And what stopping at the wall would be: 2 plus the 4 squares left');
-echo "PASS the book's example: slid 5, through wood after 1, carried on 1\n";
+// The book's whole example: a second wall right behind the first. The 1 square left slams it, for 3: 5 + 3 = 8.
+$second = $config; $second['environment']['walls']['value']['nodes'][] = ['id'=>'back-a', 'x'=>11, 'y'=>5]; $second['environment']['walls']['value']['nodes'][] = ['id'=>'back-b', 'x'=>11, 'y'=>6];
+$second['environment']['walls']['value']['segments'][] = ['id'=>'back', 'a'=>'back-a', 'b'=>'back-b', 'baseMode'=>'fixed', 'base'=>0.0, 'height'=>2.0];
+$book = ForcedMovement::through($token(8, 5), ['column'=>13, 'row'=>5], [$token(8, 5)], $second);
+hurlCheck($ids($book) === ['piece-5'] && $book['breakDamage'] === 5 && $book['wall'] === true && $book['damage'] === 3 && $book['breakDamage'] + $book['damage'] === 8 && [$book['column'], $book['row']] == [10, 5], 'The book: through the wood for 5, then the last square slams the next wall for 3, 8 in all: ' . json_encode([$book['column'], $book['breakDamage'], $book['damage']]));
+echo "PASS the book's example: slid 5, through wood after 1, carried on 1, and with a second wall 8 in all\n";
 
 // ---- each material, and not enough push ---------------------------------------------------
 $plan = $through($token(8, 6), 13, 6);
 hurlCheck($plan['breaks'] === [] && [$plan['column'], $plan['damage'], $plan['wall']] == [9, 6, true], 'Stone with 4 squares left does not break: an ordinary slam for 2 + 4');
 $plan = $through($token(8, 6), 15, 6);
-hurlCheck($ids($plan) === ['piece-6'] && $plan['breakCost'] === 6 && $plan['breakDamage'] === 8 && [$plan['column'], $plan['damage']] == [9, 0], 'Stone with exactly 6 left breaks, for 8, and the creature moves on 0');
+hurlCheck($ids($plan) === ['piece-6'] && $plan['breakCost'] === 6 && $plan['breakDamage'] === 8 && [$plan['column'], $plan['damage']] == [10, 0], 'Stone with exactly 6 left breaks, for 8, and the creature goes through it, no further');
 $plan = $through($token(8, 6), 17, 6);
-hurlCheck([$plan['column'], $plan['damage']] == [11, 0], 'With 8 left it moves on 2');
+hurlCheck([$plan['column'], $plan['damage']] == [12, 0], 'With 8 left it goes through and on 2');
 $plan = $through($token(8, 8), 10, 8);
-hurlCheck($ids($plan) === ['piece-8'] && $plan['breakCost'] === 1 && $plan['breakDamage'] === 3 && $plan['column'] == 9, 'Glass costs 1 and does 3');
+hurlCheck($ids($plan) === ['piece-8'] && $plan['breakCost'] === 1 && $plan['breakDamage'] === 3 && $plan['column'] == 10, 'Glass costs 1 and does 3, and the creature is through');
 $plan = $through($token(8, 7), 30, 7);
 hurlCheck($plan['breaks'] === [] && [$plan['column'], $plan['damage']] == [9, 23], 'A wall with no material never breaks, however hard the push');
 hurlCheck(ForcedMovement::BREAK_COST === ['glass'=>1, 'wood'=>3, 'stone'=>6, 'metal'=>9] && ForcedMovement::BREAK_DAMAGE === ['glass'=>3, 'wood'=>5, 'stone'=>8, 'metal'=>11], 'The book\'s table');
 // From the far side too, and a push along the wall strikes nothing.
 $plan = $through($token(11, 5), 6, 5);
-hurlCheck($ids($plan) === ['piece-5'] && $plan['column'] == 9, 'Pushed west through the same wall: 1 moved, 3 spent, 1 on');
+hurlCheck($ids($plan) === ['piece-5'] && $plan['column'] == 8, 'Pushed west through the same wall: 1 moved, 3 spent going through, 1 on');
 hurlCheck($through($token(9, 5), 9, 8)['breaks'] === [] && $through($token(9, 5), 9, 8)['damage'] === 0, 'A push along a wall breaks nothing and slams nothing');
 echo "PASS glass 1/3, wood 3/5, stone 6/8; not enough push is a slam; no material never breaks\n";
 
@@ -67,12 +73,20 @@ $long = $config; $long['environment']['walls']['value'] = ['version'=>1, 'nodes'
 $struck = WallMovement::struck($long['environment']['walls']['value'], $token(8, 5, 2), $token(18, 5, 2), $long);
 hurlCheck($struck['walls'][0]['squares'] === 2 && abs($struck['distance'] - 0) < 1e-6, 'A large creature meets two squares of a long wall: ' . json_encode([$struck['walls'][0]['squares'], $struck['distance']]));
 hurlCheck(WallMovement::struck($long['environment']['walls']['value'], $token(8, 5), $token(18, 5), $long)['walls'][0]['squares'] === 1, 'An ordinary one meets one');
-echo "PASS a large creature pays per square of wall\n";
+// A creature one square wide pays for one piece whatever the angle, though a diagonal push meets two
+// (Brandon, November 9, 2026: follow the book).
+$diagonalWalls = ['version'=>1, 'nodes'=>[['id'=>'d1','x'=>10,'y'=>2],['id'=>'d2','x'=>10,'y'=>5],['id'=>'d3','x'=>10,'y'=>9]], 'segments'=>[
+    ['id'=>'upper','a'=>'d1','b'=>'d2','baseMode'=>'fixed','base'=>0.0,'height'=>2.0,'material'=>'wood'],
+    ['id'=>'lower','a'=>'d2','b'=>'d3','baseMode'=>'fixed','base'=>0.0,'height'=>2.0,'material'=>'wood']]];
+$diagonal = $config; $diagonal['environment']['walls']['value'] = $diagonalWalls;
+$cross = ForcedMovement::through($token(7, 3), ['column'=>13, 'row'=>7], [$token(7, 3)], $diagonal);
+hurlCheck($cross['breakCost'] === 3 && $cross['breakDamage'] === 5 && count($cross['breaks']) === 2, 'At an angle across where two pieces meet: one piece paid for (3, 5 damage), both open: ' . json_encode([$cross['breakCost'], $cross['breakDamage'], array_column($cross['breaks'], 'id')]));
+echo "PASS a large creature pays per square of wall; one square wide pays for one piece at any angle\n";
 
 // ---- an object breaks as one thing ---------------------------------------------------------
 $plan = $through($token(12, 5), 18, 5);
 hurlCheck($ids($plan) === ['crate-w0','crate-w1','crate-w2','crate-w3'] && $plan['breakCost'] === 3 && $plan['breakDamage'] === 5, 'Into the crate: all four walls go for the price of the side struck: ' . json_encode([$ids($plan), $plan['breakCost']]));
-hurlCheck([$plan['column'], $plan['damage']] == [15, 0], 'and the creature goes on through where it stood');
+hurlCheck([$plan['column'], $plan['damage']] == [16, 0], 'and the creature goes through where it stood and on');
 // Walls with no group name are each their own thing: the far side still stands.
 $plan = $through($token(12, 8), 18, 8);
 hurlCheck($ids($plan) === ['loose-w3'] && $plan['wall'] === true && $plan['column'] == 13, 'Without a group name only the side struck breaks, and the creature stops against the rest: ' . json_encode([$ids($plan), $plan['column'], $plan['damage']]));
@@ -80,7 +94,7 @@ echo "PASS walls that share a group break together for one price\n";
 
 // ---- what is left of the push still collides ---------------------------------------------
 $plan = $through($token(8, 5), 14, 5, [$token(11, 5, 1, 'other')]);
-hurlCheck($ids($plan) === ['piece-5'] && $plan['collidedIds'] === ['other'] && $plan['column'] == 10 && $plan['damage'] === 1 && $plan['breakDamage'] === 5, 'Through the wood, then into a creature with 1 square left: ' . json_encode([$plan['column'], $plan['damage'], $plan['collidedIds']]));
+hurlCheck($ids($plan) === ['piece-5'] && $plan['collidedIds'] === ['other'] && $plan['column'] == 10 && $plan['damage'] === 2 && $plan['breakDamage'] === 5, 'Through the wood (the step across paid by the break), then into a creature with 2 squares left: ' . json_encode([$plan['column'], $plan['damage'], $plan['collidedIds']]));
 echo "PASS the rest of the push collides as any push does\n";
 
 // ---- through the real store ------------------------------------------------------------------
@@ -102,14 +116,13 @@ $send = static function (SyncV2Store $store, string $operation, array $payload, 
 try {
     // Asked first: what would this push break? The answer is what the pop-up shows.
     $offer = $store->forcedBreakOffer('scene', 't', ['column'=>14, 'row'=>5], false);
-    hurlCheck($offer['destination'] == ['column'=>10, 'row'=>5] && $offer['breakDamage'] === 5 && $offer['damage'] === 1 && $offer['collidedIds'] === ['other'] && $offer['steps'][0]['materials'] === ['wood'=>1], 'The offer: through wood for 5, then 1 more from the creature beyond: ' . json_encode($offer));
+    hurlCheck($offer['destination'] == ['column'=>10, 'row'=>5] && $offer['breakDamage'] === 5 && $offer['damage'] === 2 && $offer['collidedIds'] === ['other'] && $offer['steps'][0]['materials'] === ['wood'=>1], 'The offer: through wood for 5, then 2 more from the creature right beyond it: ' . json_encode($offer));
     hurlCheck($offer['stopped'] == ['column'=>9, 'row'=>5, 'damage'=>7], 'and what stopping at the wall would cost');
     hurlCheck($store->forcedBreakOffer('scene', 't', ['column'=>8, 'row'=>9], false) === null, 'A push that strikes nothing gets no offer');
     hurlCheck($brokenIn($store) === [], 'Asking breaks nothing');
-    // A wrong landing square is refused, and nothing is broken by the attempt.
+    // A browser that works out a different landing is not refused (Brandon, November 8, 2026): the server's own answer
+    // is used (forced-whole-squares.test.php, collision-reliability.test.php).
     $before = $store->getSnapshot();
-    try { $send($store, 'hurl-wrong-square', ['column'=>12, 'row'=>5, 'movementKind'=>'forced', 'forcedDestination'=>['column'=>14, 'row'=>5, 'breakThrough'=>true]]); hurlCheck(false, 'A wrong landing was accepted'); }
-    catch (InvalidArgumentException $error) { hurlCheck($store->getSnapshot() === $before, 'A refused break-through leaves the wall standing and the scene unchanged'); }
     // Told to break through.
     $revision = $before['revision'];
     $result = $send($store, 'hurl-through-wood', ['column'=>10, 'row'=>5, 'movementKind'=>'forced', 'forcedDestination'=>['column'=>14, 'row'=>5, 'breakThrough'=>true]]);
@@ -119,7 +132,7 @@ try {
     $events = $store->replayAfter($revision)['events'];
     hurlCheck(array_column($events, 'type') === ['environment.changed', 'token.moved'] && $events[0]['payload']['cause'] === 'forced', 'Every browser hears the wall break, then the move: ' . json_encode(array_column($events, 'type')));
     $records = array_column($store->collisionEffects(['operationId'=>'hurl-through-wood'], 'gm', true), 'amount', 'targetId');
-    hurlCheck($records == ['t'=>6, 'other'=>1], 'The pushed creature takes 5 for the wall and 1 for the collision; the creature it struck takes 1: ' . json_encode($records));
+    hurlCheck($records == ['t'=>7, 'other'=>2], 'The pushed creature takes 5 for the wall and 2 for the collision; the creature it struck takes 2: ' . json_encode($records));
     // Sent again (a retry after a lost reply), it is the same move, not a second break.
     $again = $send($store, 'hurl-through-wood', ['column'=>10, 'row'=>5, 'movementKind'=>'forced', 'forcedDestination'=>['column'=>14, 'row'=>5, 'breakThrough'=>true]]);
     hurlCheck(($again['idempotent'] ?? false) === true && $store->getSnapshot()['revision'] === $after['revision'], 'A repeat of the same command changes nothing');

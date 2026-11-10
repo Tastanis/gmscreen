@@ -18,12 +18,21 @@ export function climbPromptText({ squares = 0, cost = 0, left = null, others = 0
 }
 
 let open = null;
+// One pop-up at a time: a second request waits its turn (Brandon, November 8, 2026: never answered "no" for the mover).
+let waiting = null;
 
 /**
  * Ask once. Resolves true to climb, false to stay put. Enter climbs, Escape does not.
- * A second request while one is open is answered "no" rather than stacking pop-ups.
+ * Shown at once when nothing else is asked; a second request while one is open waits until it is answered.
  */
-export function askClimb(info, { documentRef = typeof document === 'undefined' ? null : document, anchor = null } = {}) {
+export function askClimb(info, options = {}) {
+  const show = () => askClimbNow(info, options), asked = waiting ? waiting.then(show, show) : show();
+  const done = () => { if (waiting === asked) waiting = null; };
+  waiting = asked; asked.then(done, done);
+  return asked;
+}
+
+function askClimbNow(info, { documentRef = typeof document === 'undefined' ? null : document, anchor = null } = {}) {
   if (!documentRef || open) return Promise.resolve(false);
   const text = climbPromptText(info);
   return new Promise((resolve) => {
