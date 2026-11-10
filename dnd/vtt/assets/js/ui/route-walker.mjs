@@ -68,6 +68,9 @@ export function stepGhost({ ghost, column, row, actor, surfaces = [], mapLevels 
   const surface = walkFloorContact(ghost, to, [], surfaces, mapLevels, terrain) || cubeStepDown(ghost, to, surfaces, mapLevels);
   if (surface) return { ghost: { ...to, levelId: surface.levelId, _supportSurfaceId: surface.id }, height: surface.height };
   const off = { ...to, _supportSurfaceId: null };
+  const was = ghost._supportSurfaceId ? surfaces.find((s) => s.id === ghost._supportSurfaceId) : null;
+  const caught = was ? surfaceBelow({ ...off, levelId: 'level-0' }, surfaces, mapLevels, was.height, terrain({ ...off, levelId: 'level-0' }), was.id) : null;
+  if (caught) return { ghost: { ...to, levelId: caught.levelId || 'level-0', _supportSurfaceId: caught.id }, height: caught.height };
   return { ghost: off, height: standing && ghost._viaStair ? standing(off) : plainHeight(column, row, { ...actor, _supportSurfaceId: null }) };
 }
 
@@ -174,7 +177,10 @@ export function traceSurfaceLeg({actor,end,surfaces=[],mapLevels=null,terrain=()
     const landing=fallLanding({...ghost,_supportSurfaceId:null,_floorTraversal:null},surfaces,mapLevels,terrain,height);
     if(landing){ghost={...ghost,levelId:landing.levelId,_supportSurfaceId:landing.id,_floorTraversal:null};height=landing.height;contact=contactFor(ghost);}
     else{
-     ghost={...ghost,levelId:'level-0',_supportSurfaceId:null,_floorTraversal:null};height=terrain(ghost);
+     ghost={...ghost,levelId:'level-0',_supportSurfaceId:null,_floorTraversal:null};
+     const caught=before._supportSurfaceId?surfaceBelow(ghost,surfaces,mapLevels,height,terrain(ghost),before._supportSurfaceId):null;
+     if(caught){ghost={...ghost,levelId:caught.levelId||'level-0',_supportSurfaceId:caught.id};height=caught.height;contact=contactFor(ghost);samples.push({...point,height,placement:{...ghost}});continue;}
+     height=terrain(ghost);
      if(startPlate&&!changedFloor&&Math.abs(height-startPlate.height)<=.55)steppedOffLevel=true;
     }
    }
@@ -208,6 +214,24 @@ export function fallLanding(ghost,surfaces,mapLevels,terrain,altitude=Infinity){
   return plate;
  }
  return null;
+}
+
+/**
+ * Off the top of a thing he stood on (a labelled object's top, a deck) with no raised floor to catch him: he comes
+ * down on the highest surface under him that is not above where he was, as the server lands him
+ * (FallOutcome::surfaceBelow, FloorSupport::landing). Not the one he left, nothing under the ground there. Null when
+ * the ground is what he lands on. Thornbriar, November 10, 2026: off the arch crown onto the great crossing below.
+ */
+export function surfaceBelow(ghost,surfaces,mapLevels,altitude,ground,left=null){
+ const levels=new Map([['level-0',{cutouts:[]}],...(mapLevels?.levels||[]).map(l=>[l.id,l])]);
+ let best=null;
+ for(const s of surfaces){
+  if(!s?.id||s.id===left||!(s.kind==='floor'||s.templateCube))continue;
+  const level=levels.get(s.levelId||'level-0');
+  if(!level||level.hidden||!(s.height<=altitude+1e-6)||(Number.isFinite(ground)&&s.height<ground-1e-6)||(best&&s.height<=best.height))continue;
+  if(intersectsFloor({...ghost,levelId:s.levelId||'level-0'},s,level.cutouts||[]))best=s;
+ }
+ return best;
 }
 
 /** Read-only endpoint compatibility check for the imported-floor sandbox.
@@ -269,6 +293,9 @@ export function commandSurfaceEnding({actor,points,surfaces=[],mapLevels,terrain
  if(ghost.levelId==='level-0'&&(!changed||fell)&&!carried&&!ghost._floorTraversal){
   const contact=terrainFloorContact({...actor,...end},surfaces,mapLevels,terrain({...actor,...end}));
   if(contact)return contactResult(contact);
+  const was=!changed&&actor._supportSurfaceId?surfaces.find(s=>s.id===actor._supportSurfaceId):null;
+  const caught=was&&terrain?surfaceBelow({...actor,...end,levelId:'level-0'},surfaces,mapLevels,was.height,terrain({...actor,...end,levelId:'level-0'}),was.id):null;
+  if(caught)return contactResult(caught);
  }
  return {known:true,placement:ghost,height:standing(ghost)};
 }

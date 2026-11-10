@@ -11,7 +11,7 @@ import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
-import {createRouteWalker,stepGhost,walksPlates,hasStairs,traceSurfaceLeg,commandSurfaceEnding} from './route-walker.mjs';
+import {createRouteWalker,stepGhost,walksPlates,hasStairs,traceSurfaceLeg,commandSurfaceEnding,surfaceBelow} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
 import {pointAtHeight,pickDrawn,pickView,pickWalked,floorDrawn} from './pointer-pick.mjs';
@@ -260,7 +260,11 @@ function landingHeight(placement,altitude){
 function movementPlacement(from,to,enter=true){
  const d=dimensions(),terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
  const surfaces=resolveSupportSurfaces(importedDesign()||{}),surface=walkFloorContact(from,to,[],surfaces,levelConfig(),terrain,enter)||cubeStepDown(from,to,surfaces,levelConfig());
- return surface?{...to,levelId:surface.levelId,_supportSurfaceId:surface.id}:to;
+ if(surface)return {...to,levelId:surface.levelId,_supportSurfaceId:surface.id};
+ // Off the top he stood on: down onto the highest surface under him, as the server lands him (route-walker.mjs).
+ const was=enter&&from._supportSurfaceId?surfaces.find(s=>s.id===from._supportSurfaceId):null,off={...to,levelId:'level-0',_supportSurfaceId:null};
+ const caught=was&&(to.levelId||'level-0')==='level-0'?surfaceBelow(off,surfaces,levelConfig(),was.height,terrain(off),was.id):null;
+ return caught?{...to,levelId:caught.levelId||'level-0',_supportSurfaceId:caught.id}:to;
 }
 // The height a mover is at part-way through a move, for judging walls: not yet up on a low box (low-boxes.mjs).
 function movementGroundFor(from,to){return groundFor(movementPlacement(from,to,false));}
@@ -453,10 +457,12 @@ function rampTargetHeight(rampId,placement){
  return ramp?rampHeight(ramp,placement.column+(placement.width||1)/2,placement.row+(placement.height||1)/2):null;
 }
 // A walk that ends on top of an object's box (low-boxes.mjs, `box-top:`), no more than a storey above the picked height.
+// A labelled map's object (`box-top:obj:`) is the thing on the square picked, however tall: a tree is climbed by a
+// drag onto it (Thornbriar, November 10, 2026: elders at 5, shoots at 9 were "Can't walk there").
 function endsOnBoxAbove(ending,picked){
  const id=String(ending?.placement?._supportSurfaceId||'');
  return id.startsWith('box-top:')&&!picked?.rampId&&Number.isFinite(ending?.height)&&Number.isFinite(picked?.surfaceElevation)
-  &&ending.height>=picked.surfaceElevation-.05&&ending.height-picked.surfaceElevation<=4;
+  &&ending.height>=picked.surfaceElevation-.05&&(id.startsWith('box-top:obj:')||ending.height-picked.surfaceElevation<=4);
 }
 function pickedSurfaceReached(ending,picked){
  if(ending?.canonicalCompatible===false)return false;

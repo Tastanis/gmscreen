@@ -79,7 +79,7 @@ final class MapLabels
                 $wallId = self::OBJECT_WALL . $id . ':' . $i;
                 $edge = ['id' => $wallId, 'a' => $ids[$i], 'b' => $ids[($i + 1) % count($ring)], 'baseMode' => 'fixed', 'base' => $base, 'height' => $tall, 'topMode' => 'follow',
                     'sight' => $sight, 'movement' => 'block', 'interaction' => 'none', 'sightDirection' => 'both', 'movementDirection' => 'both', 'object' => $id,
-                    'climbable' => ($object['climbable'] ?? false) === true];
+                    'climbable' => self::climbable($object)];
                 if (isset($object['material'])) $edge['material'] = $object['material'];
                 if (isset($object['group'])) $edge['group'] = $object['group'];
                 if (isset($object['label'])) $edge['label'] = $object['label'];
@@ -92,6 +92,15 @@ final class MapLabels
         }
         $walls['nodes'] = $nodes; $walls['segments'] = $segments;
         return $walls;
+    }
+
+    /**
+     * Whether an object is climbed: only one that can be stood on (Brandon, November 10, 2026: "don't let them climb
+     * it but not stand on it"). A climbable trunk with no top is not climbed; a tree to climb gets a top to stand on.
+     */
+    public static function climbable(array $object): bool
+    {
+        return ($object['climbable'] ?? false) === true && ($object['standOn'] ?? false) === true;
     }
 
     /** An object's outline as a ring without a repeated last point. */
@@ -209,10 +218,10 @@ final class MapLabels
         }
         // Objects: overlapping outlines.
         $objects = is_array($walls['objects'] ?? null) ? $walls['objects'] : [];
-        // An object set climbable that cannot be stood on (a tree trunk, a pointed rock) is climbed "over" for the price
-        // of a low wall, and a creature may end inside it. Found on Thornbriar's trees, November 9, 2026.
+        // An object set climbable that cannot be stood on (a tree trunk, a pointed rock) is not climbed (self::climbable).
+        // Found on Thornbriar's trees, November 9, 2026; Brandon's rule November 10.
         foreach ($objects as $object) if (($object['climbable'] ?? false) === true && ($object['standOn'] ?? false) !== true)
-            $add('Object ' . ($object['label'] ?? $object['id']) . ' is climbable but cannot be stood on: a creature climbs over it for 1 and may stop inside it. Make it not climbable.');
+            $add('Object ' . ($object['label'] ?? $object['id']) . ' is climbable but cannot be stood on, so it is not climbed. To climb it, give it a top to stand on (standOn).');
         $span = static function (array $o) { $r = self::ring($o['points']); return [min(array_column($r, 'x')), min(array_column($r, 'y')), max(array_column($r, 'x')), max(array_column($r, 'y')), $r]; };
         for ($i = 0; $i < count($objects); $i++) for ($j = $i + 1; $j < count($objects); $j++) {
             [$l1, $t1, $r1, $b1, $p1] = $span($objects[$i]); [$l2, $t2, $r2, $b2, $p2] = $span($objects[$j]);

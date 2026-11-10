@@ -14,8 +14,11 @@ try {
     $preview = ScenePackage::preview($package);
     try {
         SceneImportValidation::validate($package);
-        ScenePackage::prepareForNewScene($package,'scn-preview-validation');
+        $prepared = ScenePackage::prepareForNewScene($package,'scn-preview-validation')['package'];
         $preview['importable'] = true;
+        // A labelled map's load check (MapLabels::check), listed to the Director before the import.
+        $checks = $prepared['domains']['sceneConfig']['environment']['walls']['value']['checks'] ?? null;
+        if (is_array($checks)) $preview['mapChecks'] = array_values(array_filter($checks, 'is_string'));
     } catch (InvalidArgumentException $error) { $preview['importable']=false; $preview['importError']=$error->getMessage(); }
     vttSyncV2Respond(200,['success'=>true,'preview'=>$preview]);
 } catch (Throwable $error) { vttSyncV2HandleFailure($error); }

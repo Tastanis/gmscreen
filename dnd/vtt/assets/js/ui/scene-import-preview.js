@@ -31,6 +31,14 @@ export function mountSceneImportPreview(root, store) {
       const list=document.createElement('ul');
       for (const url of preview.assetReferences) {const item=document.createElement('li');item.textContent=url;list.append(item);}
       assets.append(list); result.append(assets); status.textContent='Scene package preview ready.';
+      // A labelled map's load check (MapLabels::check): what the app could not place as the labels say.
+      if (Array.isArray(preview.mapChecks)) {
+        const checks=document.createElement('div'); checks.dataset.sceneImportChecks='';
+        const head=document.createElement('p'); head.textContent=preview.mapChecks.length?`Map check: ${preview.mapChecks.length} to look at`:'Map check: nothing to report.';
+        checks.append(head);
+        if (preview.mapChecks.length) {const items=document.createElement('ul');for(const line of preview.mapChecks){const item=document.createElement('li');item.textContent=line;items.append(item);}checks.append(items);}
+        result.append(checks);
+      }
       if (!preview.importable) {
         const error = document.createElement('p'); error.textContent = `Cannot import yet: ${preview.importError || 'Unsupported scene data.'}`;
         result.append(error); return;
