@@ -61,16 +61,24 @@ final class AskTest
         foreach (self::CHARACTERISTICS as $name) {
             $stats[$name] = self::whole($sheet['hero']['stats'][$name] ?? 0);
         }
-        $known = array_merge(...array_values(self::SKILLS));
+        // A custom skill (one the hero typed in; Brandon, November 10, 2026) counts like a book skill.
         $skills = [];
         foreach (is_array($sheet['sidebar']['skills'] ?? null) ? $sheet['sidebar']['skills'] : [] as $skill => $entry) {
-            if (!in_array($skill, $known, true)) continue;
+            if (trim((string) $skill) === '') continue;
             $level = is_array($entry) ? ($entry['level'] ?? 'Trained') : $entry;
             if ($level === '' || $level === 'Untrained' || $level === null) continue;
             $skills[(string) $skill] = is_array($entry) ? self::whole($entry['bonus'] ?? 0) : 0;
         }
         ksort($skills);
         return ['stats' => $stats, 'skills' => $skills];
+    }
+
+    /** The skill groups a hero picks from: the book's five, and "Other" with the hero's own custom skills when they have any. */
+    public static function groups(array $sheet): array
+    {
+        $known = array_merge(...array_values(self::SKILLS));
+        $other = array_values(array_filter(array_map('strval', array_keys($sheet['skills'] ?? [])), static fn ($skill) => !in_array($skill, $known, true)));
+        return $other ? self::SKILLS + ['Other' => $other] : self::SKILLS;
     }
 
     /** The characteristics the Director lit, tidied: known ones only, in the sheet's order, each once. */
@@ -113,7 +121,7 @@ final class AskTest
             throw new InvalidArgumentException('That characteristic is not one this test offers.');
         }
         $skill = is_string($choice['skill'] ?? null) ? trim($choice['skill']) : '';
-        if ($skill !== '' && !in_array($skill, array_merge(...array_values(self::SKILLS)), true)) {
+        if ($skill !== '' && !in_array($skill, array_merge(...array_values(self::SKILLS)), true) && !array_key_exists($skill, $sheet['skills'] ?? [])) {
             throw new InvalidArgumentException('That is not a skill.');
         }
         $edge = max(-1, min(1, (int) ($choice['edge'] ?? 0)));

@@ -1075,7 +1075,7 @@ function handleAskTest($action, $dataFile, $maxMessages, array $participants)
                 $refuse('Your sheet could not be read just now. Try again.');
             }
             $sheet = AskTest::sheetOf($sheets, $user);
-            $answer(['success' => true, 'hero' => $user, 'stats' => $sheet['stats'], 'skills' => (object) $sheet['skills'], 'groups' => AskTest::SKILLS]);
+            $answer(['success' => true, 'hero' => $user, 'stats' => $sheet['stats'], 'skills' => (object) $sheet['skills'], 'groups' => AskTest::groups($sheet)]);
         }
 
         if ($action === 'test_ask') {

@@ -289,20 +289,43 @@ export function openResourceEditor({ sheet, onSave, onActivity, onClose, dark, d
 }
 
 // ---------------------------------------------------------------- skills
+/** A typed custom skill name, tidied: {name} or {error}. A book skill typed in any case is the book's; one the hero has is refused. */
+export function customSkillName(typed, have = []) {
+  const name = String(typed ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!name) return { error: 'Type a name.' };
+  const book = ALL_SKILLS.find((s) => s.toLowerCase() === name.toLowerCase());
+  const final = book || name;
+  if (have.some((s) => s.toLowerCase() === final.toLowerCase())) return { error: 'Already has it.' };
+  return { name: final };
+}
+
 export function openSkillsEditor({ sheet, onSave, onActivity, onClose, dark, doc = document }) {
   const skills = deepClone(sheet.sidebar?.skills || {});
   const row = (name, data) => `<div class="sp-row" data-row="skill" data-skill="${esc(name)}" style="grid-template-columns:1fr 120px auto;align-items:center"><b>${esc(name)} <small class="sp-hint">${esc(getSkillGroup(name))}</small></b>${fText('bonus', 'Bonus', data?.bonus ?? '')}<button type="button" class="sp-fbtn" data-remove-row>Remove</button></div>`;
-  const picker = () => `<div class="sp-skillpick">${Object.entries(SKILL_GROUPS).map(([group, list]) => `<div><b>${esc(group)}</b>${list.filter((s) => !skills[s]).map((s) => `<button type="button" data-pick="${esc(s)}">+ ${esc(s)}</button>`).join('') || '<span class="sp-hint">All taken.</span>'}</div>`).join('')}</div>`;
+  // A custom skill (Brandon, November 10, 2026: "make a custom skill where if clicked you can type in the name of the
+  // skill and make it a skill"): any name; it shows under "Other" on the sheet and can be rolled in Ask for a test.
+  const custom = `<div><b>Custom</b><button type="button" data-custom-open>+ Custom skill</button><span class="sp-skillcustom" data-custom-box hidden><input type="text" data-custom-name placeholder="Skill name" maxlength="40"><button type="button" data-custom-add>Add</button><span class="sp-hint" data-custom-hint></span></span></div>`;
+  const picker = () => `<div class="sp-skillpick">${Object.entries(SKILL_GROUPS).map(([group, list]) => `<div><b>${esc(group)}</b>${list.filter((s) => !skills[s]).map((s) => `<button type="button" data-pick="${esc(s)}">+ ${esc(s)}</button>`).join('') || '<span class="sp-hint">All taken.</span>'}</div>`).join('')}${custom}</div>`;
+  const addSkill = (body, name) => { skills[name] = { level: 'Trained', bonus: '' }; body.querySelector('[data-skills]').insertAdjacentHTML('beforeend', row(name, {})); body.querySelector('[data-picker]').innerHTML = picker(); };
+  const addCustom = (body) => {
+    const input = body.querySelector('[data-custom-name]'), hint = body.querySelector('[data-custom-hint]');
+    const typed = customSkillName(input.value, Object.keys(skills));
+    if (typed.error) { hint.textContent = typed.error; input.focus(); return; }
+    addSkill(body, typed.name);
+  };
   return openPanel({
     title: 'Skills', dark, doc, onActivity, onClose,
     html: `<div class="sp-rowlist" data-skills>${Object.entries(skills).map(([n, d]) => row(n, d)).join('')}</div><fieldset class="sp-fs"><legend>Add a skill</legend><div data-picker>${picker()}</div></fieldset>`,
     build(body) {
       body.addEventListener('click', (e) => {
         const pick = e.target.closest('[data-pick]');
-        if (pick) { skills[pick.dataset.pick] = { level: 'Trained', bonus: '' }; body.querySelector('[data-skills]').insertAdjacentHTML('beforeend', row(pick.dataset.pick, {})); body.querySelector('[data-picker]').innerHTML = picker(); }
+        if (pick) addSkill(body, pick.dataset.pick);
+        if (e.target.closest('[data-custom-open]')) { e.target.closest('[data-custom-open]').hidden = true; body.querySelector('[data-custom-box]').hidden = false; body.querySelector('[data-custom-name]').focus(); }
+        if (e.target.closest('[data-custom-add]')) addCustom(body);
         const x = e.target.closest('[data-remove-row]');
         if (x) { delete skills[x.closest('[data-row]').dataset.skill]; x.closest('[data-row]').remove(); body.querySelector('[data-picker]').innerHTML = picker(); }
       });
+      body.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-custom-name]')) { e.preventDefault(); addCustom(body); } });
     },
     save(body) {
       const out = {};

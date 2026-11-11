@@ -26,7 +26,10 @@ $sheets = ['indigo' => ['hero' => ['stats' => ['might' => '-1', 'agility' => '1'
     'cal' => ['hero' => ['stats' => ['might' => 2, 'agility' => '', 'intuition' => '-1']]]];
 $indigo = AskTest::sheetOf($sheets, 'indigo');
 testCheck($indigo['stats'] === ['might' => -1, 'agility' => 1, 'reason' => 3, 'intuition' => 1, 'presence' => 3], 'The five characteristics are read from the sheet');
-testCheck($indigo['skills'] === ['Hide' => 0, 'Magic' => 0, 'Read Person' => 1], 'The hero\'s skills, each with its own extra bonus; one marked untrained and one that is not a skill are left out');
+testCheck($indigo['skills'] === ['Hide' => 0, 'Juggling' => 9, 'Magic' => 0, 'Read Person' => 1], 'The hero\'s skills, each with its own extra bonus; one marked untrained is left out; a custom one (Juggling) counts');
+testCheck(AskTest::groups($indigo)['Other'] === ['Juggling'] && !isset(AskTest::groups(AskTest::sheetOf($sheets, 'cal'))['Other']), 'The hero\'s custom skills are offered under Other; no Other when there are none');
+$row = AskTest::roll(AskTest::create(['indigo'], [], false, 1000), $indigo, ['characteristic' => '', 'skill' => 'Juggling', 'edge' => 0, 'extra' => 0], [1, 1], 1001);
+testCheck($row['hasSkill'] === true && $row['modifier'] === 2 + 9, 'A custom skill rolls like a book one: 2 and its own bonus');
 $cal = AskTest::sheetOf($sheets, 'cal');
 testCheck($cal['stats'] === ['might' => 2, 'agility' => 0, 'reason' => 0, 'intuition' => -1, 'presence' => 0] && $cal['skills'] === [], 'A blank or missing characteristic is 0; no skills is no skills');
 testCheck(AskTest::sheetOf($sheets, 'zepha') === ['stats' => ['might' => 0, 'agility' => 0, 'reason' => 0, 'intuition' => 0, 'presence' => 0], 'skills' => []], 'A hero with no sheet rolls from zeros');
@@ -55,7 +58,7 @@ testCheck(AskTest::words($row) === "Reason, Swim, edge, extra \u{2212}1. 10 + 4 
 $row = AskTest::roll($any, $indigo, ['characteristic' => 'might', 'skill' => 'Hide', 'edge' => -1, 'extra' => '+2'], [1, 1], 1001);
 testCheck($row['modifier'] === -1 + 2 - 2 + 2 && $row['total'] === 3, 'A bane is -2; a skill of the hero\'s with no bonus of its own adds 2');
 testCheck(AskTest::roll($any, $indigo, ['edge' => 7, 'extra' => 999], [1, 1], 1001)['modifier'] === 2 + AskTest::EXTRA_LIMIT, 'An edge counts once, and a typed extra is held to 20 either way');
-foreach ([['characteristic' => 'might'], ['characteristic' => 'luck'], ['skill' => 'Juggling']] as $bad) {
+foreach ([['characteristic' => 'might'], ['characteristic' => 'luck'], ['skill' => 'Basket Weaving']] as $bad) {
     $refused = false;
     try { AskTest::roll($several, $indigo, $bad, [1, 1], 1001); } catch (InvalidArgumentException $e) { $refused = true; }
     testCheck($refused, 'A characteristic the test does not offer, or a skill that is not one, is refused: ' . json_encode($bad));
@@ -120,7 +123,7 @@ try {
 
     // What a player's pop-up is filled from.
     $sheet = $ask('indigo', 'chat_test_sheet');
-    testCheck(($sheet['stats'] ?? null) === $indigo['stats'] && ($sheet['skills'] ?? null) === $indigo['skills'] && array_keys($sheet['groups'] ?? []) === ['Crafting', 'Exploration', 'Interpersonal', 'Intrigue', 'Lore'], 'A hero is given their own numbers and the five skill groups');
+    testCheck(($sheet['stats'] ?? null) === $indigo['stats'] && ($sheet['skills'] ?? null) === $indigo['skills'] && array_keys($sheet['groups'] ?? []) === ['Crafting', 'Exploration', 'Interpersonal', 'Intrigue', 'Lore', 'Other'] && $sheet['groups']['Other'] === ['Juggling'], 'A hero is given their own numbers, the five skill groups, and Other with their custom skills');
     testCheck(($ask('GM', 'chat_test_sheet')['success'] ?? null) === false, 'The Director has no sheet to roll from');
 
     // Rolls.
