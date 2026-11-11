@@ -6,6 +6,7 @@ import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mj
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
+import {breakableThings,thingAt,toggleBreak} from './break-tool.mjs';
 import {properties,movementPathBlocked,movementBlocked,lowBarrierOnPath,firstWallMet,wallHeights,liveWalls,isBreakable,isBroken,wallQuestion,headRoomOnPath} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
 import {DEFAULT_SLANT,validSlant,viewSlant,viewAbove,viewBelow} from './height-view.mjs';
@@ -206,7 +207,7 @@ function draw(lookOnly){
     const big=selection?.id===n.id||hover?.id===n.id;strokes3d.push({kind:'dot',...at3d(n),r:big?.13:.085,color:big?'#ffeeb5':'#27241e',stroke:'#e7ca88',opacity:1});}
  }
  editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(board3d())board3d().setWallOverlay?.(context.isGM?strokes3d:[]);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));for(const {select,current} of viewChoices)if(document.activeElement!==select)select.value=current(model);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
- editor.portals();
+ editor.portals();drawBreak();
 }
 function tick(){
  try {
@@ -277,4 +278,46 @@ function moverFor(from,kind){
  return hit;
 }
 function pathFor(from,kind){return moverFor(from,kind).path;}
+// ---- The Break tool (break-tool.mjs; Brandon, November 10, 2026). In the Edits panel, the Director only. While on, every
+// breakable thing is outlined in its material's colour (a broken one grey and dashed) and the one under the pointer in
+// white; a click breaks it, or mends it when it is broken. Saved like any wall edit, and Undo in the Walls panel takes
+// it back. Esc or the button again turns it off.
+const breakButton=document.createElement('button');breakButton.className='btn';breakButton.type='button';breakButton.textContent='Break';breakButton.dataset.action='map-break';breakButton.setAttribute('aria-pressed','false');breakButton.title='Show what can break. Click one to break it, or a broken one to mend it.';breakButton.hidden=true;document.body.append(breakButton);
+const breakSvg=document.createElementNS(ns,'svg');breakSvg.id='break-overlay';breakSvg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:100004';transform.append(breakSvg);
+const breakColors={glass:'#9fd8e8',wood:'#d39a55',stone:'#d0d0d0',metal:'#8fb3e2'};
+let breaking=false,breakHoverKey=null,breakCache=null,breakCacheRevision=-1;
+function breakList(){if(breakCacheRevision!==revision||!breakCache){breakCache=breakableThings(model);breakCacheRevision=revision;}return breakCache;}
+function setBreaking(on){
+ if(on&&!context?.isGM)return;breaking=on;breakHoverKey=null;breakButton.setAttribute('aria-pressed',String(on));board.style.cursor='';
+ if(on){claimActiveTool('break',()=>setBreaking(false));publishActiveTool('break','Break (Esc to stop)');}else publishActiveTool('break');
+ drawBreak();
+}
+breakButton.onclick=()=>setBreaking(!breaking);
+function breakHeights(e,a,b){const p=properties(e),mid=(a.x+b.x)/2,mid2=(a.y+b.y)/2;let base=Number(p.base)||0;if(p.baseMode!=='fixed'){try{base+=groundAt(mid,mid2)||0;}catch{}}return {base,top:base+(Number(p.height)||0)};}
+function drawBreak(){
+ breakSvg.replaceChildren();
+ if(!breaking||!context?.isGM){board3d()?.setOverlay?.('break',[]);return;}
+ const scale=context.view.scale||1,list=[];breakSvg.setAttribute('width',context.view.mapPixelSize.width);breakSvg.setAttribute('height',context.view.mapPixelSize.height);
+ for(const thing of breakList()){
+  const hot=thing.key===breakHoverKey,color=hot?'#ffffff':thing.broken?'#8a8a8a':(breakColors[thing.material]||'#d9b363');
+  thing.lines.forEach(([a,b],i)=>{
+   const pa=projected(a),pb=projected(b),line=document.createElementNS(ns,'line');
+   line.setAttribute('x1',pa.x);line.setAttribute('y1',pa.y);line.setAttribute('x2',pb.x);line.setAttribute('y2',pb.y);line.setAttribute('stroke',color);line.setAttribute('stroke-width',(hot?7:4)/scale);line.setAttribute('stroke-linecap','round');
+   if(thing.broken)line.setAttribute('stroke-dasharray',`${4/scale} ${5/scale}`);line.dataset.breakThing=thing.key;breakSvg.append(line);
+   const h=breakHeights(thing.edges[i],a,b);
+   for(const z of [h.top,h.base])list.push({kind:'line',points:[{x:a.x,y:a.y,z:z+.02},{x:b.x,y:b.y,z:z+.02}],color,opacity:1,dash:thing.broken?[.12,.12]:null});
+  });
+ }
+ board3d()?.setOverlay?.('break',list);
+}
+function breakPoint(event){if(board3d()){const hit=board3d().clientToMap(event.clientX,event.clientY);return hit?.squares??null;}return gridPoint(event);}
+board.addEventListener('pointermove',event=>{if(!breaking||!context?.isGM)return;const key=thingAt(breakList(),breakPoint(event))?.key??null;if(key!==breakHoverKey){breakHoverKey=key;board.style.cursor=key?'pointer':'';drawBreak();}},true);
+board.addEventListener('pointerdown',event=>{
+ if(!breaking||!context?.isGM||storedError||event.button!==0)return;consume(event);
+ const thing=thingAt(breakList(),breakPoint(event));if(!thing)return;
+ cancelDrag();const before=copyWalls(model);toggleBreak(model,thing);change(before);
+},true);
+for(const type of ['pointerup','click','dblclick'])board.addEventListener(type,event=>{if(breaking&&context?.isGM&&event.button===0)consume(event);},true);
+document.addEventListener('keydown',e=>{if(breaking&&e.key==='Escape'){consume(e);setBreaking(false);}},true);
+
 requestAnimationFrame(tick);

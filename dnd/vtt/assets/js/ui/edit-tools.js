@@ -8,6 +8,8 @@ function mount(){
  const tools=panel.querySelector('.edit-tools');tools.append(walls);
  const stairs=document.createElement('button');stairs.className='btn';stairs.textContent='Stairs';stairs.type='button';stairs.onclick=()=>{close();$('[data-settings-launch="stairs"]')?.click();};tools.append(stairs,height);
  const levels=document.createElement('button');levels.className='btn';levels.textContent='Levels';levels.type='button';levels.setAttribute('aria-expanded','false');tools.append(levels);
+ // The Break tool (wall-prototype.js): shown in the panel, which only the Director has.
+ const breakTool=$('[data-action="map-break"]');if(breakTool){breakTool.hidden=false;tools.append(breakTool);breakTool.addEventListener('click',close);}
  const content=$('#edits-levels');levels.onclick=()=>{content.hidden=!content.hidden;levels.setAttribute('aria-expanded',String(!content.hidden));};
  function close(){panel.hidden=true;button.setAttribute('aria-expanded','false');}
  button.onclick=()=>{panel.hidden=!panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));};panel.querySelector('header button').onclick=close;

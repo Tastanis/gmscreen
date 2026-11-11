@@ -7,6 +7,7 @@
 //   reach       "Not next to the door."      Open anyway / Cancel
 //   fly         "Can't fly right now."        Fly anyway / Cancel
 //   drop        "Drop of N squares."          Climb down / Fall / Cancel
+//   place       "Can't walk there."           Put it there / Cancel   (a player; the Director is never asked)
 
 /** The words and buttons for one question. Pure, so the wording is tested without a page. `names`: who it is about, when more than one. */
 export function moveQuestionText({ kind = 'wall', names = [], locked = false, squares = 0, why = '' } = {}) {
@@ -17,6 +18,7 @@ export function moveQuestionText({ kind = 'wall', names = [], locked = false, sq
   if (kind === 'grab') { const end = ['end', 'End the grab'], keep = ['keep', 'Keep it']; return { title: why || 'End the grab?', lines: [], answers: squares === 0 ? [keep, end] : [end, keep] }; }
   if (kind === 'reach') return { title: 'Not next to the door.', lines: [], answers: [['anyway', 'Open anyway'], ['cancel', 'Cancel']] };
   if (kind === 'fly') return { title: `Can't fly right now${who}.`, lines: why ? [why] : [], answers: [['anyway', 'Fly anyway'], ['cancel', 'Cancel']] };
+  if (kind === 'place') return { title: `Can't walk there${who}.`, lines: [], answers: [['place', 'Put it there'], ['cancel', 'Cancel']] };
   if (kind === 'drop') return { title: `Drop of ${squares} ${squares === 1 ? 'square' : 'squares'}${who}.`, lines: [], answers: [['climb', 'Climb down'], ['fall', 'Fall'], ['cancel', 'Cancel']] };
   return { title: `Wall in the way${who}.`, lines: [], answers: [['anyway', 'Move anyway'], ['cancel', 'Cancel']] };
 }

@@ -30023,7 +30023,9 @@ function createTemplateTool() {
     // not reach the picked square, or a wall, a shut door or a window is in the way and cannot be climbed over.
     let blocked=null;
     if(['walk','shift'].includes(getCurrentMovementKind())&&!['fly','hover'].includes(original.movementMode)){
-      if(validSurface===false)blocked='Can’t walk there: use its stairs, right-click a corner, or hold Space to teleport.';
+      // Never a refusal (Brandon, November 10, 2026: "do not stop the GM from making this move ever"): the Director's
+      // token is put there; a player is asked.
+      if(validSurface===false)blocked=isGmUser()?'Can’t walk there: let go and it is put there.':'Can’t walk there: let go to be asked to put it there.';
       else if(!isGmUser()){
         const to={column:destination.column,row:destination.row,path:intent?.waypoints||[]};
         const met=window.wallPrototype?.wallMet?.(original,to);
@@ -30093,8 +30095,15 @@ function createTemplateTool() {
       const wrongLevel=levelId&&ending?.placement?._supportSurfaceId&&!ending.placement._floorTraversal&&(ending.placement.levelId||BASE_MAP_LEVEL_ID)!==levelId;
       const wrongRamp=rampId&&window.terrainPrototype?.pickedSurfaceReached?.(ending,{rampId,surfaceElevation})!==true;
       if(wrongHeight||wrongLevel||wrongRamp||ending?.canonicalCompatible===false){
-        const reason='The walking route does not reach the picked surface. Follow its stairs or vine, or choose teleport.';
-        updateStatus(reason);return {accepted:false,reason,predictedLanding:ending};
+        // The walk does not get there. Never refused (Brandon, November 10, 2026: "i need to see the monster there, so let
+        // me set it there"): it is put there as a teleport is, walls and all. The Director is not asked; a player is.
+        if(!isGmUser()){
+          const anchor=[...tokenLayer.querySelectorAll('[data-placement-id]')].find((element)=>element.dataset.placementId===placementId)??null;
+          const choice=await askMoveQuestion({kind:'place'},{anchor});
+          if(choice!=='place'||sceneId!==getActiveSceneId()){updateStatus('Did not move.');return {accepted:false,reason:'said',predictedLanding:ending};}
+        }
+        movementKind='teleport';waypoints=[];ruler.splice(1,ruler.length-2);
+        updateStatus('Can’t walk there: put there instead.');
       }
     }
     if(movementKind==='teleport'&&Number.isFinite(surfaceElevation))moves.find(p=>p.placementId===placementId).pickedSurface={surfaceElevation,levelId:typeof levelId==='string'?levelId:null,surfaceId:typeof surfaceId==='string'?surfaceId:null};
