@@ -99,8 +99,8 @@
         "upper-briar-2"
       ]
     },
-    "glb": "thornbriar/Thornbriar-living-b641368284.glb",
-    "pieces": "thornbriar/pieces-b641368284.json",
+    "glb": "thornbriar/Thornbriar-living-218d87cdd8.glb",
+    "pieces": "thornbriar/pieces-218d87cdd8.json",
     "levels": {
       "Thornbriar organic scenery": 0
     },
@@ -301,6 +301,6 @@
         ]
       }
     },
-    "lilyBob": "thornbriar/lily-bob-33fad4dbd7.json"
+    "lilyBob": "thornbriar/lily-bob-db1fa32f3d.json"
   }
 ]
