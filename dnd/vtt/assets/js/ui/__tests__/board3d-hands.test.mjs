@@ -71,7 +71,9 @@ test('a token with a mini is the mini: its box covers the model from base to hea
   assert.match(css, /\.vtt3d-mini \.vtt-token__hp-bar \{ top: auto; bottom: calc\(100% \+ var\(--tok-unit\) \* 7\); \}/, 'bar above the head');
   assert.match(board3d, /--vtt3d-head-dx/, 'bar over the head seen from the side');
   assert.doesNotMatch(board3d + css, /vtt3d-grab|vtt3d-mini::after/, 'no box floats over the model any more');
-  assert.match(board3d, /node\.style\.setProperty\('--tok-unit',`\$\{\(1\.25\*size\//, 'badges and bars a quarter bigger');
+  // November 10, 2026: the unit is per square on screen (token-looks.mjs tokenScreenMetrics, unitBoost 1.25), so a
+  // huge creature's bars are not shrunk by its size (token-looks.test.mjs).
+  assert.match(board3d, /node\.style\.setProperty\('--tok-unit',`\$\{screenSize\.tokUnit\.toFixed\(3\)\}px`\);/, 'badges and bars a quarter bigger');
   assert.match(board3d, /const placeKey=cameraKey\+'\|'\+shownLevel\+'\|'\+tokenLayer\.childElementCount\+'\|'\+miniIds\+/, 'placed again when a mini appears');
 });
 

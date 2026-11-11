@@ -6,7 +6,7 @@
     "range": "Self",
     "target": "Self",
     "trigger": "You take damage.",
-    "description": "You vanish in a plume of black smoke to avoid danger.\n\nEffect: You take half the damage, then can teleport up to 4 squares after the triggering effect resolves.\nSpend 1+ Insight: You teleport 1 additional square for each Insight spent.\n\nToo Slow (5 Insight, built in): You ignore any effects associated with the triggering damage. Before you teleport, you can make a free strike against a creature who damaged you. After you teleport, you can spend a Recovery.\n\nBurning Ash: The first time on a turn you teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
+    "description": "You vanish in a plume of black smoke to avoid danger.\n\nEffect: You take half the damage, then can teleport up to 4 squares after the triggering effect resolves.\nSpend 1+ Insight: You teleport 1 additional square for each Insight spent.\n\nToo Slow (5 Insight, built in): You ignore any effects associated with the triggering damage. Before you teleport, you can make a free strike against a creature who damaged you. After you teleport, you can spend a Recovery.\n\nBurning Ash: The first time on a turn you use a shadow ability to teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -95,17 +95,16 @@
         "name": "burningAsh",
         "mode": "token",
         "predicate": "enemy",
-        "count": {
-          "value": 1,
-          "mode": "upTo"
+        "near": {
+          "teleport": true,
+          "within": 1
         },
-        "optional": true,
-        "promptTitle": "Burning Ash (optional)",
-        "promptText": "First time this turn: pick the enemy you teleported away from or adjacent to.",
-        "distance": {
-          "form": "ranged",
-          "value": 12
-        }
+        "oncePer": {
+          "scope": "turn",
+          "key": "burning-ash"
+        },
+        "promptTitle": "Burning Ash",
+        "promptText": "Enemies next to where you left or landed take fire damage (first time this turn). Click to add or remove, then Done."
       },
       {
         "type": "effect",

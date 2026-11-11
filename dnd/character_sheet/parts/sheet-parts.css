@@ -84,6 +84,8 @@
 .sp[data-sheet-theme="diablo"] .sp-res b { color: #e0c27a; text-shadow: 0 0 10px rgba(200, 169, 94, .35); }
 .sp-res button, .sp-rec button { border: 1px solid var(--line2); background: var(--btn); border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 12.5px; }
 .sp-rec { display: flex; align-items: center; gap: 6px; font-size: 12.5px; flex-wrap: wrap; }
+.sp-rec .sp-mini { padding: 0; border-radius: 4px; }
+.sp-rec .sp-mini:disabled { opacity: .4; cursor: default; }
 .sp-pips { display: inline-flex; gap: 2px; }
 .sp-pips i { width: 7px; height: 12px; border-radius: 2px; background: var(--green); display: inline-block; }
 .sp-pips i.used { background: var(--line); }

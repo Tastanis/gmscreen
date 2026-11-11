@@ -191,11 +191,19 @@ function normalizeRule(input, index, warnings) {
     return null;
   }
   const effect = normalizeEffect(source.effect || source);
+  // A start or end of turn is offered once a round for each hero (Brandon, November 10, 2026: "it just kept asking him
+  // if he wanted to start his turn like 3 or 4 times during his one turn"): a turn cancelled and started again, or a
+  // page that loads again, does not ask a second time. The default is a JSON field like any other limit: a rule that
+  // says "limit": false is offered at every start.
+  const turnBoundary = event === 'turnStart' || event === 'turnEnd';
+  const limitSource = source.limit === false || source.oncePer === false
+    ? null
+    : source.limit || source.oncePer || (turnBoundary ? { scope: 'round', key: id, markOn: 'offered' } : null);
   return {
     id,
     event,
     filter: normalizeFilter(source.filter),
-    limit: normalizeLimit(source.limit || source.oncePer, id),
+    limit: normalizeLimit(limitSource, id),
     effect,
     prompt: asTrimmedString(source.prompt),
     // The popup's buttons (default Yes / Cancel).

@@ -1268,7 +1268,7 @@
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "selectionGuide", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
-      "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina", "near",
+      "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina", "near", "oncePer",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -1295,9 +1295,35 @@
       } else if (mode !== "token") {
         warnings.push(`${path}.near: only works on a token target block.`);
       } else {
-        const near = { group: asTrimmedString(input.near.group) || "primary", within: asNonNegInt(input.near.within, 1) };
+        // `teleport: true`: next to the square this ability's last teleport left or landed in (Burning Ash), not a group.
+        const near = input.near.teleport === true
+          ? { teleport: true, within: asNonNegInt(input.near.within, 1) }
+          : { group: asTrimmedString(input.near.group) || "primary", within: asNonNegInt(input.near.within, 1) };
         if (input.near.includeSelf === true) near.includeSelf = true;
         block.near = near;
+      }
+    }
+    // "The first time on a turn..." (Brandon, November 10, 2026, Sharon's Burning Ash): once per turn/round/encounter,
+    // for the user (default) or for each creature. Defaults: scope "turn", key the block's name, per "user".
+    if (input.oncePer !== undefined && input.oncePer !== null) {
+      if (typeof input.oncePer !== "object" || Array.isArray(input.oncePer)) {
+        warnings.push(`${path}.oncePer: must be an object such as { "scope": "turn", "key": "burning-ash" }.`);
+      } else if (mode !== "token") {
+        warnings.push(`${path}.oncePer: only works on a token target block.`);
+      } else {
+        const scopeRaw = asTrimmedString(input.oncePer.scope).toLowerCase();
+        if (scopeRaw && !["turn", "round", "encounter"].includes(scopeRaw)) {
+          warnings.push(`${path}.oncePer.scope: "${scopeRaw}" is not turn, round or encounter; using turn.`);
+        }
+        const perRaw = asTrimmedString(input.oncePer.per).toLowerCase();
+        if (perRaw && !["user", "target"].includes(perRaw)) {
+          warnings.push(`${path}.oncePer.per: "${perRaw}" is not user or target; using user.`);
+        }
+        block.oncePer = {
+          scope: ["turn", "round", "encounter"].includes(scopeRaw) ? scopeRaw : "turn",
+          key: asTrimmedString(input.oncePer.key) || block.name,
+          per: perRaw === "target" ? "target" : "user",
+        };
       }
     }
     if (input.rangeOrigin !== undefined && input.rangeOrigin !== null) {

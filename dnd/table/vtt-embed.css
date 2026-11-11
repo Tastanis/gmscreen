@@ -152,3 +152,6 @@ html.vtt-embed .vtt-board__tracker .vtt-combat-tracker { height: 66px !important
 html.vtt-embed.te-docked .vtt-board__tracker { right: 6px !important; }
 html.vtt-embed .vtt-character-summary { top: 107px !important; }   /* just under the two rows */
 
+/* The ability hover card is drawn in the Table's page above its windows while open (vtt-embed.js, Brandon, November 10, 2026):
+   the one here stays hidden under it. */
+html.vtt-embed.te-card-lifted .vtt-character-ability-preview { visibility: hidden !important; }

@@ -71,6 +71,7 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | `limit.scope` | `round`, `turn`, or `encounter` (one fight). Marks are kept on the hero's token (every page sees them, a reload keeps them) and belong to the fight they were made in. While a popup for the rule is open no second one opens for it. |
 | `limit.key` | Scoped flag key. |
 | `limit.markOn` | `applied` by default: the limit is used when the gain is taken, so Cancel leaves it free (Brandon, November 2026). `offered` uses it when the popup shows. |
+| `limit` on `turnStart` / `turnEnd` | Left out, it is `{ "scope": "round", "key": <rule id>, "markOn": "offered" }`: the start (or end) of a hero's turn is offered once a round, even if the turn is cancelled and started again (Brandon, November 10, 2026). `"limit": false` offers it at every start. |
 | `effect.kind` | `gain`, `lose`, `set`, or `damage`. |
 | `effect.amount` | Number, dice string like `1d3`, `{ "from": "victories" }`, `{ "from": "negativeResource" }`, or level-based objects. |
 | `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, `{round}`, `{target}` and `{source}` (creature names). The popup puts what happened first ("Goblin was force moved.") unless the prompt names {target} or {source}, and asks it as a question. Buttons are Yes / Cancel (`applyLabel`, `cancelLabel` change them). |

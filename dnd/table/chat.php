@@ -104,7 +104,40 @@ header('Cache-Control: no-store');
   <script src="/dnd/js/ui-kit.js?v=<?php echo $v('js/ui-kit.js'); ?>"></script>
   <script src="/dnd/js/chat-panel.js?v=<?php echo $v('js/chat-panel.js'); ?>"></script>
   <script>
-    window.initChatPanel(window.tableChatUser.isGM, window.tableChatUser.name);
+    // "The whisper pop-out in chat is stuck in the chat. It should pop out as its own box." (Brandon, November 10,
+    // 2026). This page is a window (a frame) on the Table, and a whisper box drawn in it stayed inside the chat window.
+    // Whisper boxes now float on the Table itself, over its windows, with their own look copied from this page; the
+    // chat still runs them. Opened on its own (popped out to a second screen), the page keeps them as before.
+    function tableWhisperHost() {
+      var table = window.parent;
+      if (!table || table === window || !table.Table || !table.document || !table.document.body) return null;
+      var doc = table.document;
+      var host = doc.getElementById('table-whisper-popouts');
+      if (!host) {
+        host = doc.createElement('div');
+        host.id = 'table-whisper-popouts';
+        host.className = 'chat-whisper-popouts';
+        host.setAttribute('aria-live', 'polite');
+        doc.body.appendChild(host);
+      }
+      var style = doc.getElementById('table-whisper-popouts-css');
+      if (!style) { style = doc.createElement('style'); style.id = 'table-whisper-popouts-css'; doc.head.appendChild(style); }
+      var rules = [];
+      var pick = function (list, into) {
+        Array.prototype.forEach.call(list || [], function (rule) {
+          if (rule.cssRules && rule.media) {   // @media: only its whisper-box rules
+            var inner = []; pick(rule.cssRules, inner);
+            if (inner.length) into.push('@media ' + rule.media.mediaText + ' {\n' + inner.join('\n') + '\n}');
+          } else if (rule.selectorText && rule.selectorText.indexOf('chat-whisper-popout') !== -1) into.push(rule.cssText);
+        });
+      };
+      Array.prototype.forEach.call(document.styleSheets, function (sheet) { try { pick(sheet.cssRules, rules); } catch (e) { /* another site's sheet */ } });
+      // The Table's own light text and small font would otherwise carry into the white box.
+      rules.unshift("#table-whisper-popouts .chat-whisper-popout { color: #111827; font: 14px/1.4 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: left; }");
+      style.textContent = rules.join('\n');
+      return host;
+    }
+    window.initChatPanel(window.tableChatUser.isGM, window.tableChatUser.name, { whisperHost: tableWhisperHost });
     // The panel opens itself closed; on the Table it is always open.
     document.getElementById('chat-panel').classList.remove('chat-panel--closed');
     document.getElementById('chat-panel').setAttribute('aria-hidden', 'false');

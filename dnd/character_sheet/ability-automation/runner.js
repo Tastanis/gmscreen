@@ -793,7 +793,52 @@
     return state.sourcePlacement || null;
   }
 
+  // `oncePer` on a token target block: "the first time on a turn..." (Burning Ash). Already used this turn (round,
+  // encounter): no pick and a chat line. Picking anyone uses it. `per: "user"` (default) is once for the user;
+  // `per: "target"` once for each creature, and one already hit is left out.
+  async function oncePerUsed(state, block, targetId = "") {
+    const once = block.oncePer;
+    if (!once || typeof state.context.checkScopedFlag !== "function") return false;
+    const sourceId = state.sourcePlacement?.id || "";
+    const flagTarget = once.per === "target" ? targetId : sourceId;
+    if (!sourceId || !flagTarget) return false;
+    const result = await state.context.checkScopedFlag({ scope: once.scope || "turn", key: once.key || block.name || "oncePer", sourceId, targetId: flagTarget });
+    return Boolean(result?.set);
+  }
+
+  async function settleOncePer(state, block) {
+    const once = block.oncePer;
+    if (!once || typeof state.context.setScopedFlag !== "function") return;
+    const sourceId = state.sourcePlacement?.id || "";
+    let picked = getTargetGroup(state, block.name).filter((target) => target?.id);
+    if (once.per === "target") {
+      const fresh = [];
+      for (const target of picked) {
+        if (await oncePerUsed(state, block, target.id)) {
+          await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "that creature"} already took it this ${once.scope || "turn"}.` });
+        } else fresh.push(target);
+      }
+      if (fresh.length !== picked.length) setTargetGroup(state, block.name, fresh);
+      picked = fresh;
+    }
+    if (!sourceId || !picked.length) return;
+    const flagTargets = once.per === "target" ? picked.map((target) => target.id) : [sourceId];
+    for (const targetId of flagTargets) {
+      await state.context.setScopedFlag({ scope: once.scope || "turn", key: once.key || block.name || "oncePer", sourceId, targetId });
+    }
+  }
+
   async function runTargetBlock(state, block) {
+    if (block.oncePer && block.oncePer.per !== "target" && await oncePerUsed(state, block)) {
+      await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${block.promptTitle || block.name || "this"} was already used this ${block.oncePer.scope || "turn"}.` });
+      setTargetGroup(state, block.name, []);
+      return;
+    }
+    await pickTargetBlock(state, block);
+    if (block.oncePer && !state.aborted) await settleOncePer(state, block);
+  }
+
+  async function pickTargetBlock(state, block) {
     const desired = getTokenTargetCount(block);
     const upTo = block.count?.mode === "upTo";
     // The board already owns the multi-pick/Done prompt and its cancellation.
@@ -980,8 +1025,40 @@
     }
   }
 
+  // `near: { teleport: true }`: the creatures within `within` squares of the square this ability's last teleport
+  // left OR the square it landed in (Burning Ash: "teleport away from or into a space adjacent to an enemy"). Where
+  // it landed is measured by the board (floor heights count); where it left, square by square on that floor.
+  // No teleport made: nobody.
+  async function teleportNearCandidates(state, block) {
+    const near = block.near || {};
+    const hop = state.lastTeleport;
+    if (!hop || typeof state.context.getActiveScenePlacements !== "function") return { anchors: [], candidates: [] };
+    const anchors = [{ id: hop.id, name: hop.name || "" }];
+    const casterId = state.sourcePlacement?.id || "";
+    const casterTeam = tokenTeam(liveTokenFor(state, state.sourcePlacement));
+    const within = Math.max(0, asInt(near.within, 1));
+    const placements = (await state.context.getActiveScenePlacements()) || [];
+    const candidates = [];
+    for (const placement of placements) {
+      if (!placement?.id || placement.hidden || placement.id === hop.id) continue;
+      if (placement.id === casterId && !near.includeSelf) continue;
+      if (!nearPredicateFits(block.predicate || "creature", placement, casterTeam, casterId)) continue;
+      const column = Number(placement.column);
+      const row = Number(placement.row);
+      if (!Number.isFinite(column) || !Number.isFinite(row)) continue;
+      const spot = { column, row, width: Math.max(1, Number(placement.width) || 1), height: Math.max(1, Number(placement.height) || 1), levelId: placement.levelId || "level-0" };
+      let landed = typeof state.context.getDistanceBetween === "function" ? Number(await state.context.getDistanceBetween(hop.id, placement.id)) : NaN;
+      if (!Number.isFinite(landed)) landed = planarSquaresBetween(hop.to, spot);
+      if (landed <= within || planarSquaresBetween(hop.from, spot) <= within) {
+        candidates.push({ id: placement.id, name: placement.name || placement.label || "Creature", placement });
+      }
+    }
+    return { anchors, candidates };
+  }
+
   async function nearCandidates(state, block) {
     const near = block.near || {};
+    if (near.teleport) return teleportNearCandidates(state, block);
     const anchors = getTargetGroup(state, near.group || "primary").filter((item) => item && item.id);
     if (!anchors.length || typeof state.context.getActiveScenePlacements !== "function" || typeof state.context.getDistanceBetween !== "function") {
       return { anchors, candidates: [] };
@@ -1049,11 +1126,21 @@
   }
 
   async function runNearTargetPick(state, block, cancelPromise) {
-    const { anchors, candidates } = await nearCandidates(state, block);
+    const found = await nearCandidates(state, block);
+    const anchors = found.anchors;
+    const candidates = [];
+    for (const candidate of found.candidates) {
+      if (!(await oncePerUsed(state, block, candidate.id))) candidates.push(candidate);
+    }
     const label = state.action.name || "Ability";
     if (!candidates.length) {
       const where = anchors.map((item) => item.name || "the target").join(", ") || "the target";
-      await postChat(state.context, { message: `${state.heroName} - ${label}: nobody fits near ${where}.` });
+      const message = !block.near?.teleport
+        ? `nobody fits near ${where}.`
+        : state.lastTeleport
+          ? `nobody fits next to where ${where} teleported from or to.`
+          : "no teleport was made, so nobody is next to one.";
+      await postChat(state.context, { message: `${state.heroName} - ${label}: ${message}` });
       setTargetGroup(state, block.name, []);
       return;
     }
@@ -4351,6 +4438,31 @@
     }
   }
 
+  // A token's squares as the board holds them now, or null when the board can't say.
+  async function readTokenFootprint(state, placementId) {
+    if (!placementId || typeof state.context.getPlacementById !== "function") return null;
+    const token = await state.context.getPlacementById(placementId);
+    const column = Number(token?.column);
+    const row = Number(token?.row);
+    if (!Number.isFinite(column) || !Number.isFinite(row)) return null;
+    return {
+      column,
+      row,
+      width: Math.max(1, Number(token.width) || 1),
+      height: Math.max(1, Number(token.height) || 1),
+      levelId: token.levelId || "level-0",
+    };
+  }
+
+  // Squares between two footprints on the same floor (1 = adjacent); Infinity on different floors.
+  function planarSquaresBetween(a, b) {
+    if (!a || !b) return Infinity;
+    if ((a.levelId || "level-0") !== (b.levelId || "level-0")) return Infinity;
+    const dx = Math.max(0, a.column - (b.column + b.width - 1), b.column - (a.column + a.width - 1));
+    const dy = Math.max(0, a.row - (b.row + b.height - 1), b.row - (a.row + a.height - 1));
+    return Math.max(dx, dy);
+  }
+
   async function applyTeleportEffect(state, effect, targets, _ctx) {
     const effectHasExplicitTarget = effect?.target !== undefined
       && effect?.target !== null
@@ -4393,6 +4505,10 @@
     for (const target of teleportTargets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+      // The square it leaves and the square it lands in are kept for a later `near: { teleport: true }` pick
+      // (Burning Ash: "teleport away from or into a space adjacent to an enemy"). Brandon, November 10, 2026: "Check
+      // Sharon's teleporting causing fire damage... When she teleported away from a creature."
+      const before = await readTokenFootprint(state, target.id);
       const result = await state.context.applyTeleport({
         placementId: target.id,
         distance,
@@ -4402,6 +4518,10 @@
       if (!result || result.skipped) {
         lines.push(`${target.name || "Target"}: teleport ${distance} skipped.`);
         continue;
+      }
+      const after = await readTokenFootprint(state, target.id);
+      if (before && after && (before.column !== after.column || before.row !== after.row || before.levelId !== after.levelId)) {
+        state.lastTeleport = { id: target.id, name: result.name || target.name || "", from: before, to: after };
       }
       const moved = Number.isFinite(result.movedDistance) ? result.movedDistance : distance;
       lines.push(`${result.name || target.name || "Target"} teleports ${moved} square${moved === 1 ? "" : "s"}.`);
@@ -4914,6 +5034,13 @@
   function getActionKind(state) {
     // Switched on by itself at a fight's start (an aura's autoOn): no action used.
     if (state.action?._ensureAuraOn) return "free";
+    // A maintained persistent ability used again at the start of the turn costs what its "Persistent N:" words say,
+    // not its own action (November 10, 2026): The Flesh, a Crucible "(no action required)", Conflagration "you can use
+    // a maneuver to use this ability again". Words that name neither leave the ability's own action.
+    if (state.action?._maintainRerun) {
+      const rerun = getPersistentRerunActionKind(state.action);
+      if (rerun) return rerun;
+    }
     // "No action required" (Mantle of Essence switched on or off): it uses neither the main action nor the maneuver.
     if (/no action|free maneuver|free triggered/i.test(String(state.action?.actionLabel || ""))) return "free";
     const text = String(
@@ -5042,6 +5169,27 @@
     walk(action, 0);
     const match = texts.join("\n").match(/\bPersistent\s+(\d+)\b/i);
     return match ? Number(match[1]) : 0;
+  }
+
+  // What the "Persistent N: ..." entry says using it again takes: "free" (no action required), "maneuver", "main", or
+  // "" when its words name none of them.
+  function getPersistentRerunActionKind(action) {
+    const texts = [];
+    const walk = (value, depth) => {
+      if (value == null || depth > 4) return;
+      if (typeof value === "string") texts.push(value);
+      else if (Array.isArray(value)) value.forEach((item) => walk(item, depth + 1));
+      else if (typeof value === "object") Object.entries(value).forEach(([key, item]) => { if (key !== "automation") walk(item, depth + 1); });
+    };
+    walk(action, 0);
+    const plain = texts.join("\n").replace(/<[^>]*>/g, " ");
+    const entry = plain.match(/\bPersistent\s+\d+\s*:\s*([^\n]*)/i);
+    if (!entry) return "";
+    const words = entry[1].split(/\.(?:\s|$)/)[0];   // its first sentence: what using it again takes
+    if (/no action/i.test(words)) return "free";
+    if (/\bmaneuver\b/i.test(words)) return "maneuver";
+    if (/\bmain action\b/i.test(words)) return "main";
+    return "";
   }
 
   function fireActionUsedEvent(state, force = false) {

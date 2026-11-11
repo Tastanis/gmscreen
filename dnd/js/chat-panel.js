@@ -128,7 +128,28 @@
             }
         }
         const whisperContainer = document.getElementById('chat-whisper-targets');
-        const whisperPopoutHost = document.getElementById('chat-whisper-popouts');
+        // options.whisperHost: a function giving the element whisper pop-outs go in, when that is not this page's
+        // own #chat-whisper-popouts. The Table's chat is a window (a frame), and a pop-out inside it could not leave
+        // it: "The whisper pop-out in chat is stuck in the chat. It should pop out as its own box." (Brandon,
+        // November 10, 2026). The Table's chat page gives an element on the Table itself (table/chat.php).
+        const ownWhisperPopoutHost = document.getElementById('chat-whisper-popouts');
+        function getWhisperPopoutHost() {
+            if (options && typeof options.whisperHost === 'function') {
+                try {
+                    const host = options.whisperHost();
+                    if (host) {
+                        return host;
+                    }
+                } catch (error) {
+                    // Fall back to this page's own host.
+                }
+            }
+            return ownWhisperPopoutHost;
+        }
+        // The window a pop-out is shown in (the Table's, when it is there), for its size.
+        function popoutView(element) {
+            return (element && element.ownerDocument && element.ownerDocument.defaultView) || window;
+        }
         const whisperAlertHost = document.getElementById('chat-whisper-alerts');
         const sceneDisplay = document.getElementById('scene-display');
         const sceneMap = document.getElementById('scene-map');
@@ -412,8 +433,9 @@
             }
 
             const element = popoutData.element;
-            const maxLeft = Math.max(0, window.innerWidth - element.offsetWidth);
-            const maxTop = Math.max(0, window.innerHeight - element.offsetHeight);
+            const view = popoutView(element);
+            const maxLeft = Math.max(0, view.innerWidth - element.offsetWidth);
+            const maxTop = Math.max(0, view.innerHeight - element.offsetHeight);
             const clampedLeft = Math.min(Math.max(left, 0), maxLeft);
             const clampedTop = Math.min(Math.max(top, 0), maxTop);
 
@@ -444,7 +466,7 @@
                 const defaultLeft = 24 + (whisperPopoutStackOffset % 3) * 24;
                 const defaultTop = Math.max(
                     24,
-                    window.innerHeight - element.offsetHeight - 24 - whisperPopoutStackOffset
+                    popoutView(element).innerHeight - element.offsetHeight - 24 - whisperPopoutStackOffset
                 );
                 whisperPopoutStackOffset = (whisperPopoutStackOffset + 48) % 240;
                 setWhisperPopoutPosition(popoutData, defaultLeft, defaultTop);
@@ -508,19 +530,45 @@
             });
         }
 
-        window.addEventListener('resize', () => {
+        function keepWhisperPopoutsInView() {
             whisperPopouts.forEach((popoutData) => {
                 if (!popoutData || !popoutData.element || !popoutData.position) {
                     return;
                 }
                 setWhisperPopoutPosition(popoutData, popoutData.position.left, popoutData.position.top);
             });
-        });
+        }
+        window.addEventListener('resize', keepWhisperPopoutsInView);
+        // Pop-outs shown on another page (the Table) follow that page's size, and go when this chat page goes
+        // (its window closed or reloaded), so none is left behind that nothing answers.
+        let foreignPopoutView = null;
+        function watchForeignPopoutView(view) {
+            if (!view || view === window || foreignPopoutView === view) {
+                return;
+            }
+            foreignPopoutView = view;
+            view.addEventListener('resize', keepWhisperPopoutsInView);
+            window.addEventListener('pagehide', () => {
+                try {
+                    view.removeEventListener('resize', keepWhisperPopoutsInView);
+                } catch (error) {
+                    // The other page may already be gone.
+                }
+                whisperPopouts.forEach((popoutData) => {
+                    if (popoutData && popoutData.element && popoutData.element.parentNode) {
+                        popoutData.element.parentNode.removeChild(popoutData.element);
+                    }
+                });
+                whisperPopouts.clear();
+            });
+        }
 
         function createWhisperPopout(targetId) {
+            const whisperPopoutHost = getWhisperPopoutHost();
             if (!whisperPopoutHost) {
                 return null;
             }
+            watchForeignPopoutView(popoutView(whisperPopoutHost));
 
             const popout = document.createElement('div');
             popout.className = 'chat-whisper-popout';
@@ -662,6 +710,13 @@
 
             if (!popout || !popout.element) {
                 return;
+            }
+            // Its box was taken off the page that showed it (the Table's): put it back.
+            if (!popout.element.isConnected) {
+                const host = getWhisperPopoutHost();
+                if (host) {
+                    host.appendChild(popout.element);
+                }
             }
 
             popout.element.classList.add('chat-whisper-popout--open');

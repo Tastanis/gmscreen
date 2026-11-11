@@ -11,6 +11,8 @@ import {normalizeSheetConditions, durationShort} from '../../../../character_she
 import {editHeroCondition, CONDITION_SYNC_CHANNEL} from '../../../../character_sheet/parts/condition-edits.js';
 import {createSheetLive} from '../../../../character_sheet/parts/sheet-live.js';
 import {noteResourceLevel} from './resource-levels.js';
+// The hero's passives (the sheet's features) on the ability bar too (Brandon, November 10, 2026).
+import {PASSIVE_TRAY_CATEGORY, heroPassives} from './hero-passives.js';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
 const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -1253,6 +1255,13 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
             height: itemRect.height,
           },
         });
+      } else if (action && abilityItem.dataset.abilityCategory === PASSIVE_TRAY_CATEGORY.key) {
+        // A passive with nothing to run (always on, or just to know about): the click shows its card, as hovering
+        // does (Brandon, November 10, 2026). Its chat dot posts it.
+        event.preventDefault();
+        event.stopPropagation();
+        renderAbilityPreview(abilityPreview, action, PASSIVE_TRAY_CATEGORY.key, activeSheet);
+        placeAbilityPreview(abilityPreview, abilityItem);
       } else if (action) {
         // No automation: the click posts the ability's card to chat, as its chat dot does.
         event.preventDefault();
@@ -1528,7 +1537,7 @@ function renderAbilityTray(tray, sheet, { activeCategory = null, activeToken = n
   const hasReadyTrigger = Boolean(placement?.hasReadyTrigger);
   const mainActionUsed = Boolean(placement?.mainActionUsedThisTurn);
   const maneuverUsed = Boolean(placement?.maneuverUsedThisTurn);
-  const trayCategories = [...ABILITY_CATEGORIES, ITEM_TRAY_CATEGORY];
+  const trayCategories = [...ABILITY_CATEGORIES, PASSIVE_TRAY_CATEGORY, ITEM_TRAY_CATEGORY];
   const previousActiveCategory = getActiveAbilityTrayCategory(tray);
   const previousList = tray.querySelector('.vtt-character-ability-category.is-active .vtt-character-ability-list');
   const previousScrollTop = previousList ? previousList.scrollTop : 0;
@@ -2823,6 +2832,8 @@ function actionHasKeyword(action, keyword) {
 }
 
 function getAbilityActions(sheet, categoryKey, opts = {}) {
+  // Passives: the sheet's features drawn as ability cards (hero-passives.js).
+  if (categoryKey === PASSIVE_TRAY_CATEGORY.key) return heroPassives(sheet);
   const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
   const list = Array.isArray(actions[categoryKey]) ? actions[categoryKey] : [];
   const baseList = list.map((action, index) => ({
@@ -4042,12 +4053,15 @@ function summarizeAbility(action, categoryKey) {
 }
 
 function getAbilityCategoryLabel(categoryKey) {
-  return ABILITY_CATEGORIES.find((category) => category.key === categoryKey)?.label || 'Ability';
+  return [...ABILITY_CATEGORIES, PASSIVE_TRAY_CATEGORY].find((category) => category.key === categoryKey)?.label || 'Ability';
 }
 
 function getAbilityIcon(categoryKey) {
   if (categoryKey === 'triggers') {
     return '!';
+  }
+  if (categoryKey === PASSIVE_TRAY_CATEGORY.key) {
+    return '*';
   }
   if (categoryKey === 'mains') {
     return '>';

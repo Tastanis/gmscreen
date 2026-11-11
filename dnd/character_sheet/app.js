@@ -242,7 +242,7 @@ function render() {
 
 function renderStatus() {
   host('status').innerHTML = statusHtml(state.sheet, {
-    characterId: character, portrait: state.portrait, canEdit, conditions: state.sheet.hero.conditions || [], fallbackName: character,
+    characterId: character, portrait: state.portrait, canEdit, editing: state.editing, conditions: state.sheet.hero.conditions || [], fallbackName: character,
     conditionsTitle: state.token?.onMap ? 'Add a condition to this hero (and their token on the map)' : 'Add a condition',
   });
   wireConditionPicker(host('status'), (choice) => changeCondition('add', choice));
@@ -767,6 +767,15 @@ root.addEventListener('click', async (event) => {
     const now = Math.max(0, Number(state.sheet.hero.surges) || 0);
     state.sheet.hero.surges = Math.max(0, now + Number(el.dataset.characterSurgeDelta));
     state.sheet.hero.surgesUsed = 0;
+    renderStatus(); saveSheet(); return;
+  }
+  // Edit mode's − / + on Recoveries (Brandon, November 10, 2026: "while in edit mode ... the ability to tick them up or
+  // down"): the count only, no healing; from nought to the maximum. Saved as a counter, like Surges.
+  if ((el = hit('[data-character-recovery-delta]'))) {
+    if (!state.editing) return;
+    const v = state.sheet.hero.vitals ||= {}, max = Number(v.recoveriesMax) || 0;
+    const next = Math.max(0, (Number(v.currentRecoveries ?? max) || 0) + Number(el.dataset.characterRecoveryDelta));
+    v.currentRecoveries = max > 0 ? Math.min(max, next) : next;
     renderStatus(); saveSheet(); return;
   }
   if ((el = hit('[data-character-victory-delta]')) || hit('[data-character-add-victory]')) {

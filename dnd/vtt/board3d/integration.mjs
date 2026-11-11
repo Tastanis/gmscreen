@@ -12,6 +12,7 @@ import {createWallOverlayLayer} from './wall-overlay.mjs';
 import {createTerrainBrushLayer} from './terrain-brush.mjs';
 import {buildAreaVolume} from './area-volume.mjs';
 import {chooseSurface} from './surface-choice.mjs';
+import {tokenLookSettings,tokenScreenMetrics} from './token-looks.mjs';
 
 // The 3D board. It draws the scene and the tokens; every rule, command and
 // panel stays the VTT's own. The 2D map layer stays in place, transparent, on
@@ -97,7 +98,7 @@ async function mount(){
   const foot=shown?view.project(turnStart):null;
   if(!foot?.visible){turnGhost?.remove();turnGhost=null;return;}
   if(!turnGhost){turnGhost=document.createElement('div');turnGhost.className='vtt3d-turn-ghost';turnGhost.setAttribute('aria-hidden','true');overlayHost.append(turnGhost);}
-  const across=view.project({...turnStart,x:turnStart.x+turnStart.width*.5}),size=Math.max(22,Math.min(110,Math.hypot(across.x-foot.x,across.y-foot.y)*2));
+  const across=view.project({...turnStart,x:turnStart.x+turnStart.width*.5}),size=tokenScreenMetrics(Math.hypot(across.x-foot.x,across.y-foot.y)*2,Math.max(turnStart.width||1,turnStart.height||1),tokenLookSettings().tokenScreen).size; // per square, like the token (November 10, 2026)
   const image=turnStart.image?`url(${JSON.stringify(turnStart.image)})`:'none';if(turnGhost.dataset.image!==image){turnGhost.dataset.image=image;turnGhost.style.backgroundImage=image;}
   turnGhost.style.width=turnGhost.style.height=`${size}px`;turnGhost.style.left=`${canvasRect.left-hostRect.left+foot.x-size/2}px`;turnGhost.style.top=`${canvasRect.top-hostRect.top+foot.y-size*.85}px`;}
  let buildTimer=0,buildGeneration=0,builtSceneId=null,loadingNote=null;
@@ -555,15 +556,20 @@ async function mount(){
    const stacks=new Map();for(const p of recordById.values()){const key=[Math.round(p.x*2),Math.round(p.y*2),Math.round(p.z)].join(',');if(!stacks.has(key))stacks.set(key,[]);stacks.get(key).push(p);}
    const spread=new Map();for(const list of stacks.values()){if(list.length<2)continue;list.sort((a,b)=>(stackOrderOf(a.id)-stackOrderOf(b.id))||String(a.id).localeCompare(String(b.id)));list.forEach((p,i)=>spread.set(p.id,{offset:i-(list.length-1)/2,order:i}));}
    for(const node of tokenNodes){placedElements.add(node);const p=recordById.get(node.dataset.placementId);if(!p){node.style.setProperty('--vtt3d-visible','hidden');continue;}
-    const foot=view.project(p),top=view.project({...p,z:p.z+Math.max(p.width,p.height)*1.1}),across=view.project({...p,x:p.x+Math.max(p.width,p.height)*.5});const size=Math.max(25,Math.min(110,Math.hypot(across.x-foot.x,across.y-foot.y)*2));
+    const foot=view.project(p),top=view.project({...p,z:p.z+Math.max(p.width,p.height)*1.1}),across=view.project({...p,x:p.x+Math.max(p.width,p.height)*.5});
+    // Box and --tok-unit per square on screen (token-looks.mjs), so a huge creature's bars and conditions read like a
+    // size-1 creature's and grow with the zoom (Brandon, November 10, 2026: the Thorn Briar's were "shrunken down so
+    // small I couldn't even see them when I zoomed in"; the box was held under 110 px and the unit divided by its size).
+    const screenSize=tokenScreenMetrics(Math.hypot(across.x-foot.x,across.y-foot.y)*2,Math.max(p.width,p.height),tokenLookSettings().tokenScreen),size=screenSize.size;
     const shared=spread.get(p.id);if(shared)foot.x+=shared.offset*size*.55;
-    // Tokens on one square: each says so, in large print over its head, so a model hidden inside another is not
-    // missed (Brandon, October 16, 2026: "a big indicator that the other model is hidden under the first").
+    // Tokens on one square: each says so, so a model hidden inside another is not missed (Brandon, October 16, 2026:
+    // "a big indicator that the other model is hidden under the first"); since November 10, 2026 a small badge under
+    // its foot and a faint outline, off the health bar (integration.css).
     {const count=shared?(stacks.get([Math.round(p.x*2),Math.round(p.y*2),Math.round(p.z)].join(','))||[]).length:0;const want=count>1?String(count):'';
      if((node.dataset.vtt3dStacked||'')!==want){if(want){node.dataset.vtt3dStacked=want;node.title=`${count} tokens share this square`;}else{delete node.dataset.vtt3dStacked;if(/share this square$/.test(node.title||''))node.removeAttribute('title');}}}
     // Badges, HP bars and labels are sized in token units (board.css --tok-unit), so they scale with the token;
     // a quarter bigger than on the flat board, so they read on the 3D one (Brandon, October 2026).
-    node.style.setProperty('--tok-unit',`${(1.25*size/(64*Math.max(p.width,p.height))).toFixed(3)}px`);
+    node.style.setProperty('--tok-unit',`${screenSize.tokUnit.toFixed(3)}px`);
     // A flat token stands as its portrait over its square. A token with a mini is the mini: its box covers the
     // model from its base to its head, so the model is what is grabbed and its popups sit just above its head
     // (integration.css .vtt3d-mini), with nothing invisible floating over it.

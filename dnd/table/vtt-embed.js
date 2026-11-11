@@ -75,7 +75,7 @@
       ['vision', 'Vision for everyone', '[data-action="sight-test"]'],
       ['vision', () => ($('[data-action="sight-look"]')?.textContent || 'Unseen: Grey').trim() + ' — click to change', '[data-action="sight-look"]', true],
       ['find', gm ? 'Find token' : 'My token', '[data-action="return-token-floor"]'],
-      ['first', '1st person', '[data-action="first-person"]'],
+      ['first', '1st person: walk / fly (V)', '[data-action="first-person"]'],   // W A S D walk, the mouse aims (Brandon, November 10, 2026)
     ].filter(([icon]) => gm || icon === 'find' || icon === 'first');   // players: their token and 1st person only, no say over vision (Brandon, October 27, 2026)
     openMenu(anchor, `<h5>View</h5>
       ${'' /* height and Show players live in the top bar, always in sight: not repeated here */}
@@ -83,7 +83,9 @@
       ${rows.map(([icon, label, sel, sub]) => { const b = $(sel); if (!b || (sub && !$('[data-action="sight-test"][aria-pressed="true"]'))) return ''; const on = pressed(sel); return `<button class="te-row${on ? ' on' : ''}" data-sel='${sel}'>${svg(icon)}${typeof label === 'function' ? label() : label}${on ? '<span class="k">on</span>' : ''}</button>`; }).join('')}
       ${gm && window.vttVisionForget && /Explored/.test($('[data-action="sight-look"]')?.textContent || '') && $('[data-action="sight-test"][aria-pressed="true"]') ? `<button class="te-row" data-forget>${svg('clear')}Forget what the party explored<span class="k">this scene</span></button>` : ''}`,
     (m) => {
-      m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel); setTimeout(() => { viewMenu(anchor); menuTool = 'view'; }, 60); });
+      m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel);
+        if (r.dataset.sel.includes('first-person')) { closeMenu(); setTimeout(refresh, 60); return; }   // 1st person takes the board's clicks and keys: no menu left over it (November 10, 2026)
+        setTimeout(() => { viewMenu(anchor); menuTool = 'view'; }, 60); });
       m.querySelector('[data-forget]')?.addEventListener('click', () => { if (!window.confirm('Forget every square the party has explored on this scene? It goes black again for them.')) return; window.vttVisionForget(); closeMenu(); });
       m.querySelectorAll('[data-l]').forEach((b) => b.onclick = () => { press(`[data-action="view-map-level-${b.dataset.l}"]`); setTimeout(() => { const n = m.querySelector('[data-l="name"]'); if (n) n.textContent = levelName(); refresh(); }, 80); });
     });
@@ -252,6 +254,61 @@
 
   // What the Table's side drawers cover of the map (table-apps.js sendMapInsets): the ability trays centre in the rest.
   function setInsets(insets) { try { window.vttBoardFreeArea?.setOutside?.(insets); } catch (_) { /* not mounted yet */ } }
+
+  // ---------------------------------------------------------------- ability cards above the Table's windows
+  // Brandon, November 10, 2026: "The chat while over the VTT covers the ability. ... I need the ability to show up over
+  // the chat so I can see the ability. The ability pops up while I'm hovering, shows up over the chat, and then goes
+  // away when I move off of it." The hover card (hero and monster ability bars) is drawn in this page, so a Table
+  // window over the map covers it. While one is open, a copy is drawn in the Table's own page above every window, on
+  // the same spot of the screen, and it goes when the card closes. A map on its own (not framed by the Table) keeps
+  // its card as before.
+  const CARD = '.vtt-character-ability-preview', CARD_OPEN = 'vtt-character-ability-preview--open';
+  let frame = null, table = null;
+  try { frame = window.frameElement; table = frame && window.parent !== window ? window.parent.document : null; } catch (_) { table = null; }
+  if (table && frame) {
+    let lifted = null, queued = false;
+    const watched = new WeakSet();
+    const drop = () => { lifted?.remove(); lifted = null; doc.documentElement.classList.remove('te-card-lifted'); };
+    // The card's look as drawn here, written onto the copy (the Table's page has none of the map's styles).
+    const copyLook = (from, to) => {
+      const cs = getComputedStyle(from);
+      for (let i = 0; i < cs.length; i += 1) if (cs[i] !== 'visibility') to.style.setProperty(cs[i], cs.getPropertyValue(cs[i]));   // the card here is hidden while lifted
+      for (let i = 0; i < from.children.length && i < to.children.length; i += 1) copyLook(from.children[i], to.children[i]);
+    };
+    const paintLifted = () => {
+      queued = false;
+      const card = [...doc.querySelectorAll(CARD)].find((n) => n.classList.contains(CARD_OPEN));
+      const r = card?.getBoundingClientRect();
+      if (!card || !frame.isConnected || !r.width || !r.height) { drop(); return; }
+      const f = frame.getBoundingClientRect(), view = table.defaultView;
+      const copy = card.cloneNode(true);
+      copy.removeAttribute('id'); copy.removeAttribute('aria-hidden'); copy.setAttribute('aria-hidden', 'true');
+      copy.classList.add('te-lifted-card');
+      copyLook(card, copy);
+      // The same spot on the screen, kept inside the Table's page.
+      const left = Math.max(4, Math.min(view.innerWidth - r.width - 4, f.left + frame.clientLeft + r.left));
+      const top = Math.max(4, Math.min(view.innerHeight - r.height - 4, f.top + frame.clientTop + r.top));
+      Object.assign(copy.style, { position: 'fixed', left: `${Math.round(left)}px`, top: `${Math.round(top)}px`, right: 'auto', bottom: 'auto', margin: '0',
+        boxSizing: 'border-box', width: `${Math.round(r.width)}px`, height: `${Math.round(r.height)}px`, maxHeight: 'none', transform: 'none',
+        zIndex: '2147483600', pointerEvents: 'none', visibility: 'visible', display: 'block' });
+      lifted?.remove(); lifted = copy; table.body.append(copy);
+      copy.scrollTop = card.scrollTop;
+      doc.documentElement.classList.add('te-card-lifted');
+    };
+    const queue = () => { if (queued) return; queued = true; (window.requestAnimationFrame || setTimeout)(paintLifted); };
+    const watch = (n) => {
+      if (n?.nodeType !== 1 || !n.matches(CARD) || watched.has(n)) return;
+      watched.add(n);
+      new MutationObserver(queue).observe(n, { attributes: true, attributeFilter: ['class', 'style'], childList: true, subtree: true, characterData: true });
+      queue();
+    };
+    doc.querySelectorAll(CARD).forEach(watch);
+    new MutationObserver((list) => list.forEach((m) => { m.addedNodes.forEach(watch); if ([...m.removedNodes].some((n) => n.nodeType === 1 && n.matches(CARD))) queue(); })).observe(doc.body, { childList: true });
+    // The pointer moving on the Table's own page is off the map, so off any ability: no card left behind.
+    const offMap = () => { if (lifted) drop(); };
+    table.addEventListener('pointermove', offMap, { passive: true });
+    addEventListener('pagehide', () => { table.removeEventListener('pointermove', offMap); drop(); });
+  }
 
   window.vttEmbed = { tools: () => TOOLS.map(({ sel, on, ...t }) => t), run, status, dock, refresh, setInsets, isActive: (id) => { const t = TOOLS.find((x) => x.id === id); return Boolean(t && (t.on ? t.on() : t.sel && t.toggle && pressed(t.sel))); } };   // always true or false: an undefined made the rail flip a tool on and off every second
   build();

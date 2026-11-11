@@ -5052,6 +5052,7 @@ export function mountBoardInteractions(store, routes = {}) {
         eventTargetId: record.eventTargetId || placementId,
         undoGroup: record.undoGroup || '',
         sentence: record.sentence || '',
+        routed: true,
       });
     } finally {
       removePendingHeroResourcePromptRecord(placementId, record.id);
@@ -5069,11 +5070,14 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup = '', sentence = '' }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup = '', sentence = '', routed = false }) {
     // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
     const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
     const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
-    if (limitKey && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
+    // A popup sent here by another page with an "offered" limit was counted there as it was sent (that is what stops
+    // a second one): that mark is this popup's own and does not hold it back (November 10, 2026).
+    const reservedBySender = routed && rule.limit?.markOn === 'offered';
+    if (limitKey && !reservedBySender && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
     if (lockKey) pendingResourceLimitKeys.add(lockKey);
     const roundAtOffer = combatRound;
     try {
@@ -5136,6 +5140,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const choice = await queueMaintainPrompt({ placement, maintained, gain: amount, resourceName, current: change.current });
       if (!choice?.applied) return;
       setMaintainedAbilities(placement.id, choice.kept);
+      endZonesOfDroppedMaintenance(placement.id, maintained.filter((item) => !choice.kept.some((keep) => keep.id === item.id)));
       const upkeep = choice.kept.reduce((sum, item) => sum + item.value, 0);
       amount = Math.max(0, amount - upkeep);
       change = normalizeHeroicResourceChange(rule, sheet, amount);
@@ -7220,10 +7225,35 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!ownerId || (when !== 'startOfTurn' && when !== 'endOfTurn')) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
-    const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when);
+    // A persistent ability its owner maintains keeps its area past the start of the turn (O Flower Aid, O Earth Defend:
+    // "Persistent 1: The area remains until the start of your next turn"). The start-of-turn question decides; an
+    // ability let go there ends its area then (endZonesOfDroppedMaintenance). November 10, 2026.
+    const kept = getMaintainedAbilities(getPlacementFromStore(ownerId));
+    const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when
+      && !kept.some((item) => zoneBelongsToMaintained(z, item)));
     if (!matching.length) return;
     const owner = tokenLabel(getPlacementFromStore(ownerId)) || 'its owner';
     return endPersistentZonesByTime(matching, `${when === 'endOfTurn' ? 'end' : 'start'} of ${owner}'s turn`);
+  }
+
+  function zoneBelongsToMaintained(zone, item) {
+    if (!zone || !item) return false;
+    if (item.abilityId && zone.abilityId) return zone.abilityId === item.abilityId;
+    const name = String(item.name || '').trim().toLowerCase();
+    return Boolean(name) && String(zone.abilityName || '').trim().toLowerCase() === name;
+  }
+
+  // Abilities let go at the start-of-turn question: an area they kept going past the start of the turn ends now
+  // (the Director is asked first, as for any area whose time is up).
+  function endZonesOfDroppedMaintenance(ownerId, dropped) {
+    if (!ownerId || !Array.isArray(dropped) || !dropped.length) return;
+    const zones = getActivePersistentZones().filter((zone) => zone && zone.casterId === ownerId
+      && (zone.expiresAt === 'startOfTurn' || zone.expiresAt === 'endOfTurn')
+      && dropped.some((item) => zoneBelongsToMaintained(zone, item)));
+    if (!zones.length) return;
+    const owner = tokenLabel(getPlacementFromStore(ownerId)) || 'Its owner';
+    endPersistentZonesByTime(zones, `${owner} stopped maintaining ${dropped.map((item) => item.name).join(', ')}`)
+      ?.catch?.((error) => console.warn('[VTT] maintained area could not be ended', error));
   }
 
   // ---------- a zone's time is up (Brandon, October 2026: ask the Director first) ----------
@@ -13506,12 +13536,13 @@ export function mountBoardInteractions(store, routes = {}) {
       completeActiveCombatant();
     };
 
-    const handleKeydown = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        handleCancel();
-      }
-    };
+    // Escape no longer cancels the running turn (Brandon, November 10, 2026: "it just kept asking him if he wanted to
+    // start his turn like 3 or 4 times during his one turn. While he was actively taking it."). This listener sat on
+    // the whole page, so the Escape that put the ruler away, closed the dice or a panel, or tried to shut a popup that
+    // has no Escape of its own also ended the turn, with no question. The turn went back to picking, his next move or
+    // ability asked "Start Zepha's turn?" and every start ran the start of the turn again (Essence, persistent
+    // abilities). Cancel Turn stays on its button.
+    const handleKeydown = () => {};
 
     const handleResize = () => {
       if (hasDragged) {

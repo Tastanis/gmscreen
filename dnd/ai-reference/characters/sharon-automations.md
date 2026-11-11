@@ -252,11 +252,19 @@ Ranged-only, per the book.
 
 ---
 
+## Burning Ash (built into both teleports)
+
+Book (2nd-level Black Ash feature): the first time on a turn you use a **shadow ability** to teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility. So it rides on **Black Ash Teleport** and **In All This Confusion** only; a plain drag teleport on the map, or the Director putting her token somewhere, never sets it off.
+
+November 10, 2026 (Brandon: "one of her regular teleports away did not cause fire damage"): the old card made Sharon click the enemy herself, so an enemy she had just left (often out of sight once she landed behind cover) could be missed. The card now uses `near: { "teleport": true, "within": 1 }`: every enemy next to the square she **left** or the square she **landed in** is pre-picked and pulses; click a token to take it out or add one, then Done. Nobody there, or the teleport was skipped: a chat line, no damage. `oncePer: { "scope": "turn", "key": "burning-ash" }` is shared by both abilities, so a second teleport in the same turn skips it (an enemy's turn is its own turn, so In All This Confusion still burns there). **Re-paste both blocks** onto the live sheet.
+
+---
+
 ## In All This Confusion (with Too Slow + Burning Ash built in)
 
 Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](uploads/sharon-in-all-this-confusion.json)
 
-**Flow:** take damage → click the `!` → halve the damage → asks "Spend 5 Insight?" *only if affordable* (the Too Slow gate; if yes → free strike the attacker → asks about the Recovery → shows the Too Slow "ignore effects" reminder) → asks how much extra Insight to teleport, then teleports → asks who takes the Burning Ash fire damage.
+**Flow:** take damage → click the `!` → halve the damage → asks "Spend 5 Insight?" *only if affordable* (the Too Slow gate; if yes → free strike the attacker → asks about the Recovery → shows the Too Slow "ignore effects" reminder) → asks how much extra Insight to teleport, then teleports → Burning Ash (see below).
 
 > Note: the "spend to teleport farther" question pops at the teleport step (free strike must happen first), and the ignore-effects reminder shows as the last part of the Too Slow step rather than dead last. All mechanics are in the correct order.
 
@@ -269,7 +277,7 @@ Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](upload
     "range": "Self",
     "target": "Self",
     "trigger": "You take damage.",
-    "description": "You vanish in a plume of black smoke to avoid danger.\n\nEffect: You take half the damage, then can teleport up to 4 squares after the triggering effect resolves.\nSpend 1+ Insight: You teleport 1 additional square for each insight spent.\n\nToo Slow (5 Insight, built in): You ignore any effects associated with the triggering damage. Before you teleport, you can make a free strike against a creature who damaged you. After you teleport, you can spend a Recovery.\n\nBurning Ash: The first time on a turn you teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
+    "description": "You vanish in a plume of black smoke to avoid danger.\n\nEffect: You take half the damage, then can teleport up to 4 squares after the triggering effect resolves.\nSpend 1+ Insight: You teleport 1 additional square for each insight spent.\n\nToo Slow (5 Insight, built in): You ignore any effects associated with the triggering damage. Before you teleport, you can make a free strike against a creature who damaged you. After you teleport, you can spend a Recovery.\n\nBurning Ash: The first time on a turn you use a shadow ability to teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -303,7 +311,7 @@ Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](upload
           { "kind": "teleport", "target": "self", "distance": 4, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
         ]
       },
-      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "upTo" }, "optional": true, "promptTitle": "Burning Ash (optional)", "promptText": "First time this turn: pick the enemy you teleported away from or adjacent to.", "distance": { "form": "ranged", "value": 12 } },
+      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "Enemies next to where you left or landed take fire damage (first time this turn). Click to add or remove, then Done." },
       { "type": "effect", "target": "burningAsh", "effects": [ { "kind": "damage", "amount": 0, "attribute": "A", "damageType": "fire", "raw": true } ] }
     ]
   }
@@ -363,7 +371,7 @@ The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `
     "keywords": "Magic",
     "range": "Self",
     "target": "Self",
-    "description": "In a swirl of black ash, you step from one place to another.\n\nEffect: You teleport up to 5 squares. If you have concealment or cover at your destination, you can use the Hide maneuver even if you are observed. If you successfully hide using this maneuver, you gain 1 surge.\nSpend 1+ Insight: You teleport 1 additional square for each insight spent.\n\nBurning Ash: The first time on a turn you teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
+    "description": "In a swirl of black ash, you step from one place to another.\n\nEffect: You teleport up to 5 squares. If you have concealment or cover at your destination, you can use the Hide maneuver even if you are observed. If you successfully hide using this maneuver, you gain 1 surge.\nSpend 1+ Insight: You teleport 1 additional square for each insight spent.\n\nBurning Ash: The first time on a turn you use a shadow ability to teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -381,7 +389,7 @@ The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `
           { "kind": "ifPrompt", "question": "Hide at your destination (concealment/cover)?", "yesLabel": "Yes — gain 1 surge", "noLabel": "No", "target": "self", "then": [ { "kind": "surgeGain", "amount": 1, "target": "self" } ], "else": [] }
         ]
       },
-      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "upTo" }, "optional": true, "promptTitle": "Burning Ash (optional)", "promptText": "First time this turn: pick the enemy you teleported away from or adjacent to.", "distance": { "form": "ranged", "value": 12 } },
+      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "Enemies next to where you left or landed take fire damage (first time this turn). Click to add or remove, then Done." },
       { "type": "effect", "target": "burningAsh", "effects": [ { "kind": "damage", "amount": 0, "attribute": "A", "damageType": "fire", "raw": true } ] }
     ]
   }
