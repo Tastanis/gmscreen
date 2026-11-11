@@ -5,7 +5,7 @@ require_once __DIR__.'/WallObjects.php';
 require_once __DIR__.'/MapLabels.php';
 /** Server-owned fall geometry; damage remains an explicitly reviewed outcome. */
 final class FallOutcome {
- public static function plan(array $from,array $to,array $config,string $kind,array $path=[],?string $cause=null):?array {
+ public static function plan(array $from,array $to,array $config,string $kind,array $path=[],?string $cause=null,bool $climbedDown=false):?array {
   if(!isset($from['column'],$from['row'],$to['column'],$to['row']))return null;
   if(in_array($kind,['undo','teleport'],true)||FloorGeometry::isAirborne($to))return null;
   $landing=WallMovement::height($to,$config);$top=null;
@@ -31,11 +31,44 @@ final class FallOutcome {
   // It lands on the highest thing below where it fell from: a box top, a step, a deck (Brandon, November 8, 2026),
   // never on the ground inside an object it fell into.
   $onto=$top!==null?self::surfaceBelow($to,$top,$config):null;
+  $ground=$landing;
   if($onto&&$onto['height']>$landing+1e-6)$landing=(float)$onto['height'];else $onto=null;
   if($top===null||$top-$landing<.999999)return null;
+  // Onto a breakable thing hard enough to break it (Brandon, November 10, 2026): through it, on down to what is under it.
+  $through=$onto&&!$climbedDown?self::breakThrough($to,$top,$onto,$ground,$config):null;
+  if($through){$onto=$through['onto'];$landing=$through['landing'];}
   // The nearest whole square, as a climb up the same face is counted (stepRise in terrain-math.mjs):
   // a 3.75-high face is 4 squares both ways. A drop of less than one square is still no fall.
-  return ['squares'=>max(1,(int)floor($top-$landing+.5+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false,...($onto?['landsOn'=>['id'=>$onto['id'],'levelId'=>$onto['levelId']]]:[])];
+  return ['squares'=>max(1,(int)floor($top-$landing+.5+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false,...($onto?['landsOn'=>['id'=>$onto['id'],'levelId'=>$onto['levelId']]]:[]),
+   ...($through?['breaks'=>$through['breaks'],'breakThrough'=>$through['pieces'],...($onto?[]:['throughToGround'=>true])]:[])];
+ }
+ /**
+  * A fall onto the top of a breakable object, hard enough to break it: the squares fallen onto it at least the
+  * object's Stamina (the forced movement a push pays to break it: glass 1, wood 3, stone 6, metal 9), times the rules
+  * table's fallBreakSquares. It breaks (every wall of it, as a push breaks it) and the creature falls on to the next
+  * surface under it, or the ground; that may break too. Damage for each break is the book's (Stamina + 2), times
+  * fallBreakDamage, on top of the fall's own. Null when it does not break: it lands on the top.
+  */
+ private static function breakThrough(array $to,float $top,array $onto,float $ground,array $config):?array {
+  $model=$config['environment']['walls']['value']??[];$per=MovementRules::get('fallBreakSquares');$times=MovementRules::get('fallBreakDamage');
+  if($per<=0)return null;
+  $segments=array_column($model['segments']??[],null,'id');$boxes=array_column(WallBoxes::boxes($model),null,'id');
+  $broken=[];$pieces=[];$skip=[];$landing=null;
+  for($i=0;$i<10&&$onto;$i++){
+   $box=$boxes[$onto['id']]??null;if(!$box)break;
+   $edges=array_values(array_filter(array_map(fn($id)=>$segments[$id]??null,$box['edges']??[])));
+   if(!$edges||array_filter($edges,fn($e)=>!WallObjects::breakable($e)))break;
+   $stamina=max(array_map(fn($e)=>WallObjects::stamina($e),$edges));
+   if($top-(float)$onto['height']+1e-6<$stamina*$per)break;
+   foreach(WallObjects::whole($edges,$config) as $wall)$broken[$wall['id']]=$wall;
+   $pieces[]=['id'=>$onto['id'],'material'=>$edges[0]['material']??'stone','stamina'=>$stamina,'damage'=>(int)round(($stamina+2)*$times)];
+   $skip[$onto['id']]=true;$landing=$ground;
+   $surfaces=array_values(array_filter(FloorSupport::surfaces($model),fn($s)=>(($s['kind']??'')==='floor'||!empty($s['templateCube']))&&isset($s['id'])&&!isset($skip[$s['id']])));
+   $best=$surfaces?FloorSupport::landing($to,$surfaces,$config['mapLevels']??[],(float)$onto['height']-1e-6,-INF):null;
+   $landing=max($ground,(float)($best['height']??$ground));
+   $onto=($best['id']??null)!==null&&(float)$best['height']>$ground+1e-6?['id'=>$best['id'],'levelId'=>$best['levelId']??'level-0','height'=>(float)$best['height']]:null;
+  }
+  return $pieces?['breaks'=>array_values($broken),'pieces'=>$pieces,'onto'=>$onto,'landing'=>$landing]:null;
  }
  /** The highest floor (a plate, a box top, a summoned cube) under a creature at or below a height, or null. */
  public static function surfaceBelow(array $at,float $top,array $config):?array {
@@ -100,6 +133,12 @@ final class FallOutcome {
  }
  private static function overlaps(array $a,array $b):bool {
   return ($a['levelId']??'level-0')===($b['levelId']??'level-0')&&$a['column']<$b['column']+($b['width']??1)-1e-7&&$a['column']+($a['width']??1)>$b['column']+1e-7&&$a['row']<$b['row']+($b['height']??1)-1e-7&&$a['row']+($a['height']??1)>$b['row']+1e-7;
+ }
+ /** The landing's outcome with the walls the fall broke through added to the ones it lands in (one list, no repeats). */
+ public static function withBreaks(array $fall,array $landing):array {
+  if(empty($fall['breaks']))return $landing;
+  $all=[];foreach([...($landing['breaks']??[]),...$fall['breaks']] as $wall)$all[$wall['id']]=$wall;
+  return [...$landing,'breaks'=>array_values($all)];
  }
  /** A landing this close in height to the one fallen to is the same fall. */
  public const LANDING_STEP=.5;

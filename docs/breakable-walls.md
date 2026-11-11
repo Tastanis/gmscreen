@@ -350,3 +350,18 @@ style said "lay me out", and that wins.
   under it, or just over it near the bottom of the screen, and never off the screen. That
   keeps it clear of the turn tracker and the panels along the top.
 - The number box and the Repair button are hidden the same safe way.
+
+## Falls through things (November 10, 2026)
+
+Your word: "finish the falling through things".
+
+- A creature that falls onto the top of a breakable object breaks through it when it fell far enough: at least as
+  many squares as a push needs to break it (glass 1, wood 3, stone 6, metal 9). It then falls on to whatever is under
+  it, or the ground. Things under it can break the same way.
+- Softer than that, it lands on the top, as before.
+- The fall pop-up shows "Breaks through: wood" and adds the book's damage for breaking it (wood 5, glass 3, stone 8,
+  metal 11) to the fall damage. You can change the number before Apply, as always.
+- The object breaks when the fall is applied, the same as a push's break. Dismiss leaves it standing.
+- Answering "Climb down" at a ledge never breaks anything.
+- Both numbers are rows in the movement rules table (`fallBreakSquares`, `fallBreakDamage`); 0 turns it off.
+- Not yet: breakable floor plates (decks, bridges). Objects only.

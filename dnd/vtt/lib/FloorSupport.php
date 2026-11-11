@@ -191,16 +191,21 @@ final class FloorSupport {
   $boxes=array_values(array_filter($floors,fn($s)=>!empty($s['boxTop'])));
   $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from),.1);
   $previous=$from;
+  // Gone over an edge (off a top more than a plain step above the ground beside it): until he lands on something he is
+  // up at the height he left, so he climbs onto nothing on the way down (Thornbriar, November 10, 2026: off the north
+  // snag at 7 he was put up onto the climbable leg step at 4 from the ground under it, and no fall was counted).
+  $air=null;
   foreach([...$path,$to] as $end){
    $start=$previous;$dx=$end['column']-$start['column'];$dy=$end['row']-$start['row'];
    $steps=max(1,min(8192,(int)ceil(max(abs($dx),abs($dy))*8)));
    for($i=1;$i<=$steps;$i++){
     $p=[...$from,'column'=>$start['column']+$dx*$i/$steps,'row'=>$start['row']+$dy*$i/$steps];
-    $height=$support['height']??$terrain($previous);
+    $height=$support['height']??$air??$terrain($previous);
     // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
-    if($enter)foreach($boxes as $box)if(($support['id']??null)!==$box['id']&&$box['height']>$height+1e-6&&(!empty($box['climbable'])?$box['base']-$height<=self::CLIMB_FOOT+1e-6:$box['height']-$height<=self::BOX_REACH+1e-6)&&$overlap($p,$box)){$support=$box;$previous=$p;continue 2;}
+    if($enter&&$air===null)foreach($boxes as $box)if(($support['id']??null)!==$box['id']&&$box['height']>$height+1e-6&&(!empty($box['climbable'])?$box['base']-$height<=self::CLIMB_FOOT+1e-6:$box['height']-$height<=self::BOX_REACH+1e-6)&&$overlap($p,$box)){$support=$box;$previous=$p;continue 2;}
     if(!$support||!$overlap($p,$support)){
      $priorSupport=$support;$support=null;
+     if($priorSupport&&$air===null&&(float)$priorSupport['height']-$terrain($p)>self::BOX_REACH+1e-6)$air=(float)$priorSupport['height'];
      // The same test as ever, cheapest part first: a plate at another height is ruled out by its
      // number, before its outline (and every cut-out of its floor) is laid over the token's square.
      // On a map of many plates that outline work, done for every plate at every step, was nearly
@@ -213,6 +218,7 @@ final class FloorSupport {
       if($s['height']<($ground??=$terrain($p))-.1-1e-6||!$overlap($p,$s))continue;
       if(!$cube||!$overlap($previous,$s)||($priorSupport&&self::cubeTouches($priorSupport,$s)))$support=$s;
      }
+     if($support)$air=null;
     }
     $previous=$p;
    }

@@ -1798,7 +1798,8 @@ export function mountBoardInteractions(store, routes = {}) {
           const squares = await askClimbDownSquares({ max: drop.squares }, { anchor });
           if (!squares || sceneId !== getActiveSceneId()) { back('Did not move.'); return; }
           climbDown = { id: move.placementId, squares, all: squares >= drop.squares, top: drop.top };
-          if (climbDown.all) climbDownChosen.add(move.placementId);
+          // All the way down is told to the server too: a climb never breaks what it comes down onto (FallOutcome::plan).
+          if (climbDown.all) { climbDownChosen.add(move.placementId); wallAnswers.set(move.placementId, { ...(wallAnswers.get(move.placementId) || {}), climbDown: true }); }
           else {
             // Part-way: it goes over the edge at the height of the top, holding on, and is let down that many squares after.
             try { await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: move.placementId, patch: { movementMode: 'hover', flightHeight: drop.top, clinging: true } }]); }

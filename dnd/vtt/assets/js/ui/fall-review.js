@@ -28,6 +28,16 @@ export function fallBreaks(details){
  if(!details?.breaks?.length)return '';
  return materials.length?materials.join(' and '):'an object';
 }
+/**
+ * What a fall broke through on its way down (FallOutcome::breakThrough, Brandon, November 10, 2026): the book's damage
+ * for each break (Stamina + 2), added to the fall's own, and the words for the panel ("wood", "glass and wood").
+ */
+export function fallBreakThrough(details){
+ const pieces=Array.isArray(details?.breakThrough)?details.breakThrough:[];
+ const damage=pieces.reduce((sum,piece)=>sum+Math.max(0,Math.trunc(Number(piece?.damage)||0)),0);
+ const words=pieces.map(piece=>typeof piece?.material==='string'&&piece.material?piece.material:'an object').join(' and ');
+ return {damage,words};
+}
 // `climbing` is optional: {extra(record,faller)} gives the movement a climb down costs,
 // {charge(record,extra)} adds it to the turn, and {free(record,faller)} says the creature climbs
 // at full speed, so a walk off an edge is no fall for it. Without `climbing` the review is as before.
@@ -55,7 +65,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&climbing.free(record,faller)){
     try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,0);}catch{}return;}catch{}
    }
-   const stats=await traits(faller),shorter=Math.max(0,Number(stats.fallReduction)||0),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown,shorter),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0,shorter)}];
+   const through=fallBreakThrough(details),stats=await traits(faller),shorter=Math.max(0,Number(stats.fallReduction)||0),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown,shorter)+through.damage,targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0,shorter)}];
    for(const id of details.collidedIds||[]){const p=placement(id);if(!p)throw Error('Fall target is unavailable; GM review is required.');const t=await traits(p);targets.push({id,name:p.name||'Creature',prone:landingTargetProne(stats.size,t.might)});}
    if(disposed||document.hidden||context()?.sceneId!==record.sceneId||String(context()?.userId).toLowerCase()!==String(c.userId).toLowerCase())return;
    const token=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);
@@ -74,7 +84,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    panel.className='vtt-fall-review';
    const title=document.createElement('strong');title.className='vtt-fall-review__title';title.textContent='Fall';
    const summary=document.createElement('div');summary.className='vtt-fall-review__summary';
-   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`],...(shorter?[[stats.fallReductionLabel||'Shorter fall',`−${shorter}`]]:[]),...(breaks?[['Lands on and breaks',breaks]]:[])]){
+   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`],...(shorter?[[stats.fallReductionLabel||'Shorter fall',`−${shorter}`]]:[]),...(through.words?[['Breaks through',through.words],['Breaking it',`+${through.damage} damage`]]:breaks?[['Lands on and breaks',breaks]]:[])]){
     const row=document.createElement('div'),key=document.createElement('span'),amount=document.createElement('strong');key.textContent=name;amount.textContent=value;row.append(key,amount);summary.append(row);
    }
    const affected=document.createElement('div');affected.className='vtt-fall-review__targets';
@@ -83,7 +93,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    const status=document.createElement('p');status.className='vtt-fall-review__status';status.setAttribute('aria-live','polite');if(details.needsPlacementReview)status.textContent='GM: choose a free landing space.';
    const actions=document.createElement('div');actions.className='vtt-fall-review__actions';const apply=document.createElement('button'),dismiss=document.createElement('button');apply.textContent='Apply';dismiss.textContent='Dismiss';apply.type=dismiss.type='button';dismiss.className='vtt-fall-review__dismiss';
    // Walked off the edge: it may have been a climb down. No damage, no prone, extra movement.
-   let climb=null,climbNote=null;const climbExtra=climbing&&fallAllowsClimbing(details)?Math.max(0,Math.trunc(Number(climbing.extra(record,faller))||0)):null;
+   let climb=null,climbNote=null;const climbExtra=climbing&&fallAllowsClimbing(details)&&!through.words?Math.max(0,Math.trunc(Number(climbing.extra(record,faller))||0)):null;
    if(climbExtra!==null){climb=document.createElement('button');climb.type='button';climb.className='vtt-fall-review__climb';climb.dataset.fallClimb='';climb.textContent='Climbing';
     climbNote=document.createElement('p');climbNote.className='vtt-fall-review__climb-note';climbNote.textContent=climbExtra?`Climbing: no damage, ${climbExtra} more movement.`:'Climbing: no damage.';}
    actions.append(...[dismiss,climb,apply].filter(Boolean));

@@ -14,6 +14,8 @@ export const MOVEMENT_RULES = Object.freeze(/*rules*/{
   "stairMeetsPlate": 0.55,
   "objectSightPass": 1.5,
   "detourLimit": 2,
+  "fallBreakSquares": 1,
+  "fallBreakDamage": 1,
   "cost": {
     "square": 1,
     "climb": 1,
@@ -36,6 +38,9 @@ export const MOVEMENT_RULES = Object.freeze(/*rules*/{
 // stairMeetsPlate  a stair end this close to a plate's height joins it.
 // objectSightPass  a labelled object this tall or lower lets sight over it unless it says otherwise.
 // detourLimit      the route goes round a ledge only when that is at most this many squares longer than going off it.
+// fallBreakSquares a fall breaks through a breakable object it lands on when it fell at least this many squares for each
+//                  point of the object's Stamina (glass 1, wood 3, stone 6, metal 9). 0 = falls never break things.
+// fallBreakDamage  the book's damage for breaking it (Stamina + 2) is added to the fall's, times this. 0 = none.
 // cost             extra movement for each square: climbing, climbing down, water (free with a swim speed), difficult
 //                  terrain, an enemy's square. Water and difficult terrain together cost one extra, not two.
 
