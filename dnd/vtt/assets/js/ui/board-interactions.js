@@ -4613,7 +4613,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function setMaintainedAbilities(placementId, list) {
     return updatePlacementById(placementId, (target) => {
-      target.maintainedAbilities = list.length ? list.map((item) => ({ id: item.id, abilityId: item.abilityId || '', name: item.name || 'Ability', value: item.value, since: item.since ?? null })) : null;
+      // targetIds: the creatures it is on (their marking, and where "use it again" goes); none = shown on the hero.
+      target.maintainedAbilities = list.length ? list.map((item) => ({ id: item.id, abilityId: item.abilityId || '', name: item.name || 'Ability', value: item.value, since: item.since ?? null,
+        targetIds: Array.isArray(item.targetIds) ? item.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [] })) : null;
       if (!list.length) target.maintainedDamage = null;
     });
   }
@@ -4624,6 +4626,17 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function offerMaintainPersistentAbility(used = {}) {
     const value = Number(used.persistent) || 0;
+    const usedOn = Array.isArray(used.targetIds) ? used.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [];
+    // Used again while maintained (the free use, or picked by hand): its marking moves to whoever it went to this time.
+    if (value && used.maintainRerun && usedOn.length) {
+      const owner = getPlacementFromStore(used.actorId);
+      const list = getMaintainedAbilities(owner);
+      const rerunId = String(used.actionId || used.actionName || '').trim();
+      if (owner && list.some((item) => item.id === rerunId)) {
+        setMaintainedAbilities(owner.id, list.map((item) => (item.id === rerunId ? { ...item, targetIds: usedOn } : item)));
+      }
+      return;
+    }
     if (!value || used.maintainRerun || !combatActive) return;
     const placement = getPlacementFromStore(used.actorId);
     if (!placement) return;
@@ -4642,8 +4655,59 @@ export function mountBoardInteractions(store, routes = {}) {
     const fresh = getPlacementFromStore(placement.id);
     if (!fresh) return;
     setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh).filter((item) => item.id !== id),
-      { id, abilityId: used.actionId || '', name, value, since: combatRound }]);
+      { id, abilityId: used.actionId || '', name, value, since: combatRound, targetIds: usedOn }]);
     sayInChat(`${who} maintains ${name} (Persistent ${value}).`);
+  }
+
+  // ---------- maintained abilities as markings (Brandon, November 11, 2026) ----------
+  // "perhaps it is added as a condition or marking or something on the token he is using the ability on. and he can
+  // trigger it for creatures he has the persistent condition on? then stopping it is just clicking the x".
+  // Read from the maintainers' own lists (nothing is written on the creatures), so a maintenance that ends any way
+  // takes its markings with it. One with no creature it was used on (an area, or self) shows on the hero's token.
+  function getMaintainedMarkingsFor(placement, placements = null) {
+    if (!placement?.id) return [];
+    const list = Array.isArray(placements) ? placements : getActiveScenePlacements(boardApi.getState?.() ?? {});
+    const markings = [];
+    for (const owner of list) {
+      const maintained = getMaintainedAbilities(owner);
+      if (!maintained.length) continue;
+      const ownerName = tokenLabel(owner) || 'Hero';
+      for (const item of maintained) {
+        const on = (Array.isArray(item.targetIds) ? item.targetIds : []).filter((targetId) => list.some((other) => other?.id === targetId));
+        if (!(on.length ? on.includes(placement.id) : owner.id === placement.id)) continue;
+        markings.push({
+          key: `${owner.id}|${item.id}`,
+          text: `${item.name} (${ownerName})`,
+          title: `${ownerName} maintains ${item.name} (Persistent ${item.value}).`,
+          endable: canStopMaintaining(owner),
+        });
+      }
+    }
+    return markings;
+  }
+
+  // The hero's player and the Director may stop it; nobody else.
+  function canStopMaintaining(owner) {
+    if (!owner?.id) return false;
+    if (isGmUser()) return true;
+    const me = normalizeProfileId(getCurrentUserId());
+    const ownerUser = getLinkedProfileUserIdForPlacement(owner.id) || normalizeProfileId(getAutomationProfileIdForPlacement(owner.id));
+    return Boolean(me) && ownerUser === me;
+  }
+
+  // The × on a marking: stopped at once (no action, the rules allow it any time). Its upkeep stops with it; an area it
+  // kept going ends the usual way (the Director asked Remove / Keep).
+  function stopMaintainingAbility(ownerId, itemId) {
+    const owner = getPlacementFromStore(ownerId);
+    const list = getMaintainedAbilities(owner);
+    const item = list.find((entry) => entry.id === itemId);
+    if (!owner || !item) return false;
+    if (!canStopMaintaining(owner)) { updateStatus(`Only ${tokenLabel(owner) || 'its hero'}'s player or the Director can stop it.`); return false; }
+    setMaintainedAbilities(owner.id, list.filter((entry) => entry.id !== itemId));
+    endZonesOfDroppedMaintenance(owner.id, [item]);
+    sayInChat(`${tokenLabel(owner) || 'Hero'} stops maintaining ${item.name}.`);
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    return true;
   }
 
   // The start of the hero's turn: each maintained ability kept or let go, and "use it again" for the free use.
@@ -4719,6 +4783,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const fresh = getPlacementFromStore(placement.id) || placement;
       const result = await window.VTTCharacterAbilities?.runFree?.({
         characterId: profileId, sourceToken: cloneJsonSafe(fresh), abilityId: item.abilityId, name: item.name,
+        // To the creatures carrying its marking, still on the map (out of range: warned, never refused).
+        presetTargetIds: (getMaintainedAbilities(fresh).find((entry) => entry.id === item.id)?.targetIds || item.targetIds || [])
+          .filter((targetId) => getPlacementFromStore(targetId)),
       }).catch(() => null);
       if (!result?.ran) {
         showConditionBanner(`${item.name}: ${result?.reason === 'no-automation' ? 'it has no automation, use it again by hand' : 'not found on the sheet, use it again by hand'}.`, { tone: 'reminder' });
@@ -8304,7 +8371,7 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenLayer.addEventListener('click', handleTriggerIndicatorClick);
     tokenLayer.addEventListener('keydown', handleTriggerIndicatorKeydown);
     tokenLayer.addEventListener('pointerdown', (event) => {
-      if (event.target?.closest?.('[data-token-trigger-ready], [data-token-judgment-mark], [data-token-hidden-effect]')) {
+      if (event.target?.closest?.('[data-token-trigger-ready], [data-token-judgment-mark], [data-token-hidden-effect], [data-token-maintained-end]')) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -8331,6 +8398,16 @@ export function mountBoardInteractions(store, routes = {}) {
       for (const index of [...hiddenIndexes].reverse()) {
         removeConditionFromPlacement(placementId, index);
       }
+    });
+    // The × on a maintained persistent ability's marking: stop maintaining it (November 11, 2026).
+    tokenLayer.addEventListener('click', (event) => {
+      const end = event.target?.closest?.('[data-token-maintained-end]');
+      if (!end) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const key = String(end.getAttribute('data-token-maintained-end') || '');
+      const cut = key.indexOf('|');
+      if (cut > 0) stopMaintainingAbility(key.slice(0, cut), key.slice(cut + 1));
     });
     tokenLayer.addEventListener('click', (event) => {
       const mark = event.target?.closest?.('[data-token-judgment-mark]');
@@ -17747,7 +17824,7 @@ export function mountBoardInteractions(store, routes = {}) {
     paintTokenMarkIndicator(tokenElement, getPlacementMark(placement, 'judgment'), {interactive:true});
     // Clinging to a wall part-way down a climb (the ledge question) shows with the conditions; it is not one.
     const shownConditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
-    paintTokenConditionLabel(tokenElement, wholePlacement?.clinging === true && ['fly', 'hover'].includes(wholePlacement?.movementMode) ? [...shownConditions, { name: 'Clinging' }] : shownConditions, {interactive:true, configureConditionTooltip, detachConditionTooltip});
+    paintTokenConditionLabel(tokenElement, wholePlacement?.clinging === true && ['fly', 'hover'].includes(wholePlacement?.movementMode) ? [...shownConditions, { name: 'Clinging' }] : shownConditions, {interactive:true, configureConditionTooltip, detachConditionTooltip, markings: getMaintainedMarkingsFor(wholePlacement)});
   }
 
 
@@ -19458,6 +19535,15 @@ export function mountBoardInteractions(store, routes = {}) {
     // Draw the reach/range box around the source token so the player can see
     // who's actually legal to click. Skipped when distance info is missing.
     renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
+    // A maintained persistent ability used again: the creature carrying its marking is picked for it, through the
+    // ordinary pick (so past its range it is warned about, never refused). November 11, 2026.
+    const autoPick = Array.isArray(pendingAutomationTarget.targetConfig?.autoPickTargetIds) ? pendingAutomationTarget.targetConfig.autoPickTargetIds : [];
+    const autoId = autoPick[(Number(pendingAutomationTarget.targetConfig?.pickIndex) || 1) - 1];
+    const autoPlacement = autoId ? getPlacementFromStore(autoId) : null;
+    if (autoPlacement) {
+      const request = pendingAutomationTarget;
+      setTimeout(() => { if (pendingAutomationTarget === request) acceptAutomationTargetPlacement(getPlacementFromStore(autoId) || autoPlacement); }, 0);
+    }
   }
 
   function clearAutomationTargetPrompt() {

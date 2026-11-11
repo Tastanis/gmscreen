@@ -938,6 +938,13 @@
       }
 
       const rangeOriginPlacement = getRangeOriginPlacement(state, block);
+      // A maintained persistent ability used again goes to the creatures carrying its marking (November 11, 2026):
+      // the first creature-picking card of the run is handed them, and the board picks them with its usual range
+      // warning (never a refusal). Later cards, and picks past them, are made by hand.
+      const autoPickTargetIds = Array.isArray(state.presetTargetIds) && state.presetTargetIds.length && !state.presetTargetsUsed
+        ? state.presetTargetIds.slice()
+        : [];
+      if (autoPickTargetIds.length) state.presetTargetsUsed = true;
       const selected = [];
       const seen = new Set();
       const excludedIds = new Set(
@@ -966,6 +973,7 @@
           // opp-attack). Picker pulses this token red but the player can
           // still click anyone.
           suggestedTargetId: state.suggestedTargetId || "",
+          ...(autoPickTargetIds.length ? { autoPickTargetIds } : {}),
           // Source token/location used only by the advisory reach/range box.
           // It defaults to the caster, but rangeOrigin can reference an
           // earlier token target group or placed area.
@@ -994,6 +1002,8 @@
         // Count "all"/"each": picking goes on until Done.
       }
       setTargetGroup(state, block.name, selected);
+      // The creatures picked one by one (not those caught in an area): a maintained persistent ability is marked on them.
+      state.pickedTokenTargetIds = [...new Set([...(state.pickedTokenTargetIds || []), ...selected.map((target) => target?.id).filter(Boolean)])];
       fireTargetedEvents(state, selected);
     } catch (error) {
       if (block.mode === "area") state.context.cancelAreaSelection?.();
@@ -1144,7 +1154,13 @@
       setTargetGroup(state, block.name, []);
       return;
     }
-    const selected = new Map(candidates.map((item) => [item.id, item]));
+    // `near.max`: at most that many. No more fit than that: all pre-picked. More fit: none pre-picked, the user picks;
+    // a click past the limit replaces the first pick. Burning Ash is max 1 (Brandon, November 11, 2026: "read the
+    // ability and do what it says": "that enemy", one).
+    const max = Number.isFinite(block.near?.max) && block.near.max > 0 ? block.near.max : Infinity;
+    const tooMany = candidates.length > max;
+    const selected = new Map(tooMany ? [] : candidates.map((item) => [item.id, item]));
+    const choose = tooMany ? ` ${candidates.length} fit: pick ${max}.` : "";
     for (;;) {
       const result = await Promise.race([
         state.context.selectTarget({
@@ -1155,7 +1171,7 @@
           allowDone: true,
           preselectedIds: [...selected.keys()],
           promptTitle: block.promptTitle || "Confirm the targets",
-          promptText: block.promptText || `${selected.size} picked. Click a token to add or remove it, then Done.`,
+          promptText: `${block.promptText || `${selected.size} picked. Click a token to add or remove it, then Done.`}${choose}`,
         }),
         cancelPromise,
       ]);
@@ -1169,7 +1185,10 @@
         break;
       }
       if (selected.has(result.id)) selected.delete(result.id);
-      else selected.set(result.id, result);
+      else {
+        if (selected.size >= max) selected.delete(selected.keys().next().value);
+        selected.set(result.id, result);
+      }
     }
     setTargetGroup(state, block.name, [...selected.values()]);
   }
@@ -5209,6 +5228,8 @@
         persistent: getPersistentValue(state.action),
         // Used again for free because it is maintained (VTTCharacterAbilities.runFree): not asked to maintain again.
         maintainRerun: Boolean(state.action?._maintainRerun),
+        // The creatures it was used on, picked one by one (a maintained persistent ability is marked on them).
+        targetIds: Array.isArray(state.pickedTokenTargetIds) ? state.pickedTokenTargetIds.slice() : [],
       },
     });
   }
@@ -5495,6 +5516,8 @@
       // that triggered an opp-attack). Threaded into every target picker
       // config so the board can paint a continuous red pulse on it.
       suggestedTargetId: options?.suggestedTargetId || "",
+      // Creatures a maintained persistent ability used again goes to (their marking); see pickTargetBlock.
+      presetTargetIds: Array.isArray(options?.presetTargetIds) ? options.presetTargetIds.filter(Boolean).map(String) : [],
       // Captured firing-event payload from a triggered action. Set when the
       // panel resolves a ready trigger; consumed by `halveTriggeringDamage`
       // and similar trigger-context-aware effects. Null for non-triggered

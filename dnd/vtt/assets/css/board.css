@@ -3533,6 +3533,38 @@
   text-overflow: ellipsis;
 }
 
+/* A maintained persistent ability on the creature it is on ("The Flesh, a Crucible (Zepha)"), told apart from a
+   condition by its ember colour; its × stops maintaining it (November 11, 2026). */
+.vtt-token__condition-line--maintained {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--tok-unit) * 2);
+  color: #fdba74;
+  font-style: italic;
+}
+.vtt-token__condition-line--maintained > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vtt-token__maintained-end {
+  flex: none;
+  border: 0;
+  padding: 0 calc(var(--tok-unit) * 1.5);
+  border-radius: calc(var(--tok-unit) * 2);
+  background: rgba(253, 186, 116, 0.18);
+  color: inherit;
+  font: inherit;
+  font-style: normal;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.vtt-token__maintained-end:hover,
+.vtt-token__maintained-end:focus-visible {
+  background: rgba(253, 186, 116, 0.4);
+  outline: none;
+}
+
 .vtt-token__hidden-effect {
   position: absolute;
   right: calc(var(--tok-unit) * -1);

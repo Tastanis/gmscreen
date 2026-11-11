@@ -1300,6 +1300,9 @@
           ? { teleport: true, within: asNonNegInt(input.near.within, 1) }
           : { group: asTrimmedString(input.near.group) || "primary", within: asNonNegInt(input.near.within, 1) };
         if (input.near.includeSelf === true) near.includeSelf = true;
+        // `max`: at most that many (none: everyone who fits). Burning Ash: 1 (November 11, 2026).
+        const max = asNonNegInt(input.near.max, 0);
+        if (max > 0) near.max = max;
         block.near = near;
       }
     }

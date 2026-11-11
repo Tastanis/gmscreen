@@ -198,3 +198,134 @@ test('a maintained area stays past the start of the turn; one let go at the ques
   assert.match(section('  async function offerHeroicResourceRuleNow({', '  // The gain (or loss, or damage) taken:'),
     /setMaintainedAbilities\(placement\.id, choice\.kept\);\s*endZonesOfDroppedMaintenance\(placement\.id, maintained\.filter\(\(item\) => !choice\.kept\.some/);
 });
+
+// ---------------------------------------------------------------- markings (Brandon, November 11, 2026)
+// "perhaps it is added as a condition or marking or something on the token he is using the ability on. and he can
+// trigger it for creatures he has the persistent condition on? then stopping it is just clicking the x"
+
+function markingBoard({ gm = false, me = 'zepha-player' } = {}) {
+  const placements = [
+    { id: 'zepha', name: 'Zepha', maintainedAbilities: [
+      { id: 'action_flesh', abilityId: 'action_flesh', name: FLESH.name, value: 1, targetIds: ['gob'] },
+      { id: 'action_flower', abilityId: 'action_flower', name: FLOWER.name, value: 1, targetIds: [] },
+    ] },
+    { id: 'gob', name: 'Goblin' },
+    { id: 'cal', name: 'Cal' },
+  ];
+  const calls = { ended: [], chat: [], status: [] };
+  const deps = {
+    boardApi: { getState: () => ({}) },
+    getActiveScenePlacements: () => placements,
+    getPlacementFromStore: (id) => placements.find((p) => p.id === id) || null,
+    updatePlacementById: (id, fn) => { fn(placements.find((p) => p.id === id)); return true; },
+    tokenLabel: (p) => p?.name || '',
+    isGmUser: () => gm,
+    getCurrentUserId: () => me,
+    normalizeProfileId: (v) => (typeof v === 'string' && v ? v.toLowerCase() : null),
+    getLinkedProfileUserIdForPlacement: (id) => (id === 'zepha' ? 'zepha-player' : null),
+    getAutomationProfileIdForPlacement: (id) => (id === 'zepha' ? 'zepha' : ''),
+    endZonesOfDroppedMaintenance: (ownerId, dropped) => calls.ended.push([ownerId, dropped.map((item) => item.name)]),
+    sayInChat: (message) => calls.chat.push(message),
+    updateStatus: (message) => calls.status.push(message),
+    renderTokens: () => {}, tokenLayer: null, viewState: {},
+    queueHeroicResourcePrompt: async () => ({ applied: true }),
+    combatActive: true, combatRound: 2,
+    Array, Number, String, Boolean, console,
+  };
+  const api = new Function('deps', `with (deps) { ${section('  function getMaintainedAbilities(placement) {', '  function sayInChat(')}
+    ${section('  async function offerMaintainPersistentAbility(used = {}) {', "  // The start of the hero's turn: each maintained")}
+    return { getMaintainedMarkingsFor, stopMaintainingAbility, offerMaintainPersistentAbility, getMaintainedAbilities }; }`)(deps);
+  return { api, placements, calls };
+}
+
+test('a maintained ability shows on the creature it is on; one with no creature (an area) shows on the hero', () => {
+  const { api, placements } = markingBoard();
+  const on = (id) => api.getMaintainedMarkingsFor(placements.find((p) => p.id === id)).map((m) => [m.text, m.endable]);
+  assert.deepEqual(on('gob'), [[`${FLESH.name} (Zepha)`, true]]);
+  assert.deepEqual(on('zepha'), [[`${FLOWER.name} (Zepha)`, true]], 'O Flower Aid: an area, so on Zepha');
+  assert.deepEqual(on('cal'), []);
+  placements.splice(1, 1);                         // the goblin is gone from the map: the marking falls back to Zepha
+  assert.deepEqual(on('zepha').map(([text]) => text), [`${FLESH.name} (Zepha)`, `${FLOWER.name} (Zepha)`]);
+});
+
+test("the × is for Zepha's player and the Director only; it stops the maintenance, its area and its markings", () => {
+  const other = markingBoard({ me: 'cal-player' });
+  assert.equal(other.api.getMaintainedMarkingsFor(other.placements[1])[0].endable, false, 'another player sees it, no ×');
+  assert.equal(other.api.stopMaintainingAbility('zepha', 'action_flesh'), false);
+  assert.equal(other.api.getMaintainedAbilities(other.placements[0]).length, 2);
+
+  const director = markingBoard({ gm: true, me: 'gm' });
+  assert.equal(director.api.getMaintainedMarkingsFor(director.placements[1])[0].endable, true, 'never blocked for the Director');
+
+  const { api, placements, calls } = markingBoard();
+  assert.equal(api.stopMaintainingAbility('zepha', 'action_flower'), true);
+  assert.deepEqual(api.getMaintainedAbilities(placements[0]).map((item) => item.name), [FLESH.name], 'its upkeep stops with it');
+  assert.deepEqual(calls.ended, [['zepha', [FLOWER.name]]], 'its area ends the usual way (the Director asked)');
+  assert.deepEqual(calls.chat, [`Zepha stops maintaining ${FLOWER.name}.`]);
+  assert.deepEqual(api.getMaintainedMarkingsFor(placements[0]), [], 'its marking is gone');
+  placements[0].maintainedAbilities = null;        // any other ending (untick, damage break, end of fight)
+  assert.deepEqual(api.getMaintainedMarkingsFor(placements[1]), [], 'markings go with it');
+});
+
+test('maintaining keeps who it was used on; using it again moves the marking to whoever it went to', async () => {
+  const { api, placements } = markingBoard();
+  placements[0].maintainedAbilities = null;
+  await api.offerMaintainPersistentAbility({ actorId: 'zepha', actionId: 'action_flesh', actionName: FLESH.name, persistent: 1, targetIds: ['gob'] });
+  assert.deepEqual(api.getMaintainedAbilities(placements[0])[0].targetIds, ['gob']);
+  await api.offerMaintainPersistentAbility({ actorId: 'zepha', actionId: 'action_flesh', actionName: FLESH.name, persistent: 1, maintainRerun: true, targetIds: ['cal'] });
+  const list = api.getMaintainedAbilities(placements[0]);
+  assert.equal(list.length, 1, 'not maintained twice');
+  assert.deepEqual(list[0].targetIds, ['cal']);
+});
+
+test('used again, it goes to the creatures carrying the marking; out of range is warned, never refused', async () => {
+  const harness = await createAbilityAutomationHarness({ targets: [{ id: 'gob', name: 'Goblin' }] });
+  try {
+    const automation = { schema: 'ability-automation/v3', cards: [
+      { type: 'target', name: 'target', mode: 'token', predicate: 'creatureOrObject', count: { value: 1, mode: 'exact' }, distance: { form: 'ranged', value: 10 } },
+      { type: 'effect', target: 'target', effects: [{ kind: 'note', text: 'x' }] },
+    ] };
+    const result = await harness.runAutomation({ automation, action: { ...FLESH, _maintainRerun: true }, contextOverrides: { presetTargetIds: ['gob'] } });
+    assert.deepEqual(result.calls.selectTarget.map((call) => call.autoPickTargetIds), [['gob']], 'the picker is handed the marked creature');
+    const used = result.calls.fireTriggerEvent.find((call) => call.eventType === 'actionUsed').payload;
+    assert.deepEqual(used.targetIds, ['gob'], 'who it went to rides on the use');
+  } finally { harness.close(); }
+  const request = section('  function handleAutomationTargetRequest(event) {', '  function clearAutomationTargetPrompt() {');
+  assert.match(request, /autoPickTargetIds[^]*?acceptAutomationTargetPlacement\(/, 'picked through the ordinary pick');
+  assert.match(section('  function acceptAutomationTargetPlacement(placement) {', '  function handleAutomationAreaRequest('), /Targeted anyway\./, 'which warns past range and goes on');
+  assert.match(section('  async function runMaintainedAgain(', '  // Damage to a hero who maintains something'), /presetTargetIds: \(getMaintainedAbilities\(fresh\)/);
+});
+
+test('the marking is drawn with the conditions, in its own look, with an × only where it may be stopped', async () => {
+  class El {
+    constructor(tag) { this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.className = ''; this.textContent = ''; this.title = ''; this.style = {}; this.classList = { toggle() {}, add() {}, remove() {} }; }
+    appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+    replaceChildren(...children) { this.children = children; }
+    remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this); }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return this.attrs[k] ?? null; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    querySelector(sel) { const cls = sel.slice(1); const walk = (n) => { for (const c of n.children) { if (String(c.className).split(' ').includes(cls)) return c; const f = walk(c); if (f) return f; } return null; }; return walk(this); }
+  }
+  const previous = globalThis.document;
+  globalThis.document = { createElement: (tag) => new El(tag) };
+  try {
+    const { paintTokenConditionLabel } = await import('../token-status-presentation.js');
+    const token = new El('div');
+    const marking = { key: 'zepha|action_flesh', text: `${FLESH.name} (Zepha)`, endable: true };
+    paintTokenConditionLabel(token, [{ name: 'Dazed' }], { interactive: true, markings: [marking] });
+    const label = token.querySelector('.vtt-token__condition');
+    assert.equal(label.children.length, 2, 'Dazed and the marking');
+    const line = label.children[1];
+    assert.match(line.className, /vtt-token__condition-line--maintained/);
+    assert.equal(line.children[1].getAttribute('data-token-maintained-end'), 'zepha|action_flesh');
+    paintTokenConditionLabel(token, [], { interactive: true, markings: [{ ...marking, endable: false }] });
+    const alone = token.querySelector('.vtt-token__condition');
+    assert.equal(alone.children.length, 1, 'shown with no condition on the creature');
+    assert.equal(alone.children[0].children.length, 1, 'no × for someone who may not stop it');
+    paintTokenConditionLabel(token, [], { interactive: true, markings: [] });
+    assert.equal(token.querySelector('.vtt-token__condition'), null, 'gone when the maintenance is');
+  } finally { globalThis.document = previous; }
+  assert.match(board, /\[data-token-hidden-effect\], \[data-token-maintained-end\]'\)\) \{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);/, 'pressing the × does not grab the token');
+  assert.match(board, /markings: getMaintainedMarkingsFor\(wholePlacement\)/);
+});

@@ -60,11 +60,14 @@ async function run(ability, { landAt = { column: 10, row: 5 }, ...options } = {}
 }
 const burns = (result) => result.calls.applyDamage.filter((call) => call.damageType === 'fire').map((call) => [call.placementId, call.amount]);
 
-test('Black Ash Teleport: the enemy she teleports away from and the one she lands next to both burn', async () => {
-  const result = await run(blackAshTeleport, { targetSelections: [{ done: true }] });
-  const pick = result.calls.selectTarget.at(-1);
-  assert.deepEqual(pick.preselectedIds, ['gob', 'orc'], 'the goblin she left and the orc she landed by; not Cal, not the far kobold');
-  assert.deepEqual(burns(result), [['gob', 3], ['orc', 3]], 'fire damage equal to her Agility');
+// Brandon, November 11, 2026: "read the ability and do what it says": "that enemy", one, once a turn.
+test('Black Ash Teleport: an enemy by each square: none pre-picked, she picks the one that burns', async () => {
+  const result = await run(blackAshTeleport, { targetSelections: [{ id: 'orc', name: 'Orc' }, { done: true }] });
+  const first = result.calls.selectTarget[0];
+  assert.deepEqual(first.preselectedIds, [], 'the goblin she left and the orc she landed by both fit; she chooses');
+  assert.match(first.promptText, /2 fit: pick 1./);
+  assert.deepEqual(result.calls.selectTarget.at(-1).preselectedIds, ['orc']);
+  assert.deepEqual(burns(result), [['orc', 3]], 'one enemy, fire damage equal to her Agility');
   assert.deepEqual(result.calls.setScopedFlag.map((call) => [call.scope, call.key, call.sourceId, call.targetId]), [['turn', 'burning-ash', 'sharon', 'sharon']]);
 });
 
@@ -83,9 +86,24 @@ test('In All This Confusion: the attacker she teleports away from burns', async 
   assert.deepEqual(burns(result), [['gob', 3]]);
 });
 
-test('Burning Ash: a token taken out of the pick does not burn', async () => {
-  const result = await run(blackAshTeleport, { targetSelections: [{ id: 'orc', name: 'Orc' }, { done: true }] });
+test('Burning Ash: a second click swaps the one enemy; never two', async () => {
+  const result = await run(blackAshTeleport, { targetSelections: [{ id: 'orc', name: 'Orc' }, { id: 'gob', name: 'Goblin' }, { done: true }] });
   assert.deepEqual(burns(result), [['gob', 3]]);
+});
+
+test('Burning Ash: several fit and she picks none: Done skips it, the turn is not used up', async () => {
+  const result = await run(blackAshTeleport, { targetSelections: [{ done: true }] });
+  assert.deepEqual(burns(result), []);
+  assert.equal(result.calls.setScopedFlag.length, 0);
+});
+
+test('Burning Ash: the one enemy she lands next to is pre-picked', async () => {
+  const { overrides } = board();
+  const ctx = overrides({ column: 10, row: 5 });
+  const scene = ctx.getActiveScenePlacements().filter((token) => token.id !== 'gob');
+  const result = await run(blackAshTeleport, { targetSelections: [{ done: true }], contextOverrides: { ...ctx, getActiveScenePlacements: () => scene } });
+  assert.deepEqual(result.calls.selectTarget.at(-1).preselectedIds, ['orc']);
+  assert.deepEqual(burns(result), [['orc', 3]]);
 });
 
 test('Burning Ash: only the first time on a turn', async () => {
@@ -131,7 +149,7 @@ test('the schema keeps near.teleport and oncePer with their defaults', async () 
       const { normalized, issues } = harness.validateAutomation(ability.automation, { strict: false });
       assert.ok(!issues.length, issues.join(' | '));
       const card = normalized.cards.find((entry) => entry.name === 'burningAsh');
-      assert.deepEqual(card.near, { teleport: true, within: 1 });
+      assert.deepEqual(card.near, { teleport: true, within: 1, max: 1 });
       assert.deepEqual(card.oncePer, { scope: 'turn', key: 'burning-ash', per: 'user' });
     }
     const bare = harness.validateAutomation({ schema: 'ability-automation/v3', cards: [{ type: 'target', name: 'ash', mode: 'token', near: { teleport: true }, oncePer: {} }] }, { strict: false });

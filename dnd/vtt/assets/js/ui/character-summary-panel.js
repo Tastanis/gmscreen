@@ -145,7 +145,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       }
       return { ran: false, reason: 'not-found' };
     },
-    async runFree({ characterId, sourceToken = null, abilityId = '', name = '' } = {}) {
+    // presetTargetIds: the creatures carrying its maintained-ability marking (board-interactions.js runMaintainedAgain).
+    async runFree({ characterId, sourceToken = null, abilityId = '', name = '', presetTargetIds = [] } = {}) {
       if (!characterId) return { ran: false, reason: 'no-character' };
       const sheet = await fetchCharacterSummary(routes, characterId);
       const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
@@ -158,7 +159,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (index < 0) continue;
         const action = { ...list[index], _stableActionId: list[index]._stableActionId || getStableActionId(list[index], category, index), _maintainRerun: true };
         if (!hasAbilityAutomation(action.automation)) return { ran: false, reason: 'no-automation', name: action.name };
-        startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, free: true });
+        startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, free: true, presetTargetIds });
         return { ran: true, name: action.name };
       }
       return { ran: false, reason: 'not-found' };
@@ -3003,6 +3004,8 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     // opp-attack). Runner threads this into every target picker config so
     // the board can flash it red.
     suggestedTargetId: options?.suggestedTargetId || '',
+    // A maintained persistent ability used again: the creatures carrying its marking are picked for it (November 11, 2026).
+    presetTargetIds: Array.isArray(options?.presetTargetIds) ? options.presetTargetIds : [],
     // Firing-event snapshot from the trigger registry (damage amount, source,
     // damage type, etc.). Captured at mark-ready time and threaded here so
     // effects like halveTriggeringDamage can read the original damage value.

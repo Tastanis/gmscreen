@@ -256,7 +256,7 @@ Ranged-only, per the book.
 
 Book (2nd-level Black Ash feature): the first time on a turn you use a **shadow ability** to teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility. So it rides on **Black Ash Teleport** and **In All This Confusion** only; a plain drag teleport on the map, or the Director putting her token somewhere, never sets it off.
 
-November 10, 2026 (Brandon: "one of her regular teleports away did not cause fire damage"): the old card made Sharon click the enemy herself, so an enemy she had just left (often out of sight once she landed behind cover) could be missed. The card now uses `near: { "teleport": true, "within": 1 }`: every enemy next to the square she **left** or the square she **landed in** is pre-picked and pulses; click a token to take it out or add one, then Done. Nobody there, or the teleport was skipped: a chat line, no damage. `oncePer: { "scope": "turn", "key": "burning-ash" }` is shared by both abilities, so a second teleport in the same turn skips it (an enemy's turn is its own turn, so In All This Confusion still burns there). **Re-paste both blocks** onto the live sheet.
+November 10, 2026 (Brandon: "one of her regular teleports away did not cause fire damage"): the old card made Sharon click the enemy herself, so an enemy she had just left (often out of sight once she landed behind cover) could be missed. The card now uses `near: { "teleport": true, "within": 1, "max": 1 }`: it looks at the enemies next to the square she **left** or the square she **landed in**. November 11, 2026 (Brandon: "read the ability and do what it says"): **one** enemy burns ("that enemy"). Exactly one there: it is pre-picked and pulses. Several: none is pre-picked and she clicks the one (another click swaps it). Done with none skips. Nobody there, or the teleport was skipped: a chat line, no damage. `oncePer: { "scope": "turn", "key": "burning-ash" }` is shared by both abilities, so a second teleport in the same turn skips it (an enemy's turn is its own turn, so In All This Confusion still burns there). **Re-paste both blocks** onto the live sheet.
 
 ---
 
@@ -311,7 +311,7 @@ Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](upload
           { "kind": "teleport", "target": "self", "distance": 4, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
         ]
       },
-      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "Enemies next to where you left or landed take fire damage (first time this turn). Click to add or remove, then Done." },
+      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1, "max": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "One enemy next to where you left or landed takes fire damage (first time this turn). Click to pick or change it; Done with none skips." },
       { "type": "effect", "target": "burningAsh", "effects": [ { "kind": "damage", "amount": 0, "attribute": "A", "damageType": "fire", "raw": true } ] }
     ]
   }
@@ -389,7 +389,7 @@ The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `
           { "kind": "ifPrompt", "question": "Hide at your destination (concealment/cover)?", "yesLabel": "Yes — gain 1 surge", "noLabel": "No", "target": "self", "then": [ { "kind": "surgeGain", "amount": 1, "target": "self" } ], "else": [] }
         ]
       },
-      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "Enemies next to where you left or landed take fire damage (first time this turn). Click to add or remove, then Done." },
+      { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "near": { "teleport": true, "within": 1, "max": 1 }, "oncePer": { "scope": "turn", "key": "burning-ash" }, "promptTitle": "Burning Ash", "promptText": "One enemy next to where you left or landed takes fire damage (first time this turn). Click to pick or change it; Done with none skips." },
       { "type": "effect", "target": "burningAsh", "effects": [ { "kind": "damage", "amount": 0, "attribute": "A", "damageType": "fire", "raw": true } ] }
     ]
   }

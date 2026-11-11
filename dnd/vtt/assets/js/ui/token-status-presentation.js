@@ -65,7 +65,9 @@ export function paintTokenMarkIndicator(tokenElement, mark, {interactive = false
   markEl.setAttribute('aria-label', `Judged by ${sourceName}.${action}`);
 }
 
-export function paintTokenConditionLabel(tokenElement, conditions = [], {interactive = false, configureConditionTooltip = () => {}, detachConditionTooltip = () => {}} = {}) {
+// markings: maintained persistent abilities shown with the conditions (November 11, 2026), each
+// { key, text, title, endable }: an endable one has an × (data-token-maintained-end = key) that stops maintaining it.
+export function paintTokenConditionLabel(tokenElement, conditions = [], {interactive = false, configureConditionTooltip = () => {}, detachConditionTooltip = () => {}, markings = []} = {}) {
   let label = tokenElement.querySelector('.vtt-token__condition');
   let hiddenBadge = tokenElement.querySelector('.vtt-token__hidden-effect');
   // A shown hidden effect (a buff) is on the token by its label; other hidden effects only as the FX badge.
@@ -73,8 +75,9 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
   const hiddenConditions = conditions.filter(isHiddenOnly);
   const visibleConditions = conditions.filter((condition) => !isHiddenOnly(condition));
   tokenElement.classList.toggle('vtt-token--has-hidden-effects', hiddenConditions.length > 0);
+  const marks = (Array.isArray(markings) ? markings : []).filter((mark) => mark && mark.key && mark.text);
 
-  if (!visibleConditions.length) {
+  if (!visibleConditions.length && !marks.length) {
     if (label) {
       detachConditionTooltip(label);
       label.remove();
@@ -86,7 +89,7 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
       ? condition.label.trim()
       : condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
     .filter(Boolean);
-  const text = names.join(' • ');
+  const text = [...names, ...marks.map((mark) => mark.text)].join(' • ');
 
   if (!text) {
     if (label) {
@@ -100,15 +103,36 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
   }
 
   // One line per condition, stacked (board.css .vtt-token__condition-line), not one line cut short.
-  const lineKey = names.join('|');
+  const lineKey = names.join('|') + (marks.length ? `#${marks.map((mark) => `${mark.key}:${mark.text}:${mark.endable && interactive ? 1 : 0}`).join('|')}` : '');
   if (label && text && label.dataset.conditionLines !== lineKey) {
     label.dataset.conditionLines = lineKey;
-    label.replaceChildren(...names.map((name) => { const line = document.createElement('span'); line.className = 'vtt-token__condition-line'; line.textContent = name; return line; }));
+    const markLine = (mark) => {
+      const line = document.createElement('span');
+      line.className = 'vtt-token__condition-line vtt-token__condition-line--maintained';
+      line.dataset.maintainedKey = mark.key;
+      if (mark.title) line.title = mark.title;
+      const words = document.createElement('span');
+      words.textContent = mark.text;
+      line.appendChild(words);
+      if (mark.endable && interactive) {
+        const end = document.createElement('button');
+        end.type = 'button';
+        end.className = 'vtt-token__maintained-end';
+        end.setAttribute('data-token-maintained-end', mark.key);
+        end.setAttribute('aria-label', `Stop maintaining ${mark.text}`);
+        end.title = 'Stop maintaining it (no action)';
+        end.textContent = '×';
+        line.appendChild(end);
+      }
+      return line;
+    };
+    label.replaceChildren(...names.map((name) => { const line = document.createElement('span'); line.className = 'vtt-token__condition-line'; line.textContent = name; return line; }), ...marks.map(markLine));
   }
   if (label && text) {
     label.setAttribute('aria-label', text);
     label.removeAttribute('title');
-    configureConditionTooltip(label, visibleConditions, { delay: 500 });
+    if (visibleConditions.length) configureConditionTooltip(label, visibleConditions, { delay: 500 });
+    else detachConditionTooltip(label);
   }
 
   if (!hiddenConditions.length) {
