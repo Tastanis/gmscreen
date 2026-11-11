@@ -29,6 +29,7 @@
     walls: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14h18M9 4v5M15 9v5M9 14v6"/>',
     clear: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
     fog: '<path d="M6 16a4 4 0 01.5-8A5.5 5.5 0 0117 8.5a3.8 3.8 0 01.5 7.5z"/><path d="M5 20h14"/>',
+    break: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M12 4l-2 5 4 3-3 4 1 4"/>',
   };
   const svg = (k) => `<svg viewBox="0 0 24 24">${I[k] || ''}</svg>`;
   const press = (sel) => { const b = typeof sel === 'string' ? $(sel) : sel; if (!b) return false; b.click(); return true; };
@@ -102,8 +103,11 @@
   function editsMenu(anchor) {
     openMenu(anchor, `<h5>Map edits</h5>
       <button class="te-row${pressed('[data-action="map-edits"]') ? ' on' : ''}" data-m="edits">${svg('walls')}Walls, stairs, height, floors</button>
+      <button class="te-row${pressed('[data-action="map-break"]') ? ' on' : ''}" data-m="break">${svg('break')}${pressed('[data-action="map-break"]') ? 'Stop breaking' : 'Break or mend things'}</button>
       <button class="te-row" data-m="fog">${svg('fog')}Fog of war</button>`, (m) => {
       m.querySelector('[data-m="edits"]').onclick = () => { closeMenu(); press('[data-action="map-edits"]'); setTimeout(refresh, 60); };
+      // The Break tool (wall-prototype.js, Brandon, November 10, 2026): outlines what can break; a click breaks or mends it.
+      m.querySelector('[data-m="break"]').onclick = () => { closeMenu(); press('[data-action="map-break"]'); setTimeout(refresh, 60); };
       m.querySelector('[data-m="fog"]').onclick = () => { closeMenu(); press('[data-settings-launch="fog"]'); };
     });
   }
