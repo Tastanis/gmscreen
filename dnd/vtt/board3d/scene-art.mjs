@@ -1,5 +1,6 @@
 import {readGlb} from './glb-reader.mjs';
 import {applySwampWaterAnimation} from './swamp-water.mjs';
+import {applyFlowAnimation} from './flow-art.mjs';
 import {applyLilyBob} from './lily-bob.mjs';
 import {attachPieces} from './breakable-art.mjs';
 
@@ -9,7 +10,8 @@ import {attachPieces} from './breakable-art.mjs';
 // map that plays: walls, floors, stairs and heights stay the scene's own.
 // An entry may also say (Thornbriar, November 2026):
 //   "materials"         settings for materials named in the art: envMapIntensity, roughness, and
-//                       "animation": "swamp-ripples" with its ripple sources (swamp-water.mjs);
+//                       "animation": "swamp-ripples" with its ripple sources, and optional rippleColor, rippleSpeed and
+//                       waterColor (swamp-water.mjs); or "animation": "flow" with flowSpeed, for pours (flow-art.mjs);
 //   "lilyBob"           a file of lily pads that rock gently on the water (lily-bob.mjs);
 //   "terrainZoneFills"  {"<zone tag>": false} where the art paints that ground itself, so the zone's coloured fill
 //                       is left off (its outline, name and rules stay);
@@ -31,6 +33,7 @@ export function applySceneArtMaterialOptions(material,entry){
  if(Number.isFinite(option.envMapIntensity))material.envMapIntensity=Math.max(0,Math.min(8,option.envMapIntensity));
  if(Number.isFinite(option.roughness)&&'roughness' in material)material.roughness=Math.max(0,Math.min(1,option.roughness));
  if(option.animation==='swamp-ripples')applySwampWaterAnimation(material,option);
+ else if(option.animation==='flow')applyFlowAnimation(material,option);
  material.needsUpdate=true;
 }
 // A side file of an entry. One that cannot be read is said in the console and the art is drawn without it: a map

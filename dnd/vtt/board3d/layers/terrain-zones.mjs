@@ -49,8 +49,8 @@ export function createTerrainZonesLayer({guideScene,overlayHost,helpers,view}){
   if(fills.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(fills,3));g.setAttribute('color',new THREE.Float32BufferAttribute(fillColors,4));
    const m=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,side:THREE.DoubleSide,forceSinglePass:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,toneMapped:false});const o=new THREE.Mesh(g,m);o.renderOrder=1;o.frustumCulled=false;root.add(o);}
   for(const {edge,dash,segments} of byColor.values()){if(!segments.length)continue;
-   root.add(wideLines(segments,{color:new THREE.Color('#0b1020'),width:4.5,opacity:.5,dashed:dash,renderOrder:7}));
-   root.add(wideLines(segments,{color:edge,width:2,opacity:1,dashed:dash,renderOrder:8}));}
+   root.add(wideLines(segments,{color:new THREE.Color('#0b1020'),width:4.5,opacity:.5,dashed:dash,hiddenOpacity:0,renderOrder:7}));
+   root.add(wideLines(segments,{color:edge,width:2,opacity:1,dashed:dash,hiddenOpacity:0,renderOrder:8}));}
  }
  function labelFor(id){
   let el=labels.get(id);

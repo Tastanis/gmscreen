@@ -29,8 +29,14 @@ final class SceneEnvironment
         }
         // A labelled map's objects: a player's page needs their outlines and tops to stand on them, never what breaks.
         foreach ($environment['walls']['value']['objects'] ?? [] as $i => $object) {
-            unset($object['material'], $object['group']);
+            unset($object['material'], $object['group'], $object['holds']);
             $environment['walls']['value']['objects'][$i] = $object;
+        }
+        // Breakable floor plates: which are breakable is the GM's; a player's page keeps the broken squares (holes).
+        foreach ($environment['walls']['value']['roofs'] ?? [] as $i => $roof) {
+            if (!is_array($roof) || !array_key_exists('material', $roof)) continue;
+            unset($roof['material']);
+            $environment['walls']['value']['roofs'][$i] = $roof;
         }
         unset($environment['walls']['value']['checks']);
         // GM-only zones never reach a player browser.
@@ -188,6 +194,19 @@ final class SceneEnvironment
                 $depth=$roof['sideDepth'];
                 if ((!is_int($depth)&&!is_float($depth))||!is_finite((float)$depth)||$depth<0||$depth>self::MAX_SIDE_DEPTH) throw new InvalidArgumentException('Side depth must be a number from 0 to '.self::MAX_SIDE_DEPTH.'.');
             }
+            // A breakable floor plate (plan part 4): a material, and the squares broken so far as "col,row".
+            if (array_key_exists('material',$roof)) {
+                if (!in_array($roof['material'],self::WALL_MATERIALS,true)) throw new InvalidArgumentException('Invalid plate material.');
+                if (($roof['kind'] ?? '')!=='floor'||!empty($roof['boxTop'])||!empty($roof['templateCube'])) throw new InvalidArgumentException('Only a floor plate can be breakable.');
+                if (!is_string($roof['id'] ?? null)||!preg_match(self::WALL_GROUP,$roof['id'])) throw new InvalidArgumentException('A breakable plate needs an id of letters, digits and . _ : -');
+            }
+            if (array_key_exists('broken',$roof)) {
+                $broken=$roof['broken'];
+                if (!is_array($broken)||!array_is_list($broken)||count($broken)>FloorSupport::PLATE_SQUARES_MAX) throw new InvalidArgumentException('Invalid broken squares.');
+                if ($broken&&!isset($roof['material'])) throw new InvalidArgumentException('Only a plate with a material can be broken.');
+                foreach ($broken as $key) if (!is_string($key)||!preg_match(FloorSupport::SQUARE_KEY,$key)) throw new InvalidArgumentException('Invalid broken square.');
+                if (count(array_unique($broken))!==count($broken)) throw new InvalidArgumentException('A square is listed broken twice.');
+            }
             foreach ($roof['nodes'] ?? [] as $nodeId) if (!isset($ids[$nodeId])) throw new InvalidArgumentException('Roof references missing node.');
             foreach ([$roof['points'] ?? [], ...($roof['holes'] ?? [])] as $ring) {
                 if (!is_array($ring)||count($ring)>20000) throw new InvalidArgumentException('Invalid roof ring.');
@@ -218,7 +237,7 @@ final class SceneEnvironment
         if (!is_array($objects)||!array_is_list($objects)||count($objects)>5000) throw new InvalidArgumentException('Invalid object list.');
         $ids=[];
         foreach ($objects as $object) {
-            if (!is_array($object)||array_is_list($object)||array_diff(array_keys($object),['id','kind','label','points','base','top','standOn','levelId','climbable','material','group','sight'])) throw new InvalidArgumentException('Invalid object record.');
+            if (!is_array($object)||array_is_list($object)||array_diff(array_keys($object),['id','kind','label','points','base','top','standOn','levelId','climbable','material','group','sight','holds'])) throw new InvalidArgumentException('Invalid object record.');
             $id=$object['id'] ?? null;
             if (!is_string($id)||!preg_match(self::WALL_GROUP,$id)||isset($ids[$id])) throw new InvalidArgumentException('Invalid object ID.');
             $ids[$id]=true;
@@ -231,6 +250,16 @@ final class SceneEnvironment
             foreach (['kind','label','levelId'] as $key) if (array_key_exists($key,$object)&&(!is_string($object[$key])||$object[$key]===''||strlen($object[$key])>128)) throw new InvalidArgumentException('Invalid object '.$key.'.');
             if (array_key_exists('sight',$object)&&!in_array($object['sight'],['block','pass','limited'],true)) throw new InvalidArgumentException('Invalid object sight.');
             if (array_key_exists('material',$object)&&!in_array($object['material'],self::WALL_MATERIALS,true)) throw new InvalidArgumentException('Invalid object material.');
+            // Floor squares the object holds up: they break with it (Brandon, November 12, 2026).
+            if (array_key_exists('holds',$object)) {
+                if (!isset($object['material'])) throw new InvalidArgumentException('Only a breakable object can hold up floor squares.');
+                if (!is_array($object['holds'])||!array_is_list($object['holds'])||count($object['holds'])>64) throw new InvalidArgumentException('Invalid object holds.');
+                foreach ($object['holds'] as $held) {
+                    if (!is_array($held)||array_diff(array_keys($held),['roof','squares'])||!is_string($held['roof'] ?? null)||!preg_match(self::WALL_GROUP,$held['roof'])) throw new InvalidArgumentException('Invalid held plate.');
+                    if (!is_array($held['squares'] ?? null)||!array_is_list($held['squares'])||count($held['squares'])>2000) throw new InvalidArgumentException('Invalid held squares.');
+                    foreach ($held['squares'] as $key) if (!is_string($key)||!preg_match(FloorSupport::SQUARE_KEY,$key)) throw new InvalidArgumentException('Invalid held square.');
+                }
+            }
             if (array_key_exists('group',$object)) {
                 if (!is_string($object['group'])||!preg_match(self::WALL_GROUP,$object['group'])) throw new InvalidArgumentException('Invalid object group.');
                 if (!isset($object['material'])) throw new InvalidArgumentException('An object group needs a material.');

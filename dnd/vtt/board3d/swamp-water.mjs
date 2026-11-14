@@ -1,21 +1,43 @@
 // Art-only, anchored water motion; no displaced vertices or gameplay surface changes.
 const reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
 const started=globalThis.performance?.now?.()||0;
+/** Seconds since the art clock started; 0 while motion is reduced (and for frozen shots). Flowing art shares it. */
+export function artSeconds(){return reducedMotion?.matches?0:((globalThis.performance?.now?.()||started)-started)/1000;}
+// Per material, all optional (Dead Root's blood, November 13, 2026); left out, the bog water looks as it always has:
+//   "rippleColor"  the light a crest adds, "#rrggbb" (the bog's is about "#222614"; brighter shows more);
+//   "rippleSpeed"  how fast it all moves, 1 = the bog's, 0 = still;
+//   "waterColor"   the deep colour the texture is darkened into, "#rrggbb" (the bog's is a dark green-brown).
+export const RIPPLE_SPEED_LIMIT=10;
+const BOG_CREST=[.016,.019,.007],BOG_AMBIENT=[.0035,.004,.0015],BOG_DEEP=[.02285,.02960,.00706];
+/** "#rgb" / "#rrggbb" as linear colour, or null. */
+export function linearColor(text){
+ const m=/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(text??'').trim());if(!m)return null;
+ const hex=m[1].length===3?[...m[1]].map(c=>c+c).join(''):m[1];
+ return [0,2,4].map(i=>{const c=parseInt(hex.slice(i,i+2),16)/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});
+}
+export function rippleLook(option={}){
+ const speed=Number(option.rippleSpeed),crest=linearColor(option.rippleColor);
+ return {crest:crest||BOG_CREST,ambient:crest?crest.map(c=>c*.21):BOG_AMBIENT,deep:linearColor(option.waterColor)||BOG_DEEP,speed:Number.isFinite(speed)?Math.max(0,Math.min(RIPPLE_SPEED_LIMIT,speed)):1};
+}
 export function applySwampWaterAnimation(material,option={}){
  if(material.userData?.swampWaterMotion)return;
  const sources=(option.rippleSources||[]).slice(0,20);
  const count=Math.max(1,sources.length),data=new Float32Array(count*4),directions=new Float32Array(count*2),phases=new Float32Array(count);
  sources.forEach((s,i)=>{data.set([s.x,s.z,s.radius||0,s.reach||2.2],i*4);directions.set([s.normalX||0,s.normalZ||0],i*2);phases[i]=s.phase??i*2.73;});
- material.userData??={};const time={value:0};material.userData.swampWaterMotion={time,sources};
+ const look=rippleLook(option);
+ material.userData??={};const time={value:0};material.userData.swampWaterMotion={time,sources,look};
  // Baked luminance normals created stationary streaks. This water uses animated analytic normals only.
  material.normalMap=null;
  const priorCompile=material.onBeforeCompile,priorRender=material.onBeforeRender;
  material.onBeforeCompile=function(shader,renderer){
   priorCompile?.call(this,shader,renderer);
-  Object.assign(shader.uniforms,{uSwampTime:time,uRippleSource:{value:data},uRippleDirection:{value:directions},uRipplePhase:{value:phases}});
+  Object.assign(shader.uniforms,{uSwampTime:time,uRippleSource:{value:data},uRippleDirection:{value:directions},uRipplePhase:{value:phases},uCrestColor:{value:look.crest},uAmbientCrestColor:{value:look.ambient},uDeepColor:{value:look.deep}});
   shader.vertexShader='varying vec2 vSwampWorld;\n'+shader.vertexShader;
   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vSwampWorld=(modelMatrix*vec4(position,1.0)).xz;');
   shader.fragmentShader=`uniform float uSwampTime;
+uniform vec3 uCrestColor;
+uniform vec3 uAmbientCrestColor;
+uniform vec3 uDeepColor;
 uniform vec4 uRippleSource[${count}];
 uniform vec2 uRippleDirection[${count}];
 uniform float uRipplePhase[${count}];
@@ -63,11 +85,11 @@ vec3 swampFronts(vec2 p){
  vec4 sampledDiffuseColor=texture2D(map,vMapUv+drift);
  vec2 crossedUv=mat2(.61,-.79,.79,.61)*(vMapUv*1.37)+vec2(.31,.72)-drift*.6;
  vec3 crossedColor=texture2D(map,crossedUv).rgb;
- sampledDiffuseColor.rgb=mix(vec3(.02285,.02960,.00706),sampledDiffuseColor.rgb*.45+crossedColor*.55,.4);
+ sampledDiffuseColor.rgb=mix(uDeepColor,sampledDiffuseColor.rgb*.45+crossedColor*.55,.4);
  diffuseColor*=sampledDiffuseColor;
 #endif
  diffuseColor.rgb*=.96+.07*silt;
- diffuseColor.rgb+=vec3(.016,.019,.007)*fronts.x+vec3(.0035,.004,.0015)*ambientCrest;
+ diffuseColor.rgb+=uCrestColor*fronts.x+uAmbientCrestColor*ambientCrest;
 `);
   shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
  normal=normalize(normal+mat3(viewMatrix)*vec3(-waterGradient.x,0.0,-waterGradient.y)*faceDirection);
@@ -77,6 +99,6 @@ vec3 swampFronts(vec2 p){
 `);
  };
  material.customProgramCacheKey=()=> 'thornbriar-swamp-anchored-v6-'+count;
- material.onBeforeRender=function(...args){priorRender?.apply(this,args);time.value=reducedMotion?.matches?0:((globalThis.performance?.now?.()||started)-started)/1000;};
+ material.onBeforeRender=function(...args){priorRender?.apply(this,args);time.value=artSeconds()*look.speed;};
  material.needsUpdate=true;
 }

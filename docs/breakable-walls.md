@@ -365,3 +365,24 @@ Your word: "finish the falling through things".
 - Answering "Climb down" at a ledge never breaks anything.
 - Both numbers are rows in the movement rules table (`fallBreakSquares`, `fallBreakDamage`); 0 turns it off.
 - Not yet: breakable floor plates (decks, bridges). Objects only.
+
+## Breakable floors and bridges (November 12, 2026; Build 630)
+
+Your words: "All of the bridges and stuff need this so that the floors of them can be broken" (Nov 11) and "if any one
+of the pillars breaks, that whole side should collapse" (Nov 12).
+
+- A floor plate (deck, walkway, bridge) labelled with a `material` breaks one square at a time. `broken` lists the
+  broken squares as "col,row". A broken square is a hole: nothing stands on it, a walker steps into it and falls.
+- **Falls:** a fall onto the deck goes through when it fell at least the material's push cost (glass 1, wood 3,
+  stone 6, metal 9), the same rule as box tops. Every square under the faller breaks, the book's damage (Stamina + 2) is
+  added once, and it falls on to what is under it. The squares break on Apply; Dismiss leaves them.
+- **Break tool:** every square of a breakable deck is outlined at the deck's height. Click one to break it, click a
+  broken one to mend it. Where decks stack, the one nearest the height under the pointer is picked.
+- **Pillars:** an object may list `holds` (deck squares it holds up). When it breaks, by a push, a fall or the Break
+  tool, those squares break too; mended, they come back. Undo puts both back.
+- **Standing on it:** a creature on a square you break drops: it gets the Fall pop-up, as if it fell from the deck.
+- **Art:** each square is a piece "<deck id>@<col>,<row>" in the map's pieces file; broken, it shows its rubble.
+- Players never learn which decks or pillars are breakable, only where the holes are.
+- Map maker check: `php dnd/vtt/tools/map-label-check.php <map> <pieces>` lists each breakable deck and its squares,
+  squares with no piece, and `holds` that name a missing deck or squares off it.
+- Not yet: on a map with no 3D art, the app's own drawn deck does not show the hole (the 3D art maps do).

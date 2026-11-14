@@ -58,7 +58,8 @@ export function wideLines(segments,{color,width=2,opacity=1,dashed=false,hiddenO
  geometry.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geometry.setAttribute('aOther',new THREE.Float32BufferAttribute(other,3));
  geometry.setAttribute('aSide',new THREE.Float32BufferAttribute(side,1));geometry.setAttribute('aDist',new THREE.Float32BufferAttribute(dist,1));geometry.setIndex(index);
  const group=new THREE.Group();
- for(const hidden of [false,true]){
+ // hiddenOpacity 0: nothing of it shows through the scenery (zone outlines, Dead Root, November 12, 2026).
+ for(const hidden of hiddenOpacity>0?[false,true]:[false]){
   const mesh=new THREE.Mesh(geometry,lineMaterial({color,width,opacity:hidden?opacity*hiddenOpacity:opacity,dashed,hidden}));mesh.frustumCulled=false;mesh.renderOrder=renderOrder;
   mesh.onBeforeRender=renderer=>{renderer.getSize(size);mesh.material.uniforms.uResolution.value.set(Math.max(1,size.x),Math.max(1,size.y));};
   mesh.raycast=()=>{};group.add(mesh);

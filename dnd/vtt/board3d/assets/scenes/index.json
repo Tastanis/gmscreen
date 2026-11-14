@@ -46,7 +46,7 @@
   },
   {
     "id": "deadroot",
-    "note": "Dead Root Node 3D art (Map maker, pass 9). Matches the Dead Root Node v39 scene package.",
+    "note": "Dead Root Node 3D remake (pass 9h, floors version): 61 breakable objects + 134 breakable floor squares; pillars hold squares (Build 630). Matches Dead-Root-Node-floors.vttmap.",
     "match": {
       "terrain": [
         477,
@@ -62,7 +62,7 @@
         "deadroot-deck-4"
       ]
     },
-    "glb": "deadroot/DeadRoot.glb",
+    "glb": "deadroot/DeadRoot-775781c216.glb",
     "levels": {
       "level-0": 0,
       "level-2": 2,
@@ -70,17 +70,388 @@
     },
     "light": {
       "hemi": [
-        "#ece6f8",
-        "#a898b0",
-        3.6
+        "#e0dcd8",
+        "#6a5e58",
+        3.2
       ],
       "sun": [
-        "#ffd4b0",
-        3.6
+        "#ffd0a8",
+        3.2
       ],
-      "rim": 1.5,
-      "exposure": 1.6
-    }
+      "rim": 1.3,
+      "exposure": 1.45
+    },
+    "terrainZoneFills": {
+      "water": false,
+      "blood": false
+    },
+    "materials": {
+      "blood": {
+        "envMapIntensity": 0,
+        "roughness": 0.55,
+        "animation": "swamp-ripples",
+        "rippleSources": [
+          {
+            "x": 53.7,
+            "z": 16.0,
+            "radius": 0.25,
+            "reach": 2.6,
+            "phase": 0.0
+          },
+          {
+            "x": 53.7,
+            "z": 16.0,
+            "radius": 0.25,
+            "reach": 2.6,
+            "phase": 3.6
+          },
+          {
+            "x": 34.1,
+            "z": 16.0,
+            "radius": 1.25,
+            "reach": 2.4,
+            "phase": 1.1
+          },
+          {
+            "x": 34.1,
+            "z": 16.0,
+            "radius": 1.25,
+            "reach": 2.4,
+            "phase": 4.7
+          },
+          {
+            "x": 30.5,
+            "z": 18.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 0.89
+          },
+          {
+            "x": 26.5,
+            "z": 13.5,
+            "radius": 0.42,
+            "reach": 2.2,
+            "phase": 5.4
+          },
+          {
+            "x": 26.5,
+            "z": 17.5,
+            "radius": 0.39,
+            "reach": 2.2,
+            "phase": 4.45
+          },
+          {
+            "x": 30.5,
+            "z": 14.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 7.18
+          },
+          {
+            "x": 36.5,
+            "z": 14.5,
+            "radius": 0.44,
+            "reach": 2.2,
+            "phase": 2.61
+          },
+          {
+            "x": 35.5,
+            "z": 18.5,
+            "radius": 0.4,
+            "reach": 2.2,
+            "phase": 3.56
+          },
+          {
+            "x": 39.5,
+            "z": 16.5,
+            "radius": 0.38,
+            "reach": 2.2,
+            "phase": 1.78
+          },
+          {
+            "x": 40.5,
+            "z": 15.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 0.0
+          },
+          {
+            "x": 42.5,
+            "z": 7.5,
+            "radius": 0.28,
+            "reach": 2.2,
+            "phase": 0.0
+          },
+          {
+            "x": 43.5,
+            "z": 11.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 3.8
+          },
+          {
+            "x": 43.5,
+            "z": 16.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 5.7
+          },
+          {
+            "x": 46.5,
+            "z": 15.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 0.3
+          },
+          {
+            "x": 50.5,
+            "z": 15.5,
+            "radius": 0.3,
+            "reach": 2.2,
+            "phase": 2.2
+          },
+          {
+            "x": 20.5,
+            "z": 10.5,
+            "radius": 0.34,
+            "reach": 2.2,
+            "phase": 6.35
+          },
+          {
+            "x": 14.5,
+            "z": 21.5,
+            "radius": 0.42,
+            "reach": 2.2,
+            "phase": 2.73
+          },
+          {
+            "x": 22.5,
+            "z": 19.5,
+            "radius": 0.41,
+            "reach": 2.2,
+            "phase": 4.51
+          }
+        ],
+        "rippleColor": "#5a0a08",
+        "rippleSpeed": 0.5,
+        "waterColor": "#2a0406"
+      },
+      "bog": {
+        "envMapIntensity": 0,
+        "roughness": 0.92,
+        "animation": "swamp-ripples",
+        "rippleSources": [
+          {
+            "x": 19.5,
+            "z": 2.5,
+            "radius": 0.441,
+            "reach": 2.2,
+            "phase": 0.0
+          },
+          {
+            "x": 66.5,
+            "z": 30.5,
+            "radius": 0.44,
+            "reach": 2.2,
+            "phase": 2.73
+          },
+          {
+            "x": 1.5,
+            "z": 30.5,
+            "radius": 0.261,
+            "reach": 2.2,
+            "phase": 5.46
+          },
+          {
+            "x": 52.5,
+            "z": 1.5,
+            "radius": 0.267,
+            "reach": 2.2,
+            "phase": 0.89
+          },
+          {
+            "x": 21.5,
+            "z": 29.5,
+            "radius": 0.417,
+            "reach": 2.2,
+            "phase": 3.62
+          },
+          {
+            "x": 35.5,
+            "z": 1.5,
+            "radius": 0.397,
+            "reach": 2.2,
+            "phase": 6.35
+          },
+          {
+            "x": 50.5,
+            "z": 30.5,
+            "radius": 0.384,
+            "reach": 2.2,
+            "phase": 1.78
+          },
+          {
+            "x": 66.5,
+            "z": 7.5,
+            "radius": 0.312,
+            "reach": 2.2,
+            "phase": 4.51
+          },
+          {
+            "x": 11.5,
+            "z": 30.5,
+            "radius": 0.371,
+            "reach": 2.2,
+            "phase": 7.24
+          },
+          {
+            "x": 58.5,
+            "z": 29.5,
+            "radius": 0.371,
+            "reach": 2.2,
+            "phase": 2.67
+          },
+          {
+            "x": 60.5,
+            "z": 1.5,
+            "radius": 0.366,
+            "reach": 2.2,
+            "phase": 5.4
+          },
+          {
+            "x": 27.5,
+            "z": 1.5,
+            "radius": 0.282,
+            "reach": 2.2,
+            "phase": 0.83
+          },
+          {
+            "x": 45.5,
+            "z": 2.5,
+            "radius": 0.336,
+            "reach": 2.2,
+            "phase": 3.56
+          },
+          {
+            "x": 12.5,
+            "z": 1.5,
+            "radius": 0.329,
+            "reach": 2.2,
+            "phase": 6.29
+          },
+          {
+            "x": 66.5,
+            "z": 1.5,
+            "radius": 0.395,
+            "reach": 2.2,
+            "phase": 1.72
+          },
+          {
+            "x": 6.5,
+            "z": 28.5,
+            "radius": 0.449,
+            "reach": 2.2,
+            "phase": 4.45
+          },
+          {
+            "x": 56.5,
+            "z": 3.5,
+            "radius": 0.44,
+            "reach": 2.2,
+            "phase": 7.18
+          },
+          {
+            "x": 15.5,
+            "z": 4.5,
+            "radius": 0.359,
+            "reach": 2.2,
+            "phase": 2.61
+          },
+          {
+            "x": 31.5,
+            "z": 2.5,
+            "radius": 0.339,
+            "reach": 2.2,
+            "phase": 5.34
+          },
+          {
+            "x": 23.5,
+            "z": 1.5,
+            "radius": 0.304,
+            "reach": 2.2,
+            "phase": 0.77
+          }
+        ]
+      },
+      "pool-water": {
+        "envMapIntensity": 0,
+        "roughness": 0.3,
+        "animation": "swamp-ripples",
+        "rippleSources": [
+          {
+            "x": 4.2,
+            "z": 4.0,
+            "radius": 0.3,
+            "reach": 1.2,
+            "phase": 0.0
+          },
+          {
+            "x": 7.1,
+            "z": 5.25,
+            "radius": 0.3,
+            "reach": 1.2,
+            "phase": 2.4
+          },
+          {
+            "x": 9.5,
+            "z": 7.5,
+            "radius": 0.3,
+            "reach": 1.2,
+            "phase": 4.9
+          }
+        ],
+        "rippleColor": "#5a0a08",
+        "rippleSpeed": 0.5,
+        "waterColor": "#2a0406"
+      },
+      "mist": {
+        "envMapIntensity": 0
+      },
+      "trough-blood": {
+        "envMapIntensity": 0,
+        "roughness": 0.5,
+        "animation": "swamp-ripples",
+        "rippleSources": [
+          {
+            "x": 55.9,
+            "z": 16.0,
+            "radius": 0.2,
+            "reach": 1.6,
+            "phase": 0.0
+          },
+          {
+            "x": 55.9,
+            "z": 16.0,
+            "radius": 0.2,
+            "reach": 1.6,
+            "phase": 3.6
+          }
+        ],
+        "rippleColor": "#5a0a08",
+        "rippleSpeed": 0.5,
+        "waterColor": "#2a0406"
+      },
+      "fall-blood": {
+        "envMapIntensity": 0,
+        "roughness": 0.18,
+        "animation": "flow",
+        "flowSpeed": 0.55
+      },
+      "blood-foam": {
+        "envMapIntensity": 0
+      }
+    },
+    "pieces": "deadroot/pieces-775781c216-floors.json"
   },
   {
     "id": "thornbriar",

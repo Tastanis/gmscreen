@@ -12,7 +12,12 @@
 // push, a fall, the Director's Broken box, Repair and Undo all show without anything here knowing about them.
 // No three.js here: only index arrays, so the rules below are tested without a page.
 
+import { isBreakablePlate, plateSquares, plateSquareId } from '../assets/js/ui/break-tool.mjs';
+import { resolveSupportSurfaces } from '../assets/js/ui/floor-support.js';
+
 const OBJECT_WALL = /^obj:(.+):\d+$/;
+// Breakable floor plates (plan part 4, November 11, 2026): each broken square of a plate is the piece
+// "<plate id>@<col>,<row>". Players' copies keep `broken` (not the material), so any plate's broken squares count.
 
 /** The names a wall's piece may go by, most exact first: its object, its group, itself. */
 export function pieceKeysOf(edge) {
@@ -24,6 +29,11 @@ export function pieceKeysOf(edge) {
   return keys;
 }
 
+/** Whether the art has a piece for this wall: then its rubble shows it broken, and the board draws no broken marks. */
+export function hasArtPiece(edge, pieces) {
+  return pieceKeysOf(edge).some((name) => Object.hasOwn(pieces ?? {}, name));
+}
+
 /** The pieces of this art that are broken on the map: one for each broken wall that has a piece. */
 export function brokenPieces(model, pieces) {
   const out = new Set();
@@ -31,6 +41,10 @@ export function brokenPieces(model, pieces) {
     if (edge?.broken !== true) continue;
     const key = pieceKeysOf(edge).find((name) => Object.hasOwn(pieces ?? {}, name));
     if (key) out.add(key);
+  }
+  for (const roof of model?.roofs ?? []) for (const square of roof?.broken ?? []) {
+    const key = `${roof.id}@${square}`;
+    if (Object.hasOwn(pieces ?? {}, key)) out.add(key);
   }
   return out;
 }
@@ -42,6 +56,11 @@ export function pieceMismatch(model, pieces) {
     if (typeof edge?.material !== 'string') continue;
     const key = pieceKeysOf(edge).find((name) => Object.hasOwn(pieces ?? {}, name));
     if (key) used.add(key); else missing.add(pieceKeysOf(edge)[0]);
+  }
+  const plates = (model?.roofs ?? []).filter(isBreakablePlate).map(({ broken, ...plate }) => plate);
+  for (const plate of resolveSupportSurfaces({ nodes: model?.nodes, roofs: plates })) for (const [c, r] of plateSquares(plate)) {
+    const key = plateSquareId(plate.id, c, r);
+    if (Object.hasOwn(pieces ?? {}, key)) used.add(key); else missing.add(key);
   }
   return { missing: [...missing], unused: Object.keys(pieces ?? {}).filter((key) => !used.has(key)) };
 }

@@ -434,6 +434,13 @@ final class SyncV2Store
                 if (!isset($wasBroken[$edge['id']]) || !WallObjects::breakable($edge)) continue;
                 $environment['walls']['value']['segments'][$i]['broken'] = true; $stillBroken++;
             }
+            // ...and the broken squares of floor plates that are still there and still breakable.
+            $oldRoofs = [];
+            foreach ($old['environment']['walls']['value']['roofs'] ?? [] as $roof) if (is_string($roof['id'] ?? null) && !empty($roof['broken'])) $oldRoofs[$roof['id']] = $roof['broken'];
+            if ($oldRoofs) foreach ($environment['walls']['value']['roofs'] ?? [] as $i=>$roof) {
+                if (!isset($oldRoofs[$roof['id'] ?? '']) || !FloorSupport::breakablePlate($roof)) continue;
+                $environment['walls']['value']['roofs'][$i]['broken'] = array_values(array_unique([...($roof['broken'] ?? []), ...$oldRoofs[$roof['id']]])); $stillBroken++;
+            }
             $next = $config;
             $next['environment'] = $environment;
             $fog = $old['fogOfWar'] ?? ($config['fogOfWar'] ?? null);
@@ -2356,6 +2363,34 @@ final class SyncV2Store
     }
 
     /**
+     * Breaks (or mends) the squares of breakable floor plates named among `$ids` as "<plate>@<col>,<row>". Only a
+     * breakable plate's own squares change. Returns whether anything did.
+     */
+    private static function plateSquareMarks(array &$walls,array $ids,bool $break): bool
+    {
+        $want=[];
+        foreach($ids as $id){$square=is_string($id)?FloorSupport::squareOf($id):null;if($square!==null)$want[$square[0]][$square[1].','.$square[2]]=true;}
+        if(!$want)return false;
+        $changed=false;
+        foreach($walls['value']['roofs']??[] as $i=>$roof){
+            $id=$roof['id']??null;if(!is_string($id)||!isset($want[$id])||!FloorSupport::breakablePlate($roof))continue;
+            $broken=array_values(array_filter((array)($roof['broken']??[]),'is_string'));
+            if($break){
+                $roof['points']??=FloorSupport::surfaces(['nodes'=>$walls['value']['nodes']??[],'roofs'=>[$roof]])[0]['points']??[];
+                $own=[];foreach(FloorSupport::plateSquares($roof) as [$c,$r])$own[$c.','.$r]=true;
+                $add=array_values(array_filter(array_keys($want[$id]),fn($key)=>isset($own[$key])&&!in_array($key,$broken,true)));
+                if(!$add)continue;$broken=[...$broken,...$add];
+            } else {
+                $left=array_values(array_filter($broken,fn($key)=>!isset($want[$id][$key])));
+                if(count($left)===count($broken))continue;$broken=$left;
+            }
+            if($broken)$walls['value']['roofs'][$i]['broken']=$broken;else unset($walls['value']['roofs'][$i]['broken']);
+            $changed=true;
+        }
+        return $changed;
+    }
+
+    /**
      * Marks standing breakable walls as broken, inside the caller's transaction, and tells every
      * browser the way a GM's wall save does. Walls that are gone, already broken or not breakable
      * are left alone. Returns the event, or null when nothing changed.
@@ -2372,6 +2407,8 @@ final class SyncV2Store
                 if(!in_array($edge['id']??null,$ids,true)||!WallObjects::breakable($edge))continue;
                 $walls['value']['segments'][$i]['broken']=true;$changed=true;
             }
+            // Squares of breakable floor plates ("<plate>@<col>,<row>", plan part 4), and the ones a broken object held up.
+            if(self::plateSquareMarks($walls,[...$ids,...MapLabels::heldSquares($walls['value'],$ids)],true))$changed=true;
             if($changed){
                 $walls['revision']=(int)($walls['revision']??0)+1;
                 $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;
@@ -2419,6 +2456,7 @@ final class SyncV2Store
                 if(!in_array($edge['id']??null,$ids,true)||($edge['broken']??false)!==true)continue;
                 unset($walls['value']['segments'][$i]['broken']);$changed=true;
             }
+            if(self::plateSquareMarks($walls,[...$ids,...MapLabels::heldSquares($walls['value'],$ids)],false))$changed=true;
             if($changed){
                 $walls['revision']=(int)($walls['revision']??0)+1;
                 $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;

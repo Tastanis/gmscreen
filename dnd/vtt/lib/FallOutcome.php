@@ -54,15 +54,30 @@ final class FallOutcome {
   if($per<=0)return null;
   $segments=array_column($model['segments']??[],null,'id');$boxes=array_column(WallBoxes::boxes($model),null,'id');
   $broken=[];$pieces=[];$skip=[];$landing=null;
+  $plates=[];foreach($model['roofs']??[] as $index=>$roof)if(is_string($roof['id']??null)&&FloorSupport::breakablePlate($roof))$plates[$roof['id']]=$index;
   for($i=0;$i<10&&$onto;$i++){
-   $box=$boxes[$onto['id']]??null;if(!$box)break;
-   $edges=array_values(array_filter(array_map(fn($id)=>$segments[$id]??null,$box['edges']??[])));
-   if(!$edges||array_filter($edges,fn($e)=>!WallObjects::breakable($e)))break;
-   $stamina=max(array_map(fn($e)=>WallObjects::stamina($e),$edges));
-   if($top-(float)$onto['height']+1e-6<$stamina*$per)break;
-   foreach(WallObjects::whole($edges,$config) as $wall)$broken[$wall['id']]=$wall;
-   $pieces[]=['id'=>$onto['id'],'material'=>$edges[0]['material']??'stone','stamina'=>$stamina,'damage'=>(int)round(($stamina+2)*$times)];
-   $skip[$onto['id']]=true;$landing=$ground;
+   $box=$boxes[$onto['id']]??null;
+   if($box){
+    $edges=array_values(array_filter(array_map(fn($id)=>$segments[$id]??null,$box['edges']??[])));
+    if(!$edges||array_filter($edges,fn($e)=>!WallObjects::breakable($e)))break;
+    $stamina=max(array_map(fn($e)=>WallObjects::stamina($e),$edges));
+    if($top-(float)$onto['height']+1e-6<$stamina*$per)break;
+    foreach(WallObjects::whole($edges,$config) as $wall)$broken[$wall['id']]=$wall;
+    $pieces[]=['id'=>$onto['id'],'material'=>$edges[0]['material']??'stone','stamina'=>$stamina,'damage'=>(int)round(($stamina+2)*$times)];
+    $skip[$onto['id']]=true;
+   }
+   // A breakable floor plate (plan part 4): the squares of it under the faller break, and are holes from then on.
+   elseif(isset($plates[$onto['id']])){
+    $roof=$model['roofs'][$plates[$onto['id']]];$roof['points']??=FloorSupport::surfaces(['nodes'=>$model['nodes']??[],'roofs'=>[$roof]])[0]['points']??[];
+    $cuts=[];foreach($config['mapLevels']['levels']??[] as $level)if(($level['id']??null)===($roof['levelId']??null))$cuts=$level['cutouts']??[];
+    $squares=FloorSupport::plateSquaresUnder($to,$roof,$cuts);
+    $stamina=WallObjects::STAMINA[$roof['material']];
+    if(!$squares||$top-(float)$onto['height']+1e-6<$stamina*$per)break;
+    foreach($squares as [$c,$r]){$id=FloorSupport::squareId($roof['id'],$c,$r);$broken[$id]=['id'=>$id,'material'=>$roof['material']];$model['roofs'][$plates[$onto['id']]]['broken'][]=$c.','.$r;}
+    $pieces[]=['id'=>$onto['id'],'material'=>$roof['material'],'stamina'=>$stamina,'damage'=>(int)round(($stamina+2)*$times),'squares'=>count($squares)];
+   }
+   else break;
+   $landing=$ground;
    $surfaces=array_values(array_filter(FloorSupport::surfaces($model),fn($s)=>(($s['kind']??'')==='floor'||!empty($s['templateCube']))&&isset($s['id'])&&!isset($skip[$s['id']])));
    $best=$surfaces?FloorSupport::landing($to,$surfaces,$config['mapLevels']??[],(float)$onto['height']-1e-6,-INF):null;
    $landing=max($ground,(float)($best['height']??$ground));

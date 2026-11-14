@@ -59,9 +59,20 @@ export function terrainFloorContact(p,surfaces,mapLevels,ground,below=0){
 }
 
 export function resolveSupportSurfaces(model={}){
- const surfaces=model.roofs||[];if(surfaces.every(s=>s.points))return surfaces;
+ const surfaces=model.roofs||[];if(surfaces.every(s=>s.points&&!s.broken?.length))return surfaces;
  const nodes=new Map((model.nodes||[]).map(n=>[n.id,n]));
- return surfaces.map(s=>s.points?s:{...s,points:(s.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)});
+ return surfaces.map(s=>withBrokenHoles(s.points?s:{...s,points:(s.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)}));
+}
+// Breakable floor plates (plan part 4, Brandon, November 8 and 11, 2026; FloorSupport.php): a plate's broken squares,
+// "col,row", are holes in it for standing, walking and landing. The holed copy is kept per plate object.
+export const SQUARE_KEY=/^-?\d{1,6},-?\d{1,6}$/;
+const holed=new WeakMap();
+export function withBrokenHoles(s){
+ if(!Array.isArray(s?.broken)||!s.broken.length)return s;
+ const kept=holed.get(s);if(kept)return kept;
+ const holes=[...(s.holes||[])];
+ for(const key of s.broken)if(typeof key==='string'&&SQUARE_KEY.test(key)){const [c,r]=key.split(',').map(Number);holes.push([{x:c,y:r},{x:c+1,y:r},{x:c+1,y:r+1},{x:c,y:r+1}]);}
+ const out={...s,holes};holed.set(s,out);return out;
 }
 
 // Stepping onto a floor plate (a walkway, a deck, a bridge). A walker with no plate under it is on

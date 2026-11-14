@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pieceKeysOf, brokenPieces, pieceMismatch, attachPieces } from '../../../../board3d/breakable-art.mjs';
+import { pieceKeysOf, brokenPieces, pieceMismatch, attachPieces, hasArtPiece } from '../../../../board3d/breakable-art.mjs';
 
 // Breakable map art (Brandon, November 8, 2026, plan part 4: "Breaking a square hides the intact piece and shows its
 // rubble. Everything else stays."). The art keeps its merged meshes; a pieces file names index ranges to hide and to
@@ -93,4 +93,28 @@ test('no-climb ground is walked down as well as up: no ledge question, and the p
   assert.match(board, /high - height < MOVEMENT_RULES\.climbGrade - 1e-6 && window\.terrainZones\?\.noClimb\?\.\(/);
   const planner = readFileSync(new URL('../../../../board3d/route-planner.mjs', import.meta.url), 'utf8');
   assert.match(planner, /const drop=!onStair&&!walkedDown&&/);
+});
+
+test('a broken wall with rubble in the art gets no broken marks on the 3D board (Brandon, November 13, 2026: "white circles in a line")', () => {
+  const pieces = { 'west-elder': {}, 'gate-group': {}, 'w-9': {} };
+  assert.equal(hasArtPiece({ id: 'obj:west-elder:3' }, pieces), true, 'by its object');
+  assert.equal(hasArtPiece({ id: 'w-2', group: 'gate-group' }, pieces), true, 'by its group');
+  assert.equal(hasArtPiece({ id: 'w-9' }, pieces), true, 'by itself');
+  assert.equal(hasArtPiece({ id: 'w-1' }, pieces), false, 'no piece: the marks stay');
+  const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
+  assert.match(walls, /const rubble=isBroken\(e\)&&board3d\(\)\?\.hasArtPiece\?\.\(e\);[\s\S]{0,300}if\(context\.isGM&&!rubble\)for/, 'the dashed line');
+  assert.match(walls, /if\(!rubble\)strokes3d\.push\(\{kind:'dot'/, 'and its mark');
+  assert.match(walls, /document\.addEventListener\('vtt3d:scene-built',\(\)=>\{try\{render\(true\);\}/, 'drawn again once the art is in');
+  const board = readFileSync(new URL('../../../../board3d/integration.mjs', import.meta.url), 'utf8');
+  assert.match(board, /hasArtPiece:edge=>!!sceneArtPieces&&hasArtPiece\(edge,sceneArtPieces\.pieces\)/);
+});
+
+test('an object\'s walls are not drawn faintly through the deck over them (Dead Root pillars, November 13, 2026)', () => {
+  const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
+  assert.match(walls, /const through=!\(typeof e\.object==='string'&&e\.object\|\|\/\^obj:\/\.test\(String\(e\.id\)\)\);/);
+  assert.match(walls, /opacity:panel\.hidden\?\.45:\.95,through,dash:/, 'the wall line');
+  assert.match(walls, /opacity:panel\.hidden\?\.6:1,through\}\);/, 'and its breakable mark');
+  const overlay = readFileSync(new URL('../../../../board3d/wall-overlay.mjs', import.meta.url), 'utf8');
+  assert.match(overlay, /if\(!through\)return \[mat\];const ghost=mat\.clone\(\);ghost\.depthFunc=THREE\.GreaterDepth;/, 'no faint copy for those');
+  assert.match(overlay, /through=item\.through!==false;/, 'any other wall keeps it');
 });

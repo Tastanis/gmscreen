@@ -12,6 +12,8 @@ import {createWallOverlayLayer} from './wall-overlay.mjs';
 import {createTerrainBrushLayer} from './terrain-brush.mjs';
 import {buildAreaVolume} from './area-volume.mjs';
 import {chooseSurface} from './surface-choice.mjs';
+import {withBrokenHoles} from '../assets/js/ui/floor-support.js';
+import {hasArtPiece} from './breakable-art.mjs';
 import {tokenLookSettings,tokenScreenMetrics} from './token-looks.mjs';
 
 // The 3D board. It draws the scene and the tokens; every rule, command and
@@ -69,7 +71,8 @@ async function mount(){
   // Remembered per scene: two scenes can be at the same walls revision, and must never share floors or ramps.
   const walls=context.environment?.walls,revision=walls?.revision??null,key=(context.sceneId||'')+'|'+revision;if(key===structure.key)return structure;
   const v=walls?.value||{},nodes=new Map((v.nodes||[]).map(n=>[n.id,n]));
-  const roofs=(v.roofs||[]).filter(r=>!r.boxTop).map(r=>({...r,points:r.points||(r.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)})).filter(r=>r.points.length>=3&&Number.isFinite(r.height));
+  // A breakable plate's broken squares are holes in its drawn and picked floor (floor-support.js).
+  const roofs=(v.roofs||[]).filter(r=>!r.boxTop).map(r=>withBrokenHoles({...r,points:r.points||(r.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)})).filter(r=>r.points.length>=3&&Number.isFinite(r.height));
   const ramps=(v.ramps||[]).map(r=>({...r})),text=JSON.stringify([roofs,ramps]);let hash=5381;for(let i=0;i<text.length;i++)hash=(hash*33^text.charCodeAt(i))>>>0;
   structure={key,revision,roofs,ramps,hash:hash.toString(36)};return structure;
  }
@@ -126,6 +129,9 @@ async function mount(){
    const useArt=key.startsWith('art:'),nextData=withStructure(useArt?art.data:pictureScene()),nextCanvas=document.createElement('canvas');nextCanvas.tabIndex=-1;
    const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect(),isCurrent:current});
    if(!nextView||!current()){nextView?.dispose();return;}
+   // Built again for the same scene (a floor edited, a square broken or mended, Ctrl+Z): the camera stays where it was
+   // (Brandon, November 12, 2026: "after each break it pops me out to the farthest map view").
+   const kept=view&&builtSceneId===sceneId?keptCamera(view):null;
    if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
    host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
@@ -144,11 +150,13 @@ async function mount(){
    // "Loading scene…" stays until the scene's own 3D art is in, so its plain floor shapes are never shown first.
    showLoading(false);
    const own=!context.isGM&&(context.placements?.find(p=>p.visionOwners?.includes(String(context.user?.name||'').toLowerCase()))||context.placements?.find(p=>p.canMove));
-   if(own)focus(own.id);else view.home();
+   if(kept)restoreCamera(view,kept);else if(own)focus(own.id);else view.home();
    document.dispatchEvent(new CustomEvent('vtt3d:scene-built',{detail:{sceneId:context.sceneId,art:useArt}}));
   }catch(error){console.error('[VTT 3D] scene build failed',error);}
   finally{building=null;if(sceneKey()!==builtKey)buildScene();}
  }
+ function keptCamera(v){return {position:v.camera.position.clone(),target:v.controls.target.clone(),fov:v.camera.fov};}
+ function restoreCamera(v,kept){v.camera.position.copy(kept.position);v.controls.target.copy(kept.target);if(v.camera.fov!==kept.fov){v.camera.fov=kept.fov;v.camera.updateProjectionMatrix();}v.controls.update();}
 
  // Where a pointer lands: map pixels, with the height and floor it lands on.
  // `plane` asks for a horizontal plane at that height instead of the surfaces.
@@ -207,7 +215,7 @@ async function mount(){
   setOverlay('wall-flash',[{kind:'line',points:[{x:met.a.x,y:met.a.y,z:base},{x:met.b.x,y:met.b.y,z:base}],color:colour,opacity:1},{kind:'line',points:[{x:met.a.x,y:met.a.y,z:top},{x:met.b.x,y:met.b.y,z:top}],color:colour,opacity:1},
    {kind:'line',points:[{x:met.a.x,y:met.a.y,z:base},{x:met.a.x,y:met.a.y,z:top}],color:colour,opacity:1},{kind:'line',points:[{x:met.b.x,y:met.b.y,z:base},{x:met.b.x,y:met.b.y,z:top}],color:colour,opacity:1}]);
   clearTimeout(flashTimer);flashTimer=setTimeout(()=>setOverlay('wall-flash',[]),1800);return true;}
- window.vtt3d={get active(){return !!view;},flashWall,get overlays(){return overlays;},get overlaysVersion(){return overlaysVersion;},setOverlay,get wallOverlay(){return overlays.get('walls')||[];},setWallOverlay(list){setOverlay('walls',list);},clientToMap,gridDirections,focusTokens,get view(){return view;},addLayer,helpers,overlayHost};
+ window.vtt3d={get active(){return !!view;},flashWall,get overlays(){return overlays;},get overlaysVersion(){return overlaysVersion;},setOverlay,get wallOverlay(){return overlays.get('walls')||[];},setWallOverlay(list){setOverlay('walls',list);},hasArtPiece:edge=>!!sceneArtPieces&&hasArtPiece(edge,sceneArtPieces.pieces),clientToMap,gridDirections,focusTokens,get view(){return view;},addLayer,helpers,overlayHost};
 
  const planner=createRoutePlanner({context:()=>bridge.getContext(),onProgress:()=>refreshHeld()});window.vtt3dPlanner=planner;
  const holding=()=>drag?.moved?drag.pointer:clickMoveTokenId?hoverPointer:null;

@@ -61,6 +61,25 @@ ripple animation), `"lilyBob"` (lily pads that rock on the water) and `"terrainZ
 (`{"water": false}` leaves off a zone's coloured fill where the art paints that ground itself; its outline,
 name and rules stay). These were written for Thornbriar's sandbox and had not been brought into the app.
 
+Material options added November 13, 2026 (Build 630), for Dead Root's blood. All optional; left out, the art looks as before:
+
+- `"animation": "flow"` with `flowSpeed` (texture lengths a second along the texture's V; default 0.25, negative runs
+  back, limit 10). The textures slide; the shape does not move. A material with no texture shows no flow
+  (`board3d/flow-art.mjs`).
+- With `"animation": "swamp-ripples"`: `rippleColor` ("#rrggbb", the light a crest adds; the bog's is about "#222614"),
+  `rippleSpeed` (1 = the bog's, 0 = still, limit 10) and `waterColor` ("#rrggbb", the deep colour a texture is darkened
+  into; textured materials only) (`board3d/swamp-water.mjs`).
+- Both run on one clock, which stands still when motion is reduced (frozen shots).
+
+Material options added November 13, 2026 (Build 630), for Dead Root's blood. All optional; left out, the art looks as before:
+
+- `"animation": "flow"` with `flowSpeed` (texture lengths a second along the texture's V; default 0.25, negative runs back, limit 10).
+  Textures slide; the shape does not move. A material with no texture shows no flow (`board3d/flow-art.mjs`).
+- With `"animation": "swamp-ripples"`: `rippleColor` ("#rrggbb", the light a crest adds; the bog's is about "#222614"),
+  `rippleSpeed` (1 = the bog's, 0 = still, limit 10), `waterColor` ("#rrggbb", the deep colour a texture is darkened into;
+  textured materials only) (`board3d/swamp-water.mjs`).
+- Both use one clock, which stands still when motion is reduced (frozen shots).
+
 ## Known limits
 
 - A fall onto a breakable thing that can be stood on (a leg step, a core) lands on it and does not break it.

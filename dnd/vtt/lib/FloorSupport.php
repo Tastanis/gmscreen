@@ -99,15 +99,54 @@ final class FloorSupport {
   }
   return false;
  }
- /** Resolve both imported polygon plates and node-authored roofs. */
+ /** Resolve both imported polygon plates and node-authored roofs. A plate's broken squares are holes in it. */
  public static function surfaces(array $model):array {
   $surfaces=$model['roofs']??[];
-  if(!array_filter($surfaces,fn($s)=>!isset($s['points'])))return $surfaces;
+  if(!array_filter($surfaces,fn($s)=>!isset($s['points'])||!empty($s['broken'])))return $surfaces;
   $nodes=array_column($model['nodes']??[],null,'id');
   return array_map(static function($surface)use($nodes){
    if(!isset($surface['points']))$surface['points']=array_values(array_filter(array_map(fn($id)=>$nodes[$id]??null,$surface['nodes']??[])));
-   return $surface;
+   return self::withBrokenHoles($surface);
   },$surfaces);
+ }
+
+ // ---- Breakable floor plates (plan part 4, Brandon, November 8 and 11, 2026: "the bridges and stuff need this so that
+ // the floors of them can be broken"). A `kind: floor` plate with a `material` breaks one grid square at a time; `broken`
+ // lists the broken squares as "col,row". A broken square is a hole in the plate for standing, walking and landing.
+ // A square is named `<plate id>@<col>,<row>` wherever a wall id would go (breaks, mends, the art's pieces file).
+ public const PLATE_SQUARE='/^([A-Za-z0-9_.:-]{1,128})@(-?\d{1,6}),(-?\d{1,6})$/';
+ public const SQUARE_KEY='/^-?\d{1,6},-?\d{1,6}$/';
+ /** The most squares one plate is looked through for (a plate larger than this breaks only where it is listed). */
+ public const PLATE_SQUARES_MAX=20000;
+ public static function squareId(string $plate,int $col,int $row):string {return $plate.'@'.$col.','.$row;}
+ /** [plate id, col, row] of a square's name, or null. */
+ public static function squareOf(string $id):?array {return preg_match(self::PLATE_SQUARE,$id,$m)?[$m[1],(int)$m[2],(int)$m[3]]:null;}
+ public static function breakablePlate(array $s):bool {return ($s['kind']??'')==='floor'&&empty($s['boxTop'])&&empty($s['templateCube'])&&in_array($s['material']??null,['glass','wood','stone','metal'],true);}
+ private static function squareRing(int $c,int $r):array {return [['x'=>$c,'y'=>$r],['x'=>$c+1,'y'=>$r],['x'=>$c+1,'y'=>$r+1],['x'=>$c,'y'=>$r+1]];}
+ public static function withBrokenHoles(array $s):array {
+  if(empty($s['broken'])||!is_array($s['broken']))return $s;
+  $holes=$s['holes']??[];foreach($s['broken'] as $key)if(is_string($key)&&preg_match(self::SQUARE_KEY,$key)){[$c,$r]=array_map('intval',explode(',',$key));$holes[]=self::squareRing($c,$r);}
+  $s['holes']=$holes;return $s;
+ }
+ /** Every grid square [col,row] a plate covers by a positive area (its own holes and the level's cut-outs taken out, broken squares not). */
+ public static function plateSquares(array $s,array $cuts=[]):array {
+  $points=$s['points']??[];if(count($points)<3)return [];
+  $xs=array_column($points,'x');$ys=array_column($points,'y');$out=[];
+  for($r=(int)floor(min($ys));$r<(int)ceil(max($ys));$r++)for($c=(int)floor(min($xs));$c<(int)ceil(max($xs));$c++){
+   if(count($out)>=self::PLATE_SQUARES_MAX)return $out;
+   if(self::intersects(['column'=>$c,'row'=>$r,'width'=>1,'height'=>1],$s,$cuts))$out[]=[$c,$r];
+  }
+  return $out;
+ }
+ /** The squares of a breakable plate under a creature's footprint that still stand: [[col,row],...]. */
+ public static function plateSquaresUnder(array $p,array $s,array $cuts=[]):array {
+  $broken=array_flip(array_filter((array)($s['broken']??[]),'is_string'));$out=[];
+  $left=(float)$p['column'];$top=(float)$p['row'];$right=$left+($p['width']??1);$bottom=$top+($p['height']??1);
+  for($r=(int)floor($top+1e-7);$r<(int)ceil($bottom-1e-7);$r++)for($c=(int)floor($left+1e-7);$c<(int)ceil($right-1e-7);$c++){
+   if(isset($broken[$c.','.$r]))continue;
+   if(self::intersects(['column'=>$c,'row'=>$r,'width'=>1,'height'=>1],$s,$cuts))$out[]=[$c,$r];
+  }
+  return $out;
  }
  public static function supported(array $p,array $surfaces,array $cuts=[]):?bool {
   $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')&&empty($s['templateCube'])&&empty($s['boxTop'])));

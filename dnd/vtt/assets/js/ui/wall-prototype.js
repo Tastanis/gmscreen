@@ -6,7 +6,7 @@ import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mj
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
-import {breakableThings,thingAt,toggleBreak} from './break-tool.mjs';
+import {breakableThings,thingAt,toggleBreak,syncHeldSquares,newlyBrokenSquares} from './break-tool.mjs';
 import {properties,movementPathBlocked,movementBlocked,lowBarrierOnPath,firstWallMet,wallHeights,liveWalls,isBreakable,isBroken,wallQuestion,headRoomOnPath} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
 import {DEFAULT_SLANT,validSlant,viewSlant,viewAbove,viewBelow} from './height-view.mjs';
@@ -85,15 +85,20 @@ function storageKey(c){return JSON.stringify([c.state.boardState.activeSceneId,c
 function save(){
  if(storedError)return;if(savingShared){dirtyWhileSaving=true;return;}
  const savingKey=key,savingScene=context.state.boardState.activeSceneId,expected=Math.max(0,sharedRevision),draft=copyWalls(model);
- savingShared=true;dirtyWhileSaving=false;
+ savingShared=true;dirtyWhileSaving=false;const drops=dropAfterSave;dropAfterSave=[];
  shareRoofImages(draft).then(value=>saveShared('walls',value,expected,savingScene)).then(result=>{
    if(key===savingKey)sharedRevision=acknowledgedRevision(result,'walls')??sharedRevision;
+   // Creatures standing on floor squares this edit broke drop, once the map has the holes (board-interactions.js).
+   if(drops.length){try{window.vttDropFromBrokenFloor?.(drops,savingScene);}catch(e){console.error(e);}}
  }).catch(e=>{if(key!==savingKey)return;storedError=true;console.error(e);alert('Map edit was not confirmed. Your draft is retained in this tab; reload to recover the shared map.');}).finally(()=>{
    savingShared=false;if(key===savingKey&&dirtyWhileSaving&&!storedError)save();
  });
 }
 
-function change(before){if(JSON.stringify(before)===JSON.stringify(model))return;history.push(before);if(history.length>60)history.shift();save();render();}
+// Breakable floor plates: an object that broke takes the squares it holds up with it, and a mended one puts them back
+// (break-tool.mjs); squares broken by this edit drop whoever stands on them after the save.
+let dropAfterSave=[];
+function change(before){syncHeldSquares(before,model);if(JSON.stringify(before)===JSON.stringify(model))return;dropAfterSave.push(...newlyBrokenSquares(before,model));history.push(before);if(history.length>60)history.shift();save();render();}
 // 3D board: walls are edited on the plane at the inspection height (the GM's Height), read from the 3D view.
 const board3d=()=>window.vtt3d?.active?window.vtt3d:null;
 function planePixel(event){const hit=board3d().clientToMap(event.clientX,event.clientY,{plane:context.isGM?(inspectionHeight??gmVision.height):0});return hit?{x:hit.x,y:hit.y}:{x:NaN,y:NaN};}
@@ -186,6 +191,8 @@ function pathBetween(a,b){const steps=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.
 // height the GM views from). The lines are drawn again, but the walls' revision stays, so sight,
 // movement and the summoned-wall model are not all worked out again for walls that did not change.
 function render(lookOnly=false){try{draw(lookOnly);}finally{drawHeight=undefined;}}
+// The 3D board built a scene (its art and pieces may have come in): the marks are drawn again, the walls unchanged.
+document.addEventListener('vtt3d:scene-built',()=>{try{render(true);}catch(error){console.warn('[walls] redraw after the 3D scene',error);}});
 function draw(lookOnly){
  synchronizeInspectionHeight();
  if(!lookOnly)revision++;
@@ -197,10 +204,15 @@ function draw(lookOnly){
  for(const {edge:e,a,b,intervals} of slice.segments){const path=document.createElementNS(ns,'path');path.dataset.wallSegment=e.id;
   const portions=intervals.map(([lo,hi])=>[{x:a.x+(b.x-a.x)*lo,y:a.y+(b.y-a.y)*lo},{x:a.x+(b.x-a.x)*hi,y:a.y+(b.y-a.y)*hi}]);
   path.setAttribute('d',portions.map(([a,b])=>pathBetween(a,b)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',selectedIds.has(e.id)?'#ffeeb5':editor.color(e));path.setAttribute('stroke-width',3/scale);path.setAttribute('stroke-linecap','round');if(properties(e).sight==='pass'||e.open||isBroken(e))path.setAttribute('stroke-dasharray',isBroken(e)?`${2/scale} ${5/scale}`:`${6/scale} ${4/scale}`);path.setAttribute('opacity',panel.hidden?'.45':'.95');if(isBroken(e))path.dataset.wallBroken='';fragment.append(path);
-  if(context.isGM)for(const [pa,pb] of portions)strokes3d.push({kind:'line',points:line3d(pa,pb),color:selectedIds.has(e.id)?'#ffeeb5':editor.color(e),opacity:panel.hidden?.45:.95,dash:properties(e).sight==='pass'||e.open||isBroken(e)?(isBroken(e)?[.06,.16]:[.22,.14]):null});if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);
+  // A broken wall whose rubble the map's 3D art shows gets no broken marks on the 3D board: the rubble is the mark
+  // (Brandon, November 13, 2026: "when things break they often have these white circles in a line").
+  const rubble=isBroken(e)&&board3d()?.hasArtPiece?.(e);
+  // An object's own walls (a pillar's ring) are not drawn faintly through a deck or hill in front of them.
+  const through=!(typeof e.object==='string'&&e.object||/^obj:/.test(String(e.id)));
+  if(context.isGM&&!rubble)for(const [pa,pb] of portions)strokes3d.push({kind:'line',points:line3d(pa,pb),color:selectedIds.has(e.id)?'#ffeeb5':editor.color(e),opacity:panel.hidden?.45:.95,through,dash:properties(e).sight==='pass'||e.open||isBroken(e)?(isBroken(e)?[.06,.16]:[.22,.14]):null});if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);
   // Only the GM has this overlay. A breakable wall carries one small diamond; nothing is shown to players.
   if(isBreakable(e)&&portions.length){const [p0,p1]=portions[Math.floor(portions.length/2)],q=projected({x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2}),r=4/scale,mark=document.createElementNS(ns,'path');mark.dataset.wallBreakable=e.material;mark.setAttribute('d',`M${q.x},${q.y-r} L${q.x+r},${q.y} L${q.x},${q.y+r} L${q.x-r},${q.y} Z`);mark.setAttribute('fill',isBroken(e)?'none':editor.materialColor(e.material));mark.setAttribute('stroke','#1b1b1b');mark.setAttribute('stroke-width',1/scale);mark.setAttribute('opacity',panel.hidden?'.6':'1');fragment.append(mark);
-   const mid3d={x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2};strokes3d.push({kind:'dot',...at3d(mid3d),r:.09,color:isBroken(e)?'#1b1b1b':editor.materialColor(e.material),opacity:panel.hidden?.6:1});}}
+   const mid3d={x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2};if(!rubble)strokes3d.push({kind:'dot',...at3d(mid3d),r:.09,color:isBroken(e)?'#1b1b1b':editor.materialColor(e.material),opacity:panel.hidden?.6:1,through});}}
  if(!panel.hidden){
    if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);strokes3d.push({kind:'line',points:line3d(pointNode(anchor),hover.p),color:'#fff0ba',opacity:1,dash:[.18,.14]});}
    for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);
@@ -304,13 +316,13 @@ function drawBreak(){
    const pa=projected(a),pb=projected(b),line=document.createElementNS(ns,'line');
    line.setAttribute('x1',pa.x);line.setAttribute('y1',pa.y);line.setAttribute('x2',pb.x);line.setAttribute('y2',pb.y);line.setAttribute('stroke',color);line.setAttribute('stroke-width',(hot?7:4)/scale);line.setAttribute('stroke-linecap','round');
    if(thing.broken)line.setAttribute('stroke-dasharray',`${4/scale} ${5/scale}`);line.dataset.breakThing=thing.key;breakSvg.append(line);
-   const h=breakHeights(thing.edges[i],a,b);
+   const h=thing.plate?{base:thing.height,top:thing.height}:breakHeights(thing.edges[i],a,b);
    for(const z of [h.top,h.base])list.push({kind:'line',points:[{x:a.x,y:a.y,z:z+.02},{x:b.x,y:b.y,z:z+.02}],color,opacity:1,dash:thing.broken?[.12,.12]:null});
   });
  }
  board3d()?.setOverlay?.('break',list);
 }
-function breakPoint(event){if(board3d()){const hit=board3d().clientToMap(event.clientX,event.clientY);return hit?.squares??null;}return gridPoint(event);}
+function breakPoint(event){if(board3d()){const hit=board3d().clientToMap(event.clientX,event.clientY);return hit?.squares?{...hit.squares,z:hit.height}:null;}return gridPoint(event);}
 board.addEventListener('pointermove',event=>{if(!breaking||!context?.isGM)return;const key=thingAt(breakList(),breakPoint(event))?.key??null;if(key!==breakHoverKey){breakHoverKey=key;board.style.cursor=key?'pointer':'';drawBreak();}},true);
 board.addEventListener('pointerdown',event=>{
  if(!breaking||!context?.isGM||storedError||event.button!==0)return;consume(event);

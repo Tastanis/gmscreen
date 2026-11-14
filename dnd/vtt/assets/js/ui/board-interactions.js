@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import { intersectsFloor, resolveSupportSurfaces } from './floor-support.js';
 import { footprintGap, followSquare } from './grab-geometry.mjs';
 import { postUndo, undoChatLines, inUndoGroup, currentUndoTag } from '../services/undo-client.js';
 import { coverFor } from './cover-check.mjs';
@@ -760,6 +761,34 @@ export function mountBoardInteractions(store, routes = {}) {
   const boardApi = store ?? {};
   window.submitEnvironmentCommand = descriptor => tokenMovementRuntime.submitBoardDomainCommands([descriptor], true);
   window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}]);
+  // Breakable floor plates (plan part 4, Brandon, November 11, 2026: "A creature standing on a square that breaks
+  // falls"). The Director broke floor squares ("<plate>@<col>,<row>", wall-prototype.js after the save): whoever stood
+  // on one is held at the deck's height for a moment and let go, which the server counts as a fall from there
+  // (FallOutcome: the Fall pop-up, damage, prone), landing on what is under it.
+  window.vttDropFromBrokenFloor = async (names, sceneId) => {
+    if (!isGmUser() || !sceneId || sceneId !== getActiveSceneId() || !Array.isArray(names) || !names.length) return;
+    const state = boardApi.getState?.() ?? {}, design = state.boardState?.sceneState?.[sceneId]?.environment?.walls?.value || {}, roofs = design.roofs || [];
+    const byPlate = new Map();
+    for (const name of names) { const at = String(name).lastIndexOf('@'); if (at < 1) continue; const plate = name.slice(0, at); if (!byPlate.has(plate)) byPlate.set(plate, new Set()); byPlate.get(plate).add(name.slice(at + 1)); }
+    for (const placement of getActiveScenePlacements(state)) {
+      const squares = byPlate.get(placement?._supportSurfaceId);
+      if (!squares || ['fly', 'hover'].includes(placement.movementMode)) continue;
+      const roof = roofs.find((item) => item.id === placement._supportSurfaceId), height = Number(roof?.height);
+      if (!roof || !Number.isFinite(height)) continue;
+      const left = Number(placement.column) || 0, top = Number(placement.row) || 0, w = Math.max(1, Number(placement.width) || 1), h = Math.max(1, Number(placement.height) || 1);
+      let on = false;
+      for (let r = Math.floor(top + 1e-7); r < Math.ceil(top + h - 1e-7) && !on; r++) for (let c = Math.floor(left + 1e-7); c < Math.ceil(left + w - 1e-7); c++) if (squares.has(`${c},${r}`)) { on = true; break; }
+      if (!on) continue;
+      // Still held up by the rest of the deck (a big creature over a one-square hole): it stays. Judged from the squares
+      // named here as well as the plate's own list, as the page may not have the saved holes yet.
+      const holed = resolveSupportSurfaces({ nodes: design.nodes, roofs: [{ ...roof, broken: [...new Set([...(roof.broken || []), ...squares])] }] })[0];
+      if (holed && intersectsFloor(placement, holed)) continue;
+      try {
+        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: placement.id, patch: { movementMode: 'hover', flightHeight: height } }]);
+        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: placement.id, patch: { movementMode: 'ground', flightHeight: null } }]);
+      } catch (error) { console.error('[VTT] dropping a creature through a broken floor', error); }
+    }
+  };
   // The heroes with a token on the map being viewed. The Director's "ask for a test" form (js/ask-test.js)
   // starts with these lit when it is opened from the map.
   window.vttHeroesOnMap = () => [...new Set(getActiveScenePlacements(boardApi.getState?.() ?? {}).map((placement) => getCharacterSheetProfileIdForPlacement(placement)).filter(Boolean))];

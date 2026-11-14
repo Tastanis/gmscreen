@@ -24,11 +24,22 @@ $objects = $walls['objects'] ?? [];
 echo count($objects) . ' objects, ' . count(array_filter($objects, fn ($o) => ($o['standOn'] ?? false) === true)) . ' stood on; '
     . count(WallBoxes::boxes($config['environment']['walls']['value'])) . " standing tops built.\n";
 echo count($levels['baseStairs'] ?? []) + array_sum(array_map(fn ($l) => count($l['stairs'] ?? []), $levels['levels'] ?? [])) . " stair ends from ramps.\n";
+// Breakable floor plates (plan part 4): each plate's material and how many grid squares break one at a time.
+$plateSquares = [];
+$cutsOf = []; foreach ($config['mapLevels']['levels'] ?? [] as $level) $cutsOf[$level['id'] ?? ''] = $level['cutouts'] ?? [];
+foreach (FloorSupport::surfaces(['nodes' => $walls['nodes'] ?? [], 'roofs' => array_map(fn ($r) => [...$r, 'broken' => []], $walls['roofs'] ?? [])]) as $roof) {
+    if (!FloorSupport::breakablePlate($roof)) continue;
+    $squares = FloorSupport::plateSquares($roof, $cutsOf[$roof['levelId'] ?? ''] ?? []);
+    foreach ($squares as [$c, $r]) $plateSquares[] = FloorSupport::squareId($roof['id'], $c, $r);
+    echo 'Breakable floor ' . $roof['id'] . ' (' . $roof['material'] . '): ' . count($squares) . " squares.
+";
+}
 echo $lines ? "Load check:\n- " . implode("\n- ", $lines) . "\n" : "Load check: nothing to report.\n";
 // The art's breakable pieces (board3d/breakable-art.mjs), when the pieces file is given as a second argument:
 //   php dnd/vtt/tools/map-label-check.php "<map>.vttmap" "<art pieces>.json"
 // Every breakable thing on the map should have a piece, named as its label is (the object's id, else its walls' group,
-// else the wall's id), and every piece a thing that breaks (plan part 4, November 8, 2026).
+// else the wall's id), and every piece a thing that breaks (plan part 4, November 8, 2026). A breakable floor plate's
+// squares are pieces "<plate id>@<col>,<row>", one for every grid square the plate covers.
 if (isset($argv[2])) {
     $pieces = json_decode((string) @file_get_contents($argv[2]), true)['pieces'] ?? null;
     if (!is_array($pieces)) { echo "Art pieces: that file has no pieces.\n"; exit(1); }
@@ -39,6 +50,7 @@ if (isset($argv[2])) {
         $name = null; foreach ($names as $candidate) if (isset($pieces[$candidate])) { $name = $candidate; break; }
         if ($name !== null) $used[$name] = true; else $missing[$names[0] ?? '?'] = true;
     }
+    foreach ($plateSquares as $name) { if (isset($pieces[$name])) $used[$name] = true; else $missing[$name] = true; }
     $unused = array_values(array_diff(array_keys($pieces), array_keys($used)));
     echo count($used) . ' breakable things have their piece in the art (' . count($pieces) . " pieces in the file).\n";
     if ($missing) echo 'Breakable with NO piece in the art (it will break, and its art will stay): ' . implode(', ', array_keys($missing)) . "\n";

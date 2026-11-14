@@ -19,6 +19,28 @@ final class MapLabels
     public const OBJECT_WALL = 'obj:';
     public const KINDS = ['water', 'difficult', 'no-climb'];
 
+    /**
+     * The floor squares the objects named hold up (an object's `holds`, Brandon, November 12, 2026: "if any one of the
+     * pillars breaks, that whole side should collapse"), as plate square names "<plate>@<col>,<row>". `$ids` are wall
+     * ids: an object is named by any wall of it among them.
+     */
+    public static function heldSquares(array $walls, array $ids): array
+    {
+        $named = [];
+        foreach ($walls['segments'] ?? [] as $edge) if (in_array($edge['id'] ?? null, $ids, true) && is_string($edge['object'] ?? null)) $named[$edge['object']] = true;
+        if (!$named) return [];
+        $out = [];
+        foreach ($walls['objects'] ?? [] as $object) {
+            if (!isset($named[$object['id'] ?? '']) || !is_array($object['holds'] ?? null)) continue;
+            foreach ($object['holds'] as $held) foreach ($held['squares'] ?? [] as $key) {
+                if (!is_string($held['roof'] ?? null) || !is_string($key) || !preg_match(FloorSupport::SQUARE_KEY, $key)) continue;
+                [$c, $r] = array_map('intval', explode(',', $key));
+                $out[FloorSupport::squareId($held['roof'], $c, $r)] = true;
+            }
+        }
+        return array_keys($out);
+    }
+
     public static function labelled(array $walls): bool
     {
         return ($walls['labels'] ?? null) === 1;
@@ -191,6 +213,19 @@ final class MapLabels
         $nodes = array_column($walls['nodes'] ?? [], null, 'id');
         if (self::labelled($walls)) {
             foreach ($roofs as $roof) if (!in_array($roof['kind'] ?? null, ['floor', 'roof'], true)) $add('Plate ' . ($roof['id'] ?? '?') . ' says neither floor nor roof; it is treated as a roof.');
+            // An object that holds up floor squares: the plate must be a breakable floor, and the squares on it.
+            $plates = array_column(array_filter($walls['roofs'] ?? [], static fn ($r) => is_string($r['id'] ?? null)), null, 'id');
+            $cutsOf = []; foreach ($config['mapLevels']['levels'] ?? [] as $level) $cutsOf[$level['id'] ?? ''] = $level['cutouts'] ?? [];
+            foreach ($walls['objects'] ?? [] as $object) foreach ($object['holds'] ?? [] as $held) {
+                $name = 'Object ' . ($object['id'] ?? '?') . ' holds up ' . ($held['roof'] ?? '?');
+                $plate = $plates[$held['roof'] ?? ''] ?? null;
+                if (!$plate) { $add($name . ', which is not on the map.'); continue; }
+                if (!FloorSupport::breakablePlate($plate)) { $add($name . ', which is not a floor plate with a material; its squares will not break.'); continue; }
+                $plate = FloorSupport::surfaces(['nodes' => $walls['nodes'] ?? [], 'roofs' => [[...$plate, 'broken' => []]]])[0];
+                $own = []; foreach (FloorSupport::plateSquares($plate, $cutsOf[$plate['levelId'] ?? ''] ?? []) as [$c, $r]) $own[$c . ',' . $r] = true;
+                $off = array_values(array_filter($held['squares'] ?? [], static fn ($key) => !isset($own[$key])));
+                if ($off) $add($name . ': ' . count($off) . ' of its squares are not on that plate (' . implode(' ', array_slice($off, 0, 6)) . ').');
+            }
             // A stair record that disagrees with its ramp: the ramp wins.
             $given = [];
             foreach ([['level-0', $config['mapLevels']['baseStairs'] ?? []], ...array_map(static fn ($l) => [$l['id'] ?? '', $l['stairs'] ?? []], $config['mapLevels']['levels'] ?? [])] as [$level, $stairs])
