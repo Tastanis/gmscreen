@@ -13,6 +13,8 @@ import {createSheetLive} from '../../../../character_sheet/parts/sheet-live.js';
 import {noteResourceLevel} from './resource-levels.js';
 // The hero's passives (the sheet's features) on the ability bar too (Brandon, November 10, 2026).
 import {PASSIVE_TRAY_CATEGORY, heroPassives} from './hero-passives.js';
+// A test dummy's panel goes by its own id (test-dummy.mjs): what it spends and takes stays on the dummy token.
+import {isDummyId} from './test-dummy.mjs';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
 const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -675,6 +677,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
 
   async function handleHeroTokenClick(index, button) {
     if (!activeSheet || !activeCharacterId || index < 0 || index > 1) {
+      return;
+    }
+    // The party's hero tokens are the real party's: a test dummy never spends them.
+    if (isDummyId(activeCharacterId)) {
+      notifyPanelUser('A test dummy does not use the party’s hero tokens.', 'info');
       return;
     }
     const tokens = normalizeHeroTokens(activeSheet.hero?.heroTokens);
@@ -2594,6 +2601,7 @@ function renderResourceNote(text) {
 }
 
 function normalizeCharacterId(value) {
+  if (isDummyId(typeof value === 'string' ? value.trim() : value)) return value.trim();
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return PC_CHARACTER_IDS.has(normalized) ? normalized : '';
 }

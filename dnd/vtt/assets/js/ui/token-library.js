@@ -10,6 +10,7 @@ import {
 } from '../services/token-service.js';
 import { PLAYER_VISIBLE_TOKEN_FOLDER, normalizePlayerTokenFolderName, restrictTokensToPlayerView } from '../state/store.js';
 import { fetchSheetStamina, getCachedSheetStamina } from '../services/stamina-sync-service.js';
+import { pcIdForTokenName } from '../token-system/speed-resolver.js';
 
 const UNSORTED_KEY = '__unsorted';
 const STAMINA_REFRESH_INTERVAL_MS = 60000;
@@ -31,6 +32,40 @@ export function renderTokenLibrary(routes, store, options = {}) {
   if (!listContainer) return;
 
   const documentRef = moduleRoot.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+
+  // Test dummy (Brandon, November 17, 2026: "a test button in the tokens. I can then drag out any of my PC tokens and
+  // it will behave exactly as my PC except that it will basically be a duplicate copy"). The Director's only. While it
+  // is on, a hero dragged from the PC's folder is placed as a test dummy (ui/test-dummy.mjs): hidden from the players,
+  // full Stamina, its own numbers; the hero's sheet and the player's token are never touched.
+  let testDummyMode = false;
+  const dummyBar = Boolean(options?.isGM ?? initialStateForDummy()?.user?.isGM) && documentRef ? documentRef.createElement('div') : null;
+  function initialStateForDummy() { try { return typeof store?.getState === 'function' ? store.getState() : {}; } catch { return {}; } }
+  if (dummyBar) {
+    dummyBar.className = 'token-library__dummy';
+    dummyBar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0 8px';
+    dummyBar.innerHTML = '<button type="button" class="btn btn--ghost btn--tiny" data-test-dummy-toggle aria-pressed="false">Test dummy: off</button>'
+      + '<span class="token-library__dummy-note" style="font-size:11px;opacity:.8" hidden>Drag a hero from PC\'s: you get a copy that never touches the hero.</span>';
+    listContainer.before(dummyBar);
+    const toggle = dummyBar.querySelector('[data-test-dummy-toggle]'), note = dummyBar.querySelector('.token-library__dummy-note');
+    toggle.addEventListener('click', () => {
+      testDummyMode = !testDummyMode;
+      toggle.setAttribute('aria-pressed', String(testDummyMode));
+      toggle.textContent = testDummyMode ? 'Test dummy: on' : 'Test dummy: off';
+      toggle.classList.toggle('is-active', testDummyMode);
+      note.hidden = !testDummyMode;
+      moduleRoot.classList.toggle('token-library--test-dummy', testDummyMode);
+    });
+  }
+  /** The drag of a hero from the PC's folder as a test dummy of that hero; null for anything else. */
+  function asTestDummy(dragData) {
+    if (!testDummyMode || !dragData) return null;
+    const folderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
+    if (!folderKey || normalizePlayerTokenFolderName(dragData.sourceFolderName || '') !== folderKey) return null;
+    const hero = pcIdForTokenName(dragData.name);
+    if (!hero) return null;
+    const { sourceFolderName, sourceFolderId, folderName, ...rest } = dragData;
+    return { ...rest, testDummyOf: hero, team: 'ally', combatTeam: 'ally' };
+  }
 
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
@@ -757,7 +792,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
     // Async dragstart handlers are unreliable - browsers require dataTransfer to be
     // set synchronously during the event. The sync version uses cached stamina if
     // available and kicks off a background fetch for next time if not cached.
-    const dragData = buildTokenDragData(
+    const builtDrag = buildTokenDragData(
       tokenElement,
       tokenIndex,
       {
@@ -765,6 +800,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
         routes: endpoints,
       }
     );
+    const dragData = asTestDummy(builtDrag) ?? builtDrag;
     const dataTransfer = event.dataTransfer;
     if (!dragData || !dataTransfer) {
       event.preventDefault();

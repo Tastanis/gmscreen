@@ -3912,6 +3912,11 @@ final class SyncV2Store
         $metadata = is_array($placement['metadata'] ?? null)
             ? $placement['metadata']
             : (is_array($placement['meta'] ?? null) ? $placement['meta'] : []);
+        // A test dummy (Brandon, November 17, 2026; vtt/assets/js/ui/test-dummy.mjs) is no player's token, whatever its
+        // name: never their hero on the map, never counted, never moved or seen by them as theirs.
+        if (is_array($metadata['testDummy'] ?? null)) {
+            return null;
+        }
         $keys = ['profileId', 'profile', 'playerId', 'player', 'owner', 'controller'];
         foreach ([$placement, $metadata] as $source) {
             foreach ($keys as $key) {

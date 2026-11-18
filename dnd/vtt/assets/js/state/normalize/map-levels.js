@@ -492,6 +492,10 @@ export function resolvePlacementLinkedProfileId(placement) {
     : placement.meta && typeof placement.meta === 'object'
       ? placement.meta
       : {};
+  // A test dummy (ui/test-dummy.mjs) is no player's token.
+  if (metadata.testDummy && typeof metadata.testDummy === 'object') {
+    return null;
+  }
   const explicitProfile = [placement, metadata]
     .flatMap((source) => LINKED_PROFILE_KEYS.map((key) => source[key]))
     .find((value) => typeof value === 'string' && value.trim());

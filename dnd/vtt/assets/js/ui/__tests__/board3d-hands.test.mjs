@@ -74,7 +74,7 @@ test('a token with a mini is the mini: its box covers the model from base to hea
   // November 10, 2026: the unit is per square on screen (token-looks.mjs tokenScreenMetrics, unitBoost 1.25), so a
   // huge creature's bars are not shrunk by its size (token-looks.test.mjs).
   assert.match(board3d, /node\.style\.setProperty\('--tok-unit',`\$\{screenSize\.tokUnit\.toFixed\(3\)\}px`\);/, 'badges and bars a quarter bigger');
-  assert.match(board3d, /const placeKey=cameraKey\+'\|'\+shownLevel\+'\|'\+tokenLayer\.childElementCount\+'\|'\+miniIds\+/, 'placed again when a mini appears');
+  assert.match(board3d, /const placeKey=cameraKey\+'\|'\+tokenLevel\+'\|'\+tokenLayer\.childElementCount\+'\|'\+miniIds\+/, 'placed again when a mini appears');
 });
 
 test('a held token is always put down by the next click (Build 520)', () => {

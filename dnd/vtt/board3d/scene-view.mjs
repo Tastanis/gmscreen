@@ -738,7 +738,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));const lines=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:level?'#e0cca9':'#d5d4bc',transparent:true,opacity:level?.17:.13,depthWrite:false}));lines.userData.level=level;root.add(lines);grids.push(lines);
  }
- let activeLevel=-1,roofsOn=false,gridOn=true,doorsOpen=false;
+ let activeLevel=-1,tokenLevel=null,roofsOn=false,gridOn=true,doorsOpen=false;
  function updateLevels(){
   renderer.shadowMap.needsUpdate=true;
   for(const f of floors)f.visible=(!f.userData.isRoof||roofsOn)&&(activeLevel<0||f.userData.level<=activeLevel);
@@ -771,7 +771,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  }
  function updateTokenMatrices(){
   renderer.shadowMap.needsUpdate=true;
-  visibleTokens=tokenRecords.filter(t=>activeLevel<0||belongsToLevel(t)<=activeLevel).slice(0,tokenCapacity);
+  const cut=tokenLevel??activeLevel;visibleTokens=tokenRecords.filter(t=>cut<0||belongsToLevel(t)<=cut).slice(0,tokenCapacity);
   visibleTokens.forEach((t,i)=>{
    const color=new THREE.Color(t.color||'#59c8c0');obj.rotation.set(0,0,0);obj.scale.set(t.width||1,1,t.height||1);
    const bare=noBaseIds.has(t.id);
@@ -902,7 +902,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
   addLevelArt(object,level,{always=false}={}){if(disposed)return false;if(object.userData.sceneLight)setArtLight(object.userData.sceneLight);object.userData.level=always?0:level;object.userData.category='art';root.add(object);props.push(object);updateLevels();},
   removeLevelArt(object){root.remove(object);const i=props.indexOf(object);if(i>=0)props.splice(i,1);},
   setTokensWithoutBase(ids){const key=[...(ids||[])].sort().join(',');if(key===noBaseKey)return;noBaseKey=key;noBaseIds=new Set(ids||[]);if(tokenRecords.length)updateTokenMatrices();},
-  setLevel(level){activeLevel=Number(level);updateLevels();},setGrid(value){gridOn=value;updateLevels();},setRoofs(value){roofsOn=value;updateLevels();},setDoors(value){doorsOpen=value;updateLevels();},
+  setLevel(level){activeLevel=Number(level);updateLevels();},setTokenLevel(level){tokenLevel=Number.isFinite(Number(level))?Number(level):null;if(tokenRecords.length)updateTokenMatrices();},setGrid(value){gridOn=value;updateLevels();},setRoofs(value){roofsOn=value;updateLevels();},setDoors(value){doorsOpen=value;updateLevels();},
   setReachable(nodes){setOverlay('reach',nodes);},setVision(nodes,enabled){overlays.vision.visible=!!enabled;setOverlay('vision',enabled?nodes:[]);},setPath,setMovementRoute:movementRoute.set,collapseMovementRoute:movementRoute.collapse,setTethers,tethers:()=>JSON.parse(tetherSignature||'[]'),
   focus(point){const goal=V(point),delta=goal.clone().sub(controls.target);camera.position.add(delta);controls.target.copy(goal);controls.update();},home,
   render(dt){waterUniforms.uTime.value+=Math.min(dt||.016,.1);controls.update();movementRoute.update(dt);

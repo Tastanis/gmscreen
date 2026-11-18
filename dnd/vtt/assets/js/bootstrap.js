@@ -1,3 +1,5 @@
+// First: test dummies' sheet requests never leave the page (ui/test-dummy.mjs).
+import './ui/test-dummy.mjs';
 import {
   initializeState,
   getState,

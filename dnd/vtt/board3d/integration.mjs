@@ -48,7 +48,7 @@ async function mount(){
  let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
  let guideHeld=null,guideRoute=null;
- let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',reachSignature='',shownLevel=null;
+ let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',reachSignature='',shownLevel=null,tokenLevel=null;
 
  function pictureRect(){
   // Only the scene's own picture: just after a switch the map image still holds the old scene's until the new one loads.
@@ -97,7 +97,7 @@ async function mount(){
   turnStart={key,id:p.id,x:w.x,y:w.y,z:w.z,width:Math.max(w.width,w.height),level:w.level,image:typeof p.imageUrl==='string'?p.imageUrl:'',hidden:!!p.hidden};}
  function placeTurnGhost(recordById,canvasRect,hostRect){
   const p=turnStart&&recordById.get(turnStart.id),moved=p&&(Math.abs(p.x-turnStart.x)>.01||Math.abs(p.y-turnStart.y)>.01||Math.abs(p.z-turnStart.z)>.3);
-  const shown=moved&&canvasRect&&hostRect&&(!turnStart.hidden||context.isGM)&&(shownLevel===null||shownLevel<0||turnStart.level<=shownLevel);
+  const shown=moved&&canvasRect&&hostRect&&(!turnStart.hidden||context.isGM)&&(tokenLevel===null||tokenLevel<0||turnStart.level<=tokenLevel);
   const foot=shown?view.project(turnStart):null;
   if(!foot?.visible){turnGhost?.remove();turnGhost=null;return;}
   if(!turnGhost){turnGhost=document.createElement('div');turnGhost.className='vtt3d-turn-ghost';turnGhost.setAttribute('aria-hidden','true');overlayHost.append(turnGhost);}
@@ -136,7 +136,7 @@ async function mount(){
    // (Brandon, November 12, 2026: "after each break it pops me out to the farthest map view").
    const kept=view&&builtSceneId===sceneId?keptCamera(view):null;
    if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
-   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
+   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;shownLevel=null;tokenLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
    minis?.dispose();minis=createMinis(view.scene);miniIds='';
@@ -200,7 +200,7 @@ async function mount(){
  // Bring tokens into view (Find token, My token): the camera keeps its angle and comes in close (about 26 squares off
  // at most, Brandon October 2026: from far out it only looked like a ping), or backs off far enough for all of them. Returns their map points for the pulses.
  function focusTokens(ids){if(!view)return [];const wanted=new Set(ids||[]);
-  const shown=(context.placements||[]).filter(p=>wanted.has(p.id)&&(context.isGM||!p.hidden)).map(world).filter(p=>shownLevel===null||shownLevel<0||p.level<=shownLevel);
+  const shown=(context.placements||[]).filter(p=>wanted.has(p.id)&&(context.isGM||!p.hidden)).map(world).filter(p=>tokenLevel===null||tokenLevel<0||p.level<=tokenLevel);
   if(!shown.length)return [];
   const mid={x:shown.reduce((a,p)=>a+p.x,0)/shown.length,y:shown.reduce((a,p)=>a+p.y,0)/shown.length,z:shown.reduce((a,p)=>a+p.z,0)/shown.length};
   const span=Math.max(...shown.map(p=>Math.hypot(p.x-mid.x,p.y-mid.y)),0);
@@ -514,14 +514,18 @@ async function mount(){
  // floors above the height drawn are hidden, with the tokens on them.
  function viewHeight(){const vision=window.gmVision;if(!vision)return null;if(context.isGM)return vision.height;const own=vision.playerStanding;return own?(vision.raised??own.height):null;}
  function syncLevels(){if(!view)return;const height=viewHeight();let level=-1;if(Number.isFinite(height)&&data?.levels?.length>1){level=0;data.levels.forEach((l,i)=>{if(l.height<=height+.5)level=i;});if(level===data.levels.length-1)level=-1;}
-  if(level!==shownLevel){shownLevel=level;view.setLevel(level);lastTokenSignature='';}}
+  if(level!==shownLevel){shownLevel=level;view.setLevel(level);lastTokenSignature='';}
+  // Tokens: while the Director's height only follows the token selected (he has not set it himself), no token is hidden
+  // (Brandon, November 17, 2026: "for some reason they dissapear. when i click off they come back ... height is set at 4").
+  const tokens=context.isGM&&window.gmVision&&!window.gmVision.manual?-1:level;
+  if(tokens!==tokenLevel){tokenLevel=tokens;view.setTokenLevel?.(tokens);lastTokenSignature='';}}
  // A raised token's line straight down, by the 2D board's own rule (height-tethers.js).
  let tetherModel=null,tetherSurfaces=[];
  function tethers(records){
   const tp=window.terrainPrototype,model=window.wallPrototype?.model,v=context.view||{},g=v.gridSize||64,ox=v.gridOffsets?.left||0,oy=v.gridOffsets?.top||0;if(!tp?.heightAt||!model)return [];
   if(model!==tetherModel){tetherModel=model;tetherSurfaces=roofSurfaces(model);}
   const list=[];
-  for(const p of records){if(!Number.isFinite(p.z)||(shownLevel!==null&&shownLevel>=0&&p.level>shownLevel))continue;
+  for(const p of records){if(!Number.isFinite(p.z)||(tokenLevel!==null&&tokenLevel>=0&&p.level>tokenLevel))continue;
    const ramps=(model.ramps||[]).map(r=>rampHeight(r,p.x,p.y)).filter(h=>h!==null&&h<=p.z+1e-6);
    const below=tetherSupport({x:p.x,y:p.y},p.z,tp.heightAt(ox+p.x*g,oy+p.y*g),tetherSurfaces,ramps.length?Math.max(...ramps):null);
    if(below!==null)list.push({id:p.id,x:p.x,y:p.y,top:p.z,bottom:below});}
@@ -557,13 +561,13 @@ async function mount(){
     // for the length of that animation, and its flat picture does not show (integration.css).
     const now=performance.now();for(const node of tokenLayer.querySelectorAll('.vtt-token--falling[data-placement-id]'))if(!fallShakes.has(node.dataset.placementId))fallShakes.set(node.dataset.placementId,now);
     for(const [id,since] of fallShakes)if(now-since>1100)fallShakes.delete(id);
-    const result=minis.update([...recordById.values()].map(r=>fallShakes.has(r.id)?{...r,shake:Math.max(0,1-(now-fallShakes.get(r.id))/1100)}:r),profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
+    const result=minis.update([...recordById.values()].map(r=>fallShakes.has(r.id)?{...r,shake:Math.max(0,1-(now-fallShakes.get(r.id))/1100)}:r),profiles,p=>tokenLevel===null||tokenLevel<0||p.level<=tokenLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
     miniStanding=result.ids;miniTops=result.tops||new Map();
     const key=[...result.ids].sort().join(',')+'|'+tokenLayer.childElementCount;if(key!==miniIds){miniIds=key;for(const node of tokenLayer.querySelectorAll('[data-placement-id]'))node.classList.toggle('vtt3d-mini',result.ids.has(node.dataset.placementId));}}
    const {width,height}=view.viewport();
    // Nothing to place again while the camera, the tokens and the floor cut stay as they were.
    const camera=view.camera,cameraKey=camera.matrixWorld.elements.join(',')+'|'+camera.projectionMatrix.elements[0]+'|'+width+'x'+height;
-   const placeKey=cameraKey+'|'+shownLevel+'|'+tokenLayer.childElementCount+'|'+miniIds+'|'+JSON.stringify([...recordById.values()]);
+   const placeKey=cameraKey+'|'+tokenLevel+'|'+tokenLayer.childElementCount+'|'+miniIds+'|'+JSON.stringify([...recordById.values()]);
    const tokenNodes=tokenLayer.querySelectorAll('[data-placement-id]');let freshNode=false;for(const node of tokenNodes)if(!placedElements.has(node)){freshNode=true;break;}
    if(placeKey!==lastPlaceKey||freshNode){lastPlaceKey=placeKey;
    // Tokens sharing a square stand side by side, in their stack order, so each
@@ -594,7 +598,7 @@ async function mount(){
     if(head)node.style.setProperty('--vtt3d-height',`${foot.y+size*.12-boxTop}px`);else node.style.removeProperty('--vtt3d-height');
     // Seen from the side the head is not straight over the base: the bar and conditions shift over the head (integration.css).
     if(head)node.style.setProperty('--vtt3d-head-dx',`${(head.x-(foot.x-(shared?shared.offset*size*.55:0))).toFixed(1)}px`);else node.style.removeProperty('--vtt3d-head-dx');
-    node.style.setProperty('--vtt3d-visible',(shownLevel===null||shownLevel<0||p.level<=shownLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
+    node.style.setProperty('--vtt3d-visible',(tokenLevel===null||tokenLevel<0||p.level<=tokenLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
    }
    }
   }
@@ -608,7 +612,7 @@ async function mount(){
    if(anchorKey!==lastAnchorKey||freshAnchor){lastAnchorKey=anchorKey;
    const rect=canvasRect;
    for(const el of anchored){placedElements.add(el);const [x,y,z]=el.dataset.vtt3dAnchor.split(',').map(Number);if(![x,y,z].every(Number.isFinite)){el.style.visibility='hidden';continue;}
-    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(shownLevel===null||shownLevel<0||level<=shownLevel)&&!(sightHides&&window.vttSightSees(x,y)===false);
+    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(tokenLevel===null||tokenLevel<0||level<=tokenLevel)&&!(sightHides&&window.vttSightSees(x,y)===false);
     el.style.left=`${rect.left-hostRect.left+q.x}px`;el.style.top=`${rect.top-hostRect.top+q.y}px`;el.style.visibility=shown?'':'hidden';}
    }
    // A broken object or wall shows its rubble in place of its piece of the map's art, on every screen at once.

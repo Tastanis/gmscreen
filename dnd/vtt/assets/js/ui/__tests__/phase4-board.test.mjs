@@ -21,6 +21,7 @@ function rulesHarness(placements) {
     ensurePlacementHitPoints: (hp) => ({ ...(hp || {}) }),
     ensurePlacementConditions: (list) => (Array.isArray(list) ? list : list ? [list] : []),
     getCharacterSheetProfileIdForPlacement: (p) => p.profile || '',
+    sheetIdForPlacement: (p) => p.profile || '',
     characterSummaryCache: new Map([['zepha', { features: [{ title: 'Nimble', automation: { passives: [{ kind: 'movement', speedBonus: 1 }] } }] }]]),
     window: {},
   };
@@ -64,7 +65,7 @@ test('abilities by name, and "signature"', () => {
     ['ogre', { id: 'ogre', monster: { abilities: { action: [{ name: 'Club' }] } } }],
   ]);
   const find = new Function('deps', `with (deps) { ${section('  function abilityForPlacement(', '  // ---------- heroes told to move by an ability ----------')}; return abilityForPlacement; }`)({
-    getPlacementFromStore: (id) => store.get(id), getCharacterSheetProfileIdForPlacement: () => '', characterSummaryCache: new Map(),
+    getPlacementFromStore: (id) => store.get(id), getCharacterSheetProfileIdForPlacement: () => '', sheetIdForPlacement: () => '', characterSummaryCache: new Map(),
   });
   assert.equal(find('wolf', 'howl').name, 'Howl');
   assert.equal(find('wolf', 'bite').name, 'Savage Bite', 'part of the name');

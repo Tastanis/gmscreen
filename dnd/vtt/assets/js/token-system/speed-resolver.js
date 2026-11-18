@@ -1,4 +1,5 @@
 import { DEFAULT_MOVEMENT_SPEED } from './movement-math.js';
+import { dummyHeroOf } from '../ui/test-dummy.mjs';
 
 export const PC_TOKEN_NAMES = new Set(['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -32,7 +33,8 @@ export function createTokenSpeedResolver({
   }
 
   async function resolveSpeed(placement) {
-    const tokenName = pcIdForTokenName(placement?.name);
+    // A test dummy moves as its hero (the hero's sheet, read only).
+    const tokenName = dummyHeroOf(placement) || pcIdForTokenName(placement?.name);
     if (tokenName) {
       const sheetSpeed = await fetchCached(`pc:${tokenName}`, () => fetchCharacterSpeed(routes.sheet, tokenName, fetchImpl), cacheTtlMs, cache);
       const speed = sheetSpeed ?? extractLocalSpeedValue(placement) ?? defaultSpeed;

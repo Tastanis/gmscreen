@@ -1,5 +1,6 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
 import { intersectsFloor, resolveSupportSurfaces } from './floor-support.js';
+import { isTestDummy, dummyOf, dummyHeroOf, dummyIdFor, isDummyId, dummyPlacementId, dummyName, newDummyRecord } from './test-dummy.mjs';
 import { footprintGap, followSquare } from './grab-geometry.mjs';
 import { postUndo, undoChatLines, inUndoGroup, currentUndoTag } from '../services/undo-client.js';
 import { coverFor } from './cover-check.mjs';
@@ -765,6 +766,44 @@ export function mountBoardInteractions(store, routes = {}) {
   // falls"). The Director broke floor squares ("<plate>@<col>,<row>", wall-prototype.js after the save): whoever stood
   // on one is held at the deck's height for a moment and let go, which the server counts as a fall from there
   // (FallOutcome: the Fall pop-up, damage, prone), landing on what is under it.
+  // Test dummies (test-dummy.mjs): the stand-in for the sheet's server reads the dummy token, the hero's sheet (read
+  // only), and keeps the dummy's own numbers on its token. Its Stamina changes go through the board's own damage and
+  // healing, so its Stamina triggers fire as the hero's would.
+  async function fetchTestDummyHeroSheet(hero) {
+    if (!hero || !PLAYER_CHARACTER_USER_IDS.includes(hero)) return null;
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const url = new URL(endpoint, window.location.href);
+    url.searchParams.set('action', 'summary'); url.searchParams.set('character', hero); url.searchParams.set('source', 'vtt');
+    const response = await fetch(url.toString(), { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
+    const payload = await response.json().catch(() => null);
+    return response.ok && payload?.success !== false ? payload?.data ?? null : null;
+  }
+  window.vttTestDummyBoard = {
+    placement: (id) => { const placement = id ? getPlacementFromStore(id) : null; return isTestDummy(placement) ? placement : null; },
+    heroSheet: async (hero) => (await fetchTestDummyHeroSheet(hero)) ?? {},
+    setRecord: (id, record) => {
+      if (!isGmUser()) return null;
+      const result = updatePlacementById(id, (target) => {
+        if (!isTestDummy(target)) return;
+        target.metadata = { ...(target.metadata || {}), testDummy: { ...dummyOf(target), ...record, hero: dummyHeroOf(target) } };
+      }, { returnSavePromise: true });
+      return result?.savePromise ?? null;
+    },
+    stamina: (id, change) => {
+      if (!isGmUser() || !isTestDummy(getPlacementFromStore(id))) return null;
+      if (change?.mode) return applyDamageHealToPlacement(id, change.mode, Number(change.amount) || 0);
+      if (change?.set) {
+        const result = updatePlacementById(id, (target) => {
+          const hp = ensurePlacementHitPoints(target.hp);
+          target.hp = { current: String(Math.trunc(Number(change.set.current) || 0)), max: hp.max };
+          if (Number(change.set.temp) > 0) target.tempStamina = Math.trunc(Number(change.set.temp)); else delete target.tempStamina;
+        }, { returnSavePromise: true });
+        return result?.savePromise ?? null;
+      }
+      return null;
+    },
+  };
+
   window.vttDropFromBrokenFloor = async (names, sceneId) => {
     if (!isGmUser() || !sceneId || sceneId !== getActiveSceneId() || !Array.isArray(names) || !names.length) return;
     const state = boardApi.getState?.() ?? {}, design = state.boardState?.sceneState?.[sceneId]?.environment?.walls?.value || {}, roofs = design.roofs || [];
@@ -6758,7 +6797,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function deductPersistentZoneUpkeep(zone) {
     const placement=getPlacementFromStore(zone.casterId);
-    const profileId=placement ? getCharacterSheetProfileIdForPlacement(placement) : null;
+    const profileId=placement ? sheetIdForPlacement(placement) : null;
     if (!profileId) throw new Error('Zone upkeep needs manual review: no linked character resource.');
     const endpoint=routes?.sheet || '/dnd/character_sheet/handler.php';
     const result=await spendZoneUpkeep(endpoint,{character:profileId,cost:zone.upkeep.cost,resourceName:zone.upkeep.resource});
@@ -7470,8 +7509,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isPlayerCharacterPlacement(placement) {
-    const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
-    return Boolean(profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId));
+    const profileId = placement ? sheetIdForPlacement(placement) : '';
+    return Boolean(profileId && isHeroSheetId(profileId));
   }
 
   function isFreeTriggeredActionLabel(label) {
@@ -9198,6 +9237,20 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // A test dummy (Brandon, November 17, 2026): the Director's only, hidden from the players, named "Test · Hero", with
+    // its own numbers (test-dummy.mjs); never in the PC's folder, so nothing links it to the hero's sheet or player.
+    if (template.testDummyOf) {
+      if (!isGmUser()) return;
+      const hero = template.testDummyOf;
+      placement.name = dummyName(template.name || hero);
+      placement.hidden = true;
+      placement.combatTeam = 'ally';
+      placement.team = 'ally';
+      placement.metadata = { testDummy: newDummyRecord(hero, characterSummaryCache?.get?.(hero) ?? {}) };
+      const max = parseHitPointNumber(placement.hp?.max);
+      if (Number.isFinite(max) && max > 0) placement.hp = { current: String(max), max: placement.hp.max };
+    }
+
     const droppedOn = window.vtt3d?.active ? window.vtt3d.clientToMap(event.clientX, event.clientY) : null;
     const levelId = (droppedOn?.surfaceId && typeof droppedOn.levelId === 'string' ? droppedOn.levelId : null) || getActiveTokenPlacementLevelId(state);
     if (levelId) {
@@ -9239,6 +9292,19 @@ export function mountBoardInteractions(store, routes = {}) {
     // patch, so it targets an existing canonical entity revision.
     if (isTokenSourcePlayerVisible(template)) {
       fetchAndApplyCharacterStamina(placement.id, activeSceneId, dropSavePromise, { seedConditions: true });
+    }
+
+    if (template.testDummyOf) {
+      const hero = template.testDummyOf;
+      Promise.all([fetchTestDummyHeroSheet(hero), dropSavePromise]).then(([sheet]) => {
+        if (!sheet) return;
+        const max = parseHitPointNumber(sheet?.hero?.vitals?.staminaMax);
+        updatePlacementById(placement.id, (target) => {
+          if (!isTestDummy(target)) return;
+          target.metadata = { ...(target.metadata || {}), testDummy: newDummyRecord(hero, sheet) };
+          if (Number.isFinite(max) && max > 0) { target.hp = { current: String(max), max: String(max) }; delete target.tempStamina; }
+        }, { sceneId: activeSceneId });
+      }).catch((error) => console.warn('[VTT] Test dummy: the hero\'s sheet', error));
     }
 
     // A Monster Creator token (MonsterTokens.php) comes without its stat block: the monster's record is fetched and put
@@ -9613,12 +9679,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const metadata = extractPlacementMetadata(placement);
     const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
     const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
-    if (!inPlayerFolder && !isPlayerOwned) {
+    // A test dummy has the hero's panel, under its own id: what it spends and takes stays on the dummy.
+    const dummy = isTestDummy(placement) && isGmUser();
+    if (!dummy && !inPlayerFolder && !isPlayerOwned) {
       return { characterId: null, token: null };
     }
 
-    const characterId = getCharacterSheetProfileIdForPlacement(placement);
-    if (!characterId || !PLAYER_CHARACTER_USER_IDS.includes(characterId)) {
+    const characterId = dummy ? dummyIdFor(placement) : getCharacterSheetProfileIdForPlacement(placement);
+    if (!characterId || !isHeroSheetId(characterId)) {
       return { characterId: null, token: null };
     }
 
@@ -14295,6 +14363,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!isGmUser()) {
       return;
     }
+    // Test dummies on the map lose theirs too (their own, on the token).
+    for (const placement of getActiveScenePlacements(boardApi.getState?.() ?? {})) {
+      if (isTestDummy(placement) && (Number(dummyOf(placement)?.surges) || 0) > 0) window.vttTestDummyBoard?.setRecord(placement.id, { surges: 0 });
+    }
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     // The sheets of players who are on: an off player's sheet is left as it is.
     await Promise.all(ACTIVE_PLAYER_USER_IDS.map(async (profileId) => {
@@ -15519,10 +15591,10 @@ export function mountBoardInteractions(store, routes = {}) {
       captainBonus: actorId ? captainBonusFor(getPlacementsForActiveScene(), actorId) : null,
       // Always-on edge/bane traits: a monster's from its stat block, a hero's from the sheet the VTT already holds.
       passivesFor: (placement) => {
-        const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
+        const profileId = placement ? sheetIdForPlacement(placement) : '';
         const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
         // Not loaded yet: load it; the roll window asks again every second and then shows the hero's traits.
-        if (profileId && !sheet && PLAYER_CHARACTER_USER_IDS.includes(profileId) && !rollTraitSheetRequests.has(profileId)) {
+        if (profileId && !sheet && isHeroSheetId(profileId) && !rollTraitSheetRequests.has(profileId)) {
           rollTraitSheetRequests.add(profileId); // once per page: a sheet that fails to load is not asked for every second
           getAutomationSheetForPlacement(placement.id).catch(() => {});
         }
@@ -16384,6 +16456,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
     const placement = getPlacementFromStore(combatantId);
+    if (isTestDummy(placement)) return dummyIdFor(placement);
     const explicitProfile = extractProfileIdFromPlacement(placement);
     if (explicitProfile) {
       return explicitProfile;
@@ -16404,7 +16477,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function extractProfileIdFromPlacement(placement) {
-    if (!placement || typeof placement !== 'object') {
+    if (!placement || typeof placement !== 'object' || isTestDummy(placement)) {
       return null;
     }
 
@@ -16468,6 +16541,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isPlacementPlayerOwned(placement, metadata = null) {
+    if (isTestDummy(placement)) return false;
     const sources = [placement, metadata].filter(Boolean);
     const flagKeys = [
       'playerOwned',
@@ -16507,6 +16581,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isPlacementInPlayerFolder(placement, metadata = null) {
+    if (isTestDummy(placement)) return false;
     const playerFolderKey = normalizePlayerTokenFolderName(PLAYER_VISIBLE_TOKEN_FOLDER);
     if (!playerFolderKey) {
       return false;
@@ -16593,12 +16668,23 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getCharacterSheetProfileIdForPlacement(placement) {
+    // A test dummy is never its hero's token: nothing written through this link reaches the hero (test-dummy.mjs).
+    if (isTestDummy(placement)) return '';
     const explicitProfile = normalizeProfileId(extractProfileIdFromPlacement(placement));
     if (explicitProfile && PLAYER_CHARACTER_USER_IDS.includes(explicitProfile)) {
       return explicitProfile;
     }
     const aliasProfile = normalizeProfileId(matchProfileByName(placement?.name ?? ''));
     return aliasProfile && PLAYER_CHARACTER_USER_IDS.includes(aliasProfile) ? aliasProfile : '';
+  }
+
+  // The sheet a token reads: its hero's, or a test dummy's own id ("dummy:<token>", answered on this page by
+  // test-dummy.mjs from the hero's sheet and the dummy's own numbers). isHeroSheetId: a sheet the board may read.
+  function sheetIdForPlacement(placement) {
+    return isTestDummy(placement) ? dummyIdFor(placement) : getCharacterSheetProfileIdForPlacement(placement);
+  }
+  function isHeroSheetId(id) {
+    return isDummyId(id) || PLAYER_CHARACTER_USER_IDS.includes(id);
   }
 
   function normalizeCombatantName(name) {
@@ -17615,7 +17701,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return true;
     };
     const passives = placement.monster ? monsterPassivesOfKind(placement.monster, 'movement') : [];
-    const profileId = getCharacterSheetProfileIdForPlacement(placement);
+    const profileId = sheetIdForPlacement(placement);
     const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
     (Array.isArray(sheet?.features) ? sheet.features : []).forEach((feature) => {
       (Array.isArray(feature?.automation?.passives) ? feature.automation.passives : []).forEach((passive) => {
@@ -17656,7 +17742,7 @@ export function mountBoardInteractions(store, routes = {}) {
         (Array.isArray(abilities[category]) ? abilities[category] : []).forEach((ability) => list.push({ ...ability, category }));
       });
     } else {
-      const profileId = getCharacterSheetProfileIdForPlacement(placement);
+      const profileId = sheetIdForPlacement(placement);
       const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
       const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
       Object.keys(actions).forEach((kind) => {
@@ -18307,6 +18393,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (typeof parsed.sourceFolderName === 'string') {
         template.sourceFolderName = parsed.sourceFolderName.trim();
+      }
+      // The token list's Test dummy (token-library.js): a copy of this hero that never touches the hero.
+      if (typeof parsed.testDummyOf === 'string' && parsed.testDummyOf.trim()) {
+        template.testDummyOf = parsed.testDummyOf.trim().toLowerCase();
       }
 
       if (typeof parsed.folderName === 'string' && !template.sourceFolderName) {
@@ -20404,8 +20494,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const placement = getPlacementFromStore(placementId);
-    const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
-    if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
+    const profileId = placement ? sheetIdForPlacement(placement) : '';
+    if (!profileId || !isHeroSheetId(profileId)) {
       resolve?.({ skipped: true, reason: 'not-pc' });
       return;
     }
@@ -20766,8 +20856,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!placement) {
       return null;
     }
-    const profileId = getCharacterSheetProfileIdForPlacement(placement);
-    if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
+    const profileId = sheetIdForPlacement(placement);
+    if (!profileId || !isHeroSheetId(profileId)) {
       return null;
     }
     if (characterSummaryCache.has(profileId)) {
@@ -20801,13 +20891,17 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getAutomationProfileIdForPlacement(placementId) {
-    const profileId = normalizeProfileId(getCombatantProfileId(placementId));
+    const raw = getCombatantProfileId(placementId);
+    if (isDummyId(raw)) return raw;   // a test dummy: its own sheet id
+    const profileId = normalizeProfileId(raw);
     return profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId) ? profileId : '';
   }
 
   // Resolve the user profile associated with this token's linked sheet.
   function getLinkedProfileUserIdForPlacement(placementId) {
-    return normalizeProfileId(getAutomationProfileIdForPlacement(placementId));
+    // A test dummy belongs to no player: its prompts are the Director's.
+    const id = getAutomationProfileIdForPlacement(placementId);
+    return isDummyId(id) ? '' : normalizeProfileId(id);
   }
 
   // A recovery heals a third of the Stamina maximum (October 2026, as the sheet and the server work it out); a stored
