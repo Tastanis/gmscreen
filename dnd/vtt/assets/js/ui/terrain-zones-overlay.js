@@ -218,19 +218,40 @@ function setVisible(value) {
   visible = !!value;
   try { if (preferenceKey) localStorage.setItem(preferenceKey, String(visible)); } catch {}
   signature = '';
+  showSwitches();
 }
 ownButton.addEventListener('click', () => setVisible(!visible));
+// The players switch shows its new state at once, while the save is on its way; a save that fails puts it back.
+// A click during a save is kept and sent after it, so two quick clicks end where the last one left it.
+let wantedHidden = null, wantedAt = 0;
 async function setHiddenFromPlayers(hidden) {
   const c = context(), field = sceneOf(c)?.environment?.zones;
-  if (!c?.isGM || !field?.value || saving) return false;
-  const value = JSON.parse(JSON.stringify(field.value));
-  if (hidden) value.hiddenFromPlayers = true; else delete value.hiddenFromPlayers;
+  if (!c?.isGM || !field?.value) return false;
+  wantedHidden = !!hidden; wantedAt = Date.now(); showSwitches();
+  if (saving) return true;
   saving = true;
-  try { await saveShared('zones', value, field.revision, c.state.boardState.activeSceneId); return true; }
-  catch (error) { console.error('[terrain zones] could not change the players switch', error); return false; }
-  finally { saving = false; signature = ''; }
+  try {
+    let sentFrom = null;
+    while (true) {
+      // The board may not have the last save back yet: wait for it (up to 3 s) before deciding what to send next.
+      for (let i = 0; i < 30 && sentFrom !== null && sceneOf(context())?.environment?.zones?.revision === sentFrom; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+      const latest = sceneOf(context())?.environment?.zones, want = wantedHidden;
+      if (!latest?.value || zonesHiddenFromPlayers(latest) === want || latest.revision === sentFrom) break;
+      sentFrom = latest.revision;
+      const value = JSON.parse(JSON.stringify(latest.value));
+      delete value.hiddenFromPlayers;
+      if (want) delete value.shownToPlayers; else value.shownToPlayers = true;
+      await saveShared('zones', value, latest.revision, c.state.boardState.activeSceneId);
+      if (wantedHidden === want) break;
+    }
+    return true;
+  } catch (error) { console.error('[terrain zones] could not change the players switch', error); wantedHidden = null; return false; }
+  finally { saving = false; signature = ''; showSwitches(); }
 }
-playersButton.addEventListener('click', () => setHiddenFromPlayers(!current().hiddenFromPlayers));
+playersButton.addEventListener('click', () => setHiddenFromPlayers(!playersHidden()));
+// The players switch as last asked for, else as saved. Kept until the saved switch catches up, so it never flickers back for a moment after the save.
+function playersHidden(state = current()) { if (!saving && (wantedHidden === state.hiddenFromPlayers || Date.now() - wantedAt > 5000)) wantedHidden = null; return wantedHidden ?? state.hiddenFromPlayers; }
+function showSwitches() { const c = context(); if (c) { try { syncControl(c, current(c)); } catch {} } }
 
 const board = document.querySelector('#vtt-board-canvas'), mapSurface = document.querySelector('#vtt-map-surface');
 /** True when this element is ordinary board (map, tokens, the canvas itself), not a panel over it. */
@@ -270,13 +291,13 @@ function syncControl(c, state) {
   const hasZones = state.zones.length > 0;
   control.hidden = !hasZones;
   if (!hasZones) return;
-  const lockedOff = !c.isGM && state.hiddenFromPlayers;
+  const lockedOff = !c.isGM && state.hiddenFromPlayers, hidden = c.isGM ? playersHidden(state) : state.hiddenFromPlayers;
   ownButton.setAttribute('aria-pressed', String(visible && !lockedOff));
   ownButton.disabled = lockedOff;
   ownButton.title = lockedOff ? 'The GM has hidden terrain zones' : visible ? 'Hide terrain zones on your screen' : 'Show terrain zones on your screen';
   playersButton.hidden = !c.isGM;
-  playersButton.setAttribute('aria-pressed', String(!state.hiddenFromPlayers));
-  playersButton.title = state.hiddenFromPlayers ? 'Players cannot see terrain zones. Click to show them.' : 'Players can see terrain zones. Click to hide them from players.';
+  playersButton.setAttribute('aria-pressed', String(!hidden));
+  playersButton.title = hidden ? 'Players cannot see terrain zones. Click to show them.' : 'Players can see terrain zones. Click to hide them from players.';
   placeControl();
 }
 
@@ -284,8 +305,10 @@ function draw() {
   const c = context();
   if (!c?.view?.mapLoaded) { control.hidden = true; if (svg.childNodes.length) { svg.replaceChildren(); signature = ''; } return; }
   if (!svg.isConnected && transform) transform.insertBefore(svg, document.querySelector('#terrain-cost-markers') || document.querySelector('#vtt-grid-overlay'));
-  const pref = 'terrain-zones-visible:' + String(c.userId || 'viewer');
-  if (pref !== preferenceKey) { preferenceKey = pref; try { const saved = localStorage.getItem(pref); visible = saved === null ? true : saved === 'true'; } catch { visible = true; } }
+  // Off by default for the Director (Brandon, November 17, 2026); a player follows the Director's switch unless they
+  // turn zones off for themselves. A new key, so the old saved "on" is not read.
+  const pref = 'terrain-zones-shown:' + String(c.userId || 'viewer'), byDefault = !c.isGM;
+  if (pref !== preferenceKey) { preferenceKey = pref; try { const saved = localStorage.getItem(pref); visible = saved === null ? byDefault : saved === 'true'; } catch { visible = byDefault; } }
   const state = current(c), {zones, key} = state, active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
   syncControl(c, state);
   // Each person chooses for their own screen; the GM can also switch zones off for every player.

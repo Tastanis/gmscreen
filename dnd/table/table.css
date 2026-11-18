@@ -101,6 +101,10 @@ body.map-docked #rail [data-group="Campaign"]:not([data-k="rules"]), body.map-do
 .chip-btn { border: 1px solid #4a3826; background: #1d1510; border-radius: 6px; padding: 2px 7px; font-size: 11px; cursor: pointer; color: var(--ink-dim); }
 .chip-btn:hover { border-color: var(--edge-hi); color: var(--ink); }
 .chip-btn.on { background: #3a2a1b; color: var(--gold); border-color: var(--edge-hi); }
+.chip-btn.danger:hover { border-color: #b0503c; color: #f0a090; }
+.flyout .scene-tools { display: flex; gap: 6px; margin: 2px 8px 6px; }
+.flyout .scene-tools .chip-btn { padding: 4px 9px; color: #f0d898; border-color: #5a4628; }
+.flyout .item.scene .act .chip-btn + .chip-btn { margin-left: 4px; }
 .menu-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 7px; cursor: pointer; }
 .menu-row:hover { background: #2d2117; }
 .menu-row svg { width: 18px; height: 18px; stroke: var(--ink-dim); fill: none; stroke-width: 1.7; }

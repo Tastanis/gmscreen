@@ -85,11 +85,16 @@ test('a held token is always put down by the next click (Build 520)', () => {
   // The held token's box goes with the pointer: while held it lets the pointer through, so the click that puts it
   // down lands on the square, not on the token (which used to count as "put it back": "it won't place it").
   // A click selects only; a drag moves (October 16, 2026): letting go without moving never picks the token up.
-  assert.match(board3d, /if\(released\.moved\)\{const hit=dragHit\(e,find\(released\.id\),released\.air\|\|null\);if\(hit\)commit\(hit,find\(released\.id\),e,intent\);\}\}/);
+  assert.match(board3d, /if\(released\.moved\)\{const hit=dragHit\(e,find\(released\.id\),released\.air\|\|null\);if\(hit\)commit\(hit,find\(released\.id\),e,intent\);\}\s*else if\(released\.addOnClick\)bridge\.select\(released\.id,\{additive:true\}\);\}/);
   assert.doesNotMatch(board3d, /clickMoveTokenId=released\.id/);
   // Shift-click changes the selection only: it never picks a token up, nor puts a carried one down on the clicked one.
   assert.match(board3d, /if\(clickMoveTokenId&&e\.shiftKey\)\{cancelDrag\(\);bridge\.select\(id,\{additive:true\}\);board\.focus\(\{preventScroll:true\}\);return;\}/);
-  assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;markHeld\(drag\.id\);\}/);
+  assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;if\(drag\.addOnClick\)\{drag\.addOnClick=false;bridge\.select\(drag\.id\);\}markHeld\(drag\.id\);\}/);
+  // Shift is also the Draw Steel shift: a Shift-drag moves the grabbed token alone (it used to add it to the selection
+  // and carry the others selected with it: Brandon, November 17, 2026, a minion dissapeared as another was moved);
+  // a Shift-click with no drag still adds to or takes from the selection, on release.
+  assert.match(board3d, /if\(!e\.shiftKey&&!context\.selectedIds\?\.includes\(id\)\)bridge\.select\(id\);/);
+  assert.match(board3d, /shift:!!e\.shiftKey,addOnClick:!!e\.shiftKey\};/);
   assert.match(board3d, /function cancelDrag\(\)\{sayHeld\(null\);markHeld\(null\);clickMoveTokenId=null;/);
   assert.match(css, /\.vtt-token\.vtt3d-held, \.vtt3d-on #vtt-token-layer>\.vtt-token\.vtt3d-held \* \{ pointer-events: none !important; \}/);
   // A drop that is refused says why, where it can be seen.

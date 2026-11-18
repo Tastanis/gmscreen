@@ -89,6 +89,8 @@ export function mountSceneImportPreview(root, store) {
           result.replaceChildren(title,counts);
           const open = document.createElement('button'); open.type='button'; open.className='btn'; open.textContent='Open copy for GM';
           open.addEventListener('click',()=>{
+            // A page with no scene list of its own (the Table's Add scenes window) opens it its own way.
+            if(typeof store?.openImportedScene==='function'){store.openImportedScene(data.scene.id);return;}
             const target=Array.from(document.querySelectorAll('[data-action="activate-scene"]')).find(button=>button.dataset.sceneId===data.scene.id);
             if(target) target.click(); else status.textContent='The saved scene is no longer in the scene list.';
           }); result.append(open);

@@ -534,6 +534,19 @@ export function renderSceneList(routes, store) {
 
       try {
         target.disabled = true;
+        await removeScene(sceneId);
+        showFeedback(feedback, 'Scene deleted.', 'info');
+      } catch (error) {
+        console.error('[VTT] Failed to delete scene', error);
+        showFeedback(feedback, error?.message || 'Unable to delete scene.', 'error');
+      } finally {
+        target.disabled = false;
+      }
+    }
+  });
+
+  // Deleting a scene: the server first, then this board forgets it (the open scene closes if it was this one).
+  async function removeScene(sceneId) {
         await deleteScene(endpoints.scenes, sceneId);
         stateApi.updateState?.((draft) => {
           ensureSceneDraft(draft);
@@ -551,14 +564,25 @@ export function renderSceneList(routes, store) {
           }
         });
         persistBoardStateSnapshot(null, { forceFullSnapshot: true });
-        showFeedback(feedback, 'Scene deleted.', 'info');
-      } catch (error) {
-        console.error('[VTT] Failed to delete scene', error);
-        showFeedback(feedback, error?.message || 'Unable to delete scene.', 'error');
-      } finally {
-        target.disabled = false;
-      }
-    }
+        // The board takes the cleared scene from the server at once (no scene open, the players on none).
+        try { await stateApi.recoverSync?.(); } catch (error) { console.warn('[VTT] reading the board again after a delete', error); }
+  }
+  // The Table's Scenes list (dnd/table, Brandon, November 17, 2026: "i cannot add, import, or delete a scene"). It asks
+  // this board to delete a scene it has confirmed, and to read the scene list again after it added or imported one.
+  window.addEventListener('vtt:scene-delete', async (event) => {
+    const { sceneId, done } = event?.detail ?? {};
+    if (!sceneId || !endpoints.scenes) { done?.(Error('Scene saving is unavailable right now.')); return; }
+    try { await removeScene(sceneId); done?.(null); } catch (error) { console.error('[VTT] Failed to delete scene', error); done?.(error); }
+  });
+  window.addEventListener('vtt:scenes-refresh', async (event) => {
+    const done = event?.detail?.done;
+    try {
+      const response = await fetch(endpoints.scenes || '/dnd/vtt/api/scenes.php', { credentials: 'same-origin', cache: 'no-store' });
+      const catalog = await response.json();
+      if (!response.ok || !catalog.success || !catalog.data) throw Error(catalog.error || 'The scene list could not be read.');
+      stateApi.updateState?.((draft) => { draft.scenes = catalog.data; });
+      done?.(null);
+    } catch (error) { console.error('[VTT] Failed to read the scene list', error); done?.(error); }
   });
 
   document.addEventListener('change', async (event) => {

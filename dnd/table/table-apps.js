@@ -236,9 +236,9 @@
     f.addEventListener('load', () => {
       try {
         const d = f.contentDocument;
-        if (!/\/dnd\/table\/(chat|test|dice)\.php/.test(url)) { const st = d.createElement('style'); st.textContent = PAGE_CHROME; d.head.append(st); }
+        if (!/\/dnd\/table\/(chat|test|dice|scenes)\.php/.test(url)) { const st = d.createElement('style'); st.textContent = PAGE_CHROME; d.head.append(st); }
         // Older site pages get the compact window look (dnd/table/pages-embed.css/js), in the sheet's theme.
-        if (!/\/dnd\/(table\/(chat|test|dice)\.php|campaign\/|character_sheet\/)/.test(url)) {
+        if (!/\/dnd\/(table\/(chat|test|dice|scenes)\.php|campaign\/|character_sheet\/)/.test(url)) {
           let theme = 'diablo'; try { theme = localStorage.getItem('sheet-theme') === 'parchment' ? 'parchment' : 'diablo'; } catch (_) { /* no storage */ }
           d.documentElement.classList.add('in-table', theme);
           const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = vers('/dnd/table/pages-embed.css'); d.head.append(css);
@@ -278,6 +278,12 @@
   };
   // The map's hero panel asks for the full sheet.
   window.addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.type === 'table-open-sheet' && e.data.character) apps.sheet(String(e.data.character).toLowerCase()); });
+  // The Add scenes window (scenes.php): a scene was added or imported, or one is to be opened.
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.data?.source !== 'table-scenes') return;
+    if (e.data.type === 'changed') { scenesChanged(); return; }
+    if (e.data.type === 'open' && e.data.sceneId) openSceneFresh(String(e.data.sceneId));
+  });
   const heroCard = (h) => ({ id: 'card-' + h.id, hero: h.id, app: 'heroCard', arg: h.id, name: h.name, sub: h.sub.split('·')[0], initials: (h.pic || h.picUrl) && SERVED ? '' : initials(h.name), color: (h.pic || h.picUrl) && SERVED ? '#14100c' : tint(h.name), hp: heroHp(h), onAdd: (node) => wireArt(node, h), open: () => (playerView && h.own === false ? T.toast(`Only ${h.name}’s player and the Director open that sheet`) : apps.sheet(h.id)) });
   apps.heroCard = (id, x, y, w) => { const h = HEROES.find((q) => q.id === id); if (h) T.addCard(heroCard(h), x, y, w); };
 
@@ -681,7 +687,7 @@
       const mark = (s) => [s.id === youId ? '<span class="tag you">you</span>' : '', s.id === playersId ? '<span class="tag players">players</span>' : ''].join('');
       const thumb = (s) => (s.mapUrl ? `url('${esc(s.mapUrl)}') center / cover no-repeat, ` : '') + tint(s.name);
       // Scenes with the same name (copies) fold under one row: "+3 copies" opens them.
-      const row = (s, extra = '', cls = '') => `<div class="item scene${cls}" data-key="${esc(s.id)}"><div class="pic wide" style="background:${thumb(s)}"></div><div class="txt"><b>${esc(s.name)}</b><i>${mark(s)}${extra}</i></div><div class="act"><button class="chip-btn" data-a="show" title="Show this scene to the players">Show players</button></div></div>`;
+      const row = (s, extra = '', cls = '') => `<div class="item scene${cls}" data-key="${esc(s.id)}"><div class="pic wide" style="background:${thumb(s)}"></div><div class="txt"><b>${esc(s.name)}</b><i>${mark(s)}${extra}</i></div><div class="act"><button class="chip-btn" data-a="show" title="Show this scene to the players">Show players</button>${SERVED ? '<button class="chip-btn danger" data-a="delete" title="Delete this scene (asks first)">Delete</button>' : ''}</div></div>`;
       const twinRows = (list) => { const by = new Map(); list.forEach((s) => { const k = String(s.name).trim().toLowerCase(); if (!by.has(k)) by.set(k, []); by.get(k).push(s); });
         return [...by.values()].map((arr) => { const lead = arr.find((s) => s.id === youId || s.id === playersId) || arr[0]; const rest = arr.filter((s) => s !== lead);
           if (!rest.length) return row(lead);
@@ -691,13 +697,16 @@
       const pin = (lead, s) => s ? `<div class="item scene" data-key="${esc(s.id)}"><span class="lead">${lead}</span><div class="pic wide" style="background:${thumb(s)}"></div><div class="txt"><b>${esc(s.name)}</b></div>${lead === 'You' && s.id !== playersId ? '<div class="act"><button class="chip-btn" data-a="show">Show players</button></div>' : ''}</div>` : '';
       f.innerHTML = header('Scenes', `${items.length} scenes`) +
         (youId || playersId ? `<div class="pinned">${pin('You', byId(youId))}${mismatch ? pin('Players', byId(playersId)) : playersId ? '<p class="muted" style="margin:2px 8px 6px;font-size:11.5px">The players see the same scene.</p>' : ''}</div>` : '') +
+        '<div class="scene-tools"><button class="chip-btn" data-tool="new" title="A new scene from a map picture">+ New scene</button><button class="chip-btn" data-tool="import" title="Import a map package (.vttmap) or scene file">Import</button></div>' +
         '<input class="search" placeholder="Search scenes…">' +
         '<div class="body">' + groups.map((g) => { const open = g.list.some((s) => s.id === youId || s.id === playersId); return `<details class="fold" ${open ? 'open' : ''} data-open="${open ? 1 : 0}"><summary>${esc(g.fo.name)}<span class="n">${g.list.length}</span></summary>${twinRows(g.list)}</details>`; }).join('') + '</div>';
       // The folder you are in opens; Unsorted waits at the bottom.
       f.querySelectorAll('.fold').forEach((d) => { const has = d.querySelector(`[data-key="${CSS.escape(youId || '')}"]`); d.open = !!has; d.dataset.open = has ? '1' : '0'; });
       const unsorted = [...f.querySelectorAll('.fold')].find((d) => /^Unsorted/.test(d.querySelector('summary')?.textContent || '')); if (unsorted) unsorted.parentNode.append(unsorted);
       filterable(f);
+      f.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => { apps.sceneTools(b.dataset.tool); T.closeFlyout(); }));
       f.querySelectorAll('.item.scene').forEach((n) => n.addEventListener('click', (e) => {
+        if (e.target.closest('[data-a="delete"]')) { const name = n.querySelector('b').textContent; T.closeFlyout(); deleteSceneFromTable(n.dataset.key, name); return; }
         if (e.target.closest('[data-a="twins"]')) { const l = n.nextElementSibling; if (l?.classList.contains('twins-list')) { l.hidden = !l.hidden; e.target.closest('[data-a="twins"]').classList.toggle('on', !l.hidden); } return; }
         const show = e.target.closest('[data-a="show"]'), id = n.dataset.key, name = n.querySelector('b').textContent;
         if (!SERVED) { T.toast(show ? `${name} shown to players` : `Opened ${name}`); if (!show) apps.map(); T.closeFlyout(); return; }
@@ -706,6 +715,48 @@
         T.closeFlyout();
       }));
     });
+  }
+  // Adding scenes (Brandon, November 17, 2026: "i cannot add, import, or delete a scene"): a window of its own
+  // (scenes.php), so the map is not opened for it. part: 'new' (a map picture) or 'import' (a map package).
+  apps.sceneTools = (part = 'new') => T.openWindow({ id: 'scene-tools', app: 'scene-tools', title: 'Add scenes', icon: I.map || I.scenes, size: [440, 560],
+    build(c) { if (SERVED) { framePage(c, vers('/dnd/table/scenes.php') + '&part=' + encodeURIComponent(part)); return; } c.innerHTML = '<p class="pad muted">New scene from a map picture, or import a map package.</p>'; } });
+  // The scene list changed: the Table reads it again, and an open map reads its own again (scene-manager.js).
+  async function refreshSceneList() {
+    try { const j = await (await fetch('/dnd/table/config.php', { cache: 'no-store', credentials: 'same-origin' })).json(); if (j?.config) window.TABLE_CONFIG = j.config; } catch (_) { /* next time the list opens */ }
+  }
+  function mapReadsScenes(f = vttFrame()) {
+    if (!f) return Promise.resolve();
+    return new Promise((resolve) => { const w = f.contentWindow; let settled = false; const end = () => { if (!settled) { settled = true; resolve(); } };
+      try { w.dispatchEvent(new w.CustomEvent('vtt:scenes-refresh', { detail: { done: end } })); } catch (_) { end(); } setTimeout(end, 8000); });
+  }
+  async function scenesChanged() { await Promise.all([refreshSceneList(), mapReadsScenes()]); }
+  // Open a scene just added: the map is asked to read its list first, then the scene is opened as from the Scenes list.
+  function openSceneFresh(id) {
+    refreshSceneList();
+    withVtt(async (v, f) => {
+      await mapReadsScenes(f);
+      const tryOpen = (n = 0) => { if (v.run('openScene', id)) { T.toast('Opened the new scene'); return; } if (n < 20) setTimeout(() => tryOpen(n + 1), 150); else T.toast('Could not find that scene'); };
+      tryOpen();
+    }, true);
+  }
+  // Deleting a scene, after asking. With the map open the map deletes it (so it forgets it at once); without, the server.
+  async function deleteSceneFromTable(id, name) {
+    const youId = live?.sceneId, playersId = live?.playerSceneId;
+    const warn = [id === youId ? 'It is the scene open on your map.' : '', id === playersId ? 'The players are on this scene.' : ''].filter(Boolean).join(' ');
+    if (!window.confirm(`Delete “${name}”? This cannot be undone.${warn ? ' ' + warn : ''}`)) return;
+    try {
+      const f = vttFrame();
+      if (f) {
+        const w = f.contentWindow;
+        await new Promise((resolve, reject) => { w.dispatchEvent(new w.CustomEvent('vtt:scene-delete', { detail: { sceneId: id, done: (error) => (error ? reject(error) : resolve()) } })); setTimeout(() => reject(Error('The map did not answer.')), 15000); });
+      } else {
+        const endpoint = window.TABLE_CONFIG?.scenesEndpoint || '/dnd/vtt/api/scenes.php';
+        const r = await fetch(endpoint, { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sceneId: id }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok || !j.success) throw Error(j.error || 'The scene could not be deleted.');
+      }
+      await refreshSceneList();
+      T.toast(`Deleted ${name}`);
+    } catch (error) { T.toast(error?.message || 'The scene could not be deleted.'); }
   }
   // Players to a scene with no map open: the scene made visible to them, then the same move the map makes (scene.php).
   async function showToPlayers(id, name) {

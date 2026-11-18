@@ -94,13 +94,14 @@ test('zone outline keeps only outer edges and picks a label square inside the zo
   assert.equal(zoneColor('something-new'), '#d4a017');
 });
 
-test('the GM switch that hides zones from players is read from the stored field', () => {
-  assert.equal(zonesHiddenFromPlayers(field), false, 'zones are shown to players unless the GM says otherwise');
-  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, hiddenFromPlayers: true } }), true);
-  assert.equal(zonesHiddenFromPlayers({ ...field.value, hiddenFromPlayers: true }), true, 'the bare value is accepted too');
-  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, hiddenFromPlayers: 'yes' } }), false, 'only a real true hides them');
-  assert.equal(zonesHiddenFromPlayers(null), false);
-  assert.equal(normalizeZones({ revision: 2, value: { ...field.value, hiddenFromPlayers: true } }).length, 5, 'hiding is display only: the zones themselves are unchanged');
+test('players see zones only once the GM shows them (Brandon, November 17, 2026: "zones off for both" by default)', () => {
+  assert.equal(zonesHiddenFromPlayers(field), true, 'off for players until the GM says so');
+  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, shownToPlayers: true } }), false);
+  assert.equal(zonesHiddenFromPlayers({ ...field.value, shownToPlayers: true }), false, 'the bare value is accepted too');
+  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, shownToPlayers: 'yes' } }), true, 'only a real true shows them');
+  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, hiddenFromPlayers: false } }), true, 'the older switch no longer shows them');
+  assert.equal(zonesHiddenFromPlayers(null), true);
+  assert.equal(normalizeZones({ revision: 2, value: { ...field.value, shownToPlayers: true } }).length, 5, 'display only: the zones themselves are unchanged');
 });
 
 test('a difficult square costs its multiplier; a climb is paid as well', () => {

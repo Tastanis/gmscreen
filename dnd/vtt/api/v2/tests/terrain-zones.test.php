@@ -51,6 +51,8 @@ try {
     SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>true]);
     SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>false]);
     zoneRejects(static fn()=>SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>'yes']), 'Invalid zone display flag', 'The players-hidden switch must be true or false');
+    SceneEnvironment::validate('zones', [...$value, 'shownToPlayers'=>true]);
+    zoneRejects(static fn()=>SceneEnvironment::validate('zones', [...$value, 'shownToPlayers'=>1]), 'Invalid zone display flag', 'The players-shown switch (November 17, 2026) must be true or false');
     $hiddenForPlayers = SceneEnvironment::project(['zones'=>['revision'=>3,'value'=>[...$value, 'hiddenFromPlayers'=>true]]]);
     zoneCheck($hiddenForPlayers['zones']['value']['hiddenFromPlayers'] === true && count($hiddenForPlayers['zones']['value']['zones']) === 4, 'Players still receive the zones (for movement cost) together with the hidden switch, minus GM-only zones');
     echo "PASS zone format validation\n";

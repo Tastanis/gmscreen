@@ -152,7 +152,7 @@
 
   // ---------------------------------------------------------------- the top bar: height, the fight, the tokens
   const top = doc.createElement('div'); top.id = 'te-top';
-  top.innerHTML = `<span class="te-scene" data-scene></span><div class="te-height" data-h><button data-l="down" title="Lower viewing height">▼</button><span data-l="name">Height 0</span><button data-l="up" title="Raise viewing height">▲</button>${gm ? '<button class="te-show" data-l="show" title="Show this floor to the players">Show players</button>' : ''}</div><div class="te-fight" data-fight hidden></div><div class="te-tokens"></div>`;
+  top.innerHTML = `<span class="te-scene" data-scene></span><div class="te-height" data-h><button data-l="down" title="Lower viewing height">▼</button><span data-l="name">Height 0</span><button data-l="up" title="Raise viewing height">▲</button></div>${gm ? '<button class="te-show-scene" data-show-scene title="Show this scene to the players">Show players</button>' : ''}<div class="te-fight" data-fight hidden></div><div class="te-tokens"></div>`;
   // The fight's buttons (Director: start/end, end round, malice; everyone: undo). Each presses the board's own button.
   const fightBar = doc.createElement('div'); fightBar.className = 'te-combat';
   fightBar.innerHTML = (gm ? '<button data-c="start" title="Start or end the fight">Start combat</button><button data-c="round" title="End the current round early" hidden>End round</button><button data-c="malice" title="Malice" hidden>Malice</button>' : '')
@@ -168,14 +168,24 @@
   }));
   top.querySelectorAll('[data-l]').forEach((b) => b.addEventListener('click', () => {
     const l = b.dataset.l; if (l === 'name') return;
-    press(l === 'show' ? '[data-action="activate-map-level"]' : `[data-action="view-map-level-${l}"]`); setTimeout(paintTop, 80);
+    press(`[data-action="view-map-level-${l}"]`); setTimeout(paintTop, 80);
   }));
+  // Show players: the scene open here goes to the players, as the Scenes list's own button does (Brandon, November 17,
+  // 2026: the top one "doesnt work"; it was the old show-this-floor switch). On every scene, with or without heights.
+  const openSceneId = () => window.terrainContext?.()?.state?.boardState?.activeSceneId || status().sceneId || '';
+  top.querySelector('[data-show-scene]')?.addEventListener('click', () => {
+    const id = openSceneId(); if (!id || status().playerSceneId === id) return;
+    press(`[data-action="show-scene-to-players"][data-scene-id="${CSS.escape(id)}"]`); setTimeout(paintTop, 300);
+  });
   function paintTop() {
     const nav = $('[data-map-level-nav]'), levels = nav && !nav.hidden;
     const h = top.querySelector('[data-h]'); h.style.display = levels ? '' : 'none';
     if (levels) top.querySelector('[data-l="name"]').textContent = levelName() || 'Height 0';
     const st = status(), fight = top.querySelector('[data-fight]');
     const sn = top.querySelector('[data-scene]'); if (sn && sn.textContent !== st.scene) sn.textContent = st.scene;
+    const showBtn = top.querySelector('[data-show-scene]');
+    if (showBtn) { const here = !!st.playerSceneId && st.playerSceneId === openSceneId(), t = here ? 'Players see this' : 'Show players';
+      if (showBtn.textContent !== t) showBtn.textContent = t; showBtn.classList.toggle('on', here); showBtn.hidden = !openSceneId(); showBtn.title = here ? 'The players see this scene' : 'Show this scene to the players'; }
     fight.hidden = !st.combat; if (st.combat) fight.textContent = `Round ${st.round} · ${st.turn || ''}`;
     const startBtn = fightBar.querySelector('[data-c="start"]');
     if (startBtn) { const t = st.combat ? 'End combat' : 'Start combat'; if (startBtn.textContent !== t) startBtn.textContent = t; startBtn.classList.toggle('on', st.combat); }

@@ -702,7 +702,8 @@ export function createTokenMovementRuntime({
       }
     }
     for (const [field, value] of Object.entries(snapshot?.state?.routing ?? {})) {
-      if (!field.startsWith('_')) boardState[field] = clone(value);
+      // A field the server cleared stays null (a deleted scene: no scene open, players on none), never an empty object.
+      if (!field.startsWith('_')) boardState[field] = value === null || typeof value !== 'object' ? value ?? null : clone(value);
     }
     return boardState;
   }

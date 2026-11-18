@@ -38,10 +38,11 @@ export function normalizeZones(field) {
   return zones;
 }
 
-/** The GM's display switch: when true, players do not see the zone overlay (they still pay for the terrain). */
+/** The GM's display switch. Players see the zone overlay only once the GM shows it (`shownToPlayers: true`; Brandon,
+ * November 17, 2026: "i want the defalt to be zones off for both"). They still pay for the terrain either way. */
 export function zonesHiddenFromPlayers(field) {
   const value = field && typeof field === 'object' && 'value' in field ? field.value : field;
-  return value?.hiddenFromPlayers === true;
+  return value?.shownToPlayers !== true;
 }
 
 /** Zones of one scene from the board state (sceneState keyed by scene id). */

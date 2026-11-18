@@ -1491,6 +1491,9 @@ export function mountBoardInteractions(store, routes = {}) {
     },
   });
 
+  // After a change made outside the sync commands (a scene deleted through scenes.php): read the server's state again,
+  // so the board shows it without waiting for a push.
+  boardApi.recoverSync = async () => { await tokenMovementRuntime.start(); await tokenMovementRuntime.recover(); applyStateToBoard(boardApi.getState?.() ?? {}); };
   boardApi.confirmImportedScene = async (sceneId) => {
     await tokenMovementRuntime.start();
     await tokenMovementRuntime.recover();

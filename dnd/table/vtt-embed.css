@@ -30,7 +30,11 @@ html.vtt-embed.te-docked #te-top { left: 0; }
 #te-top .te-height button { width: 24px; height: 26px; border-radius: 6px; border: 1px solid #4a3826; background: #1d1510; color: #efe4cf; cursor: pointer; padding: 0; }
 #te-top .te-height button:hover { border-color: #9c7a4c; }
 #te-top .te-height span { min-width: 64px; text-align: center; font-weight: 600; }
-#te-top .te-height .te-show { width: auto; padding: 0 8px; font: 600 11px "Segoe UI", sans-serif; color: #d9b26a; }
+#te-top .te-show-scene { flex: none; height: 28px; padding: 0 9px; border-radius: 6px; border: 1px solid #5a4628; background: linear-gradient(#2a2015, #1d1510); color: #f0d898;
+  font: 600 11px Cinzel, Georgia, serif; letter-spacing: .02em; cursor: pointer; white-space: nowrap; }
+#te-top .te-show-scene[hidden] { display: none; }
+#te-top .te-show-scene:hover { border-color: #c8a95e; }
+#te-top .te-show-scene.on { cursor: default; color: #9fc79a; border-color: #3d5a36; background: #18201a; }
 #te-top .te-fight { flex: none; padding: 3px 8px; border-radius: 6px; background: #3a1d18; color: #f0c0b0; font-weight: 600; white-space: nowrap; }
 #te-top .te-fight[hidden] { display: none; }
 #te-top .te-tokens { flex: 1; min-width: 0; height: 100%; }
