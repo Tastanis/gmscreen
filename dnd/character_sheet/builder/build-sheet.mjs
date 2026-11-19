@@ -1,6 +1,6 @@
 // Build a fresh, portable sheet in memory. No profile ID, storage API, or sheet endpoint is involved.
 import { defaultSheet, defaultTestTier, ACTION_LABELS } from '../parts/sheet-model.js';
-import { evaluate, featureText, distanceText, abilityLines } from './rules.mjs';
+import { evaluate, featureText, distanceText, abilityLines, actionLabel } from './rules.mjs';
 
 const html = (text) =>
   String(text || '')
@@ -35,7 +35,7 @@ export function vitals(r) {
     recoveryValue: total(r, 'Recovery Value', Math.floor(stamina / 3)),
   };
 }
-const types = { Main: 'mains', Maneuver: 'maneuvers', Trigger: 'triggers' };
+const types = { Main: 'mains', Maneuver: 'maneuvers', Trigger: 'triggers', Move: 'maneuvers' };
 const characteristics = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' };
 function tier(text, stats, bonus) {
   const t = defaultTestTier(),
@@ -91,14 +91,18 @@ function action(a, r, group) {
   return {
     id: a.id,
     name: a.name,
-    actionLabel: ACTION_LABELS[group],
+    actionLabel:
+      a.type?.free || a.type?.args?.[1]?.free || a.type?.kind === 'Move'
+        ? actionLabel(a)
+        : ACTION_LABELS[group],
     tags: a.keywords || [],
     range: distanceText(distance),
     target: a.target || '',
-    cost: typeof a.cost === 'number' ? a.cost + ' Essence' : '',
+    cost: typeof a.cost === 'number' ? a.cost + ' ' + (a.resource || r.heroClass.resource) : '',
     description: html(description.filter(Boolean).join('\n')),
     trigger: a.type?.args?.[0] || '',
     useWhen: '',
+    ...(a.automation ? { automation: structuredClone(a.automation) } : {}),
     tests,
   };
 }
@@ -168,7 +172,7 @@ export function buildSheet(db, draft) {
   Object.assign(hero, {
     name: draft.name.trim(),
     level: r.level,
-    class: 'Elementalist',
+    class: r.heroClass.name,
     classTrack: r.subclass.name,
     ancestry: r.ancestry.name + (r.former ? ' (' + r.former.name + ')' : ''),
     complication: r.complication?.name || '',
@@ -185,20 +189,34 @@ export function buildSheet(db, draft) {
     stats: Object.fromEntries(Object.entries(r.stats).map(([k, v]) => [k.toLowerCase(), v])),
   });
   Object.assign(hero.vitals, vitals(r));
-  Object.assign(hero.resource, { title: 'Essence', automation: essence(r.level) });
+  const isNull = r.classId === 'null';
+  const resource = r.heroClass.resource;
+  Object.assign(hero.resource, {
+    title: resource,
+    automation: isNull
+      ? structuredClone(r.grants.find((f) => f.id === 'null-resource').automation)
+      : essence(r.level),
+  });
   if (r.grants.some((f) => f.id === 'elementalist-1-7a'))
     Object.assign(hero.kit, {
       armor: draft.picks['battle-armor']?.[0] === 'yes' ? 'Light armor' : '',
       weapon: draft.picks['battle-weapon']?.[0] === 'yes' ? 'Light weapon' : '',
     });
   sheet.sidebar.resource = {
-    title: 'Essence',
+    title: resource,
     text:
-      'Start combat with Essence equal to Victories. ' +
+      'Start combat with ' +
+      resource +
+      ' equal to Victories. ' +
       (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
       ' at the start of each turn. Gain ' +
       (r.level >= 4 ? 2 : 1) +
-      ' the first time each round you or a creature within 10 takes damage other than untyped or holy. Lose remaining Essence at the end of combat.',
+      (isNull
+        ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
+        : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
+      ' Lose remaining ' +
+      resource +
+      ' at the end of combat.',
   };
   sheet.sidebar.lists.languages = [...r.languages];
   sheet.sidebar.skills = Object.fromEntries(
@@ -226,11 +244,12 @@ export function buildSheet(db, draft) {
   sheet.features = r.grants
     .filter((f) => f.kind !== 'Multiple' || f.description)
     .map((f) => feature('builder-' + f.id, f.name, f.description || featureText(f), [f.source]));
+  const potency = r.stats[r.heroClass.potency];
   sheet.features.push(
     feature(
       'builder-potency',
-      'Elementalist potency',
-      'Weak ' + (r.stats.Reason - 2) + ' · Average ' + (r.stats.Reason - 1) + ' · Strong ' + r.stats.Reason,
+      r.heroClass.name + ' potency',
+      'Weak ' + (potency - 2) + ' · Average ' + (potency - 1) + ' · Strong ' + potency,
     ),
   );
   if (r.complication)

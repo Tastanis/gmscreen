@@ -21,4 +21,7 @@ $build = max(array_map('filemtime', glob(__DIR__ . '/*.{css,mjs,json,php}', GLOB
 <aside id="summary" aria-label="Hero summary"></aside></div>
 <dialog id="house"><form method="dialog"><h2>Use a house rule?</h2><p id="house-text"></p>
 <div class="controls"><button value="cancel" autofocus>Keep choosing</button><button value="accept">Use this choice</button></div></form></dialog>
+<script type="importmap">
+{"imports":{"./rules.mjs":"./rules.mjs?v=<?= $build ?>","./build-sheet.mjs":"./build-sheet.mjs?v=<?= $build ?>"}}
+</script>
 <script type="module" src="builder.mjs?v=<?= $build ?>"></script></body></html>

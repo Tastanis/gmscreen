@@ -1,15 +1,37 @@
 // Every screen and the sheet writer use this evaluator. Only reachable choices contribute.
 export const STEPS = ['Identity', 'Ancestry', 'Background', 'Class', 'Training', 'Review'];
 export const STATS = ['Might', 'Agility', 'Reason', 'Intuition', 'Presence'];
-const OTHER = STATS.filter((s) => s !== 'Reason');
 export const ARRAYS = [
   [2, 2, -1, -1],
   [2, 1, 1, -1],
   [2, 1, 0, 0],
   [1, 1, 1, 0],
 ];
+export const CLASSES = {
+  elementalist: {
+    name: 'Elementalist',
+    subclassLabel: 'Elemental specialization',
+    primary: ['Reason'],
+    potency: 'Reason',
+    arrays: ARRAYS,
+    resource: 'Essence',
+  },
+  null: {
+    name: 'Null',
+    subclassLabel: 'Null tradition',
+    primary: ['Agility', 'Intuition'],
+    potency: 'Intuition',
+    arrays: [
+      [2, -1, -1],
+      [1, 1, -1],
+      [1, 0, 0],
+    ],
+    resource: 'Discipline',
+  },
+};
 export const newDraft = () => ({
   version: 1,
+  classId: 'elementalist',
   name: '',
   level: 1,
   picks: { complication: ['none'] },
@@ -65,7 +87,9 @@ export function abilityLines(a) {
         (s.name || 'Spend') +
           ' ' +
           (s.value ?? 1) +
-          ' essence · ' +
+          ' ' +
+          (a.resource || 'Essence').toLowerCase() +
+          ' · ' +
           s.effect +
           (s.repeatable ? ' (repeatable)' : ''),
       ];
@@ -100,7 +124,7 @@ export function featureText(f) {
           m.kind === 'DamagePerLevel'
             ? m.value + ' × level'
             : m.kind === 'DamageCharacteristic'
-              ? m.characteristics?.join(' or ')
+              ? (m.multiplier > 1 ? m.multiplier + ' × ' : '') + m.characteristics?.join(' or ')
               : modifierText(m) + (m.perLevel ? ' + ' + m.perLevel + ' × level' : ''),
         ].join(' '),
       );
@@ -138,8 +162,14 @@ export function featureText(f) {
   if (f.kind === 'SaveThreshold') lines.push('Saving throws succeed on ' + f.value + ' or higher.');
   return distinct(lines.filter(Boolean)).join('\n');
 }
+export function actionLabel(a) {
+  if (a.type?.kind === 'Trigger' && (a.type.free || a.type.args?.[1]?.free)) return 'Free triggered action';
+  return { Main: 'Main action', Maneuver: 'Maneuver', Trigger: 'Triggered action', Move: 'Move action' }[
+    a.type?.kind
+  ];
+}
 export function abilityText(a) {
-  const type = { Main: 'Main action', Maneuver: 'Maneuver', Trigger: 'Triggered action' }[a.type?.kind];
+  const type = actionLabel(a);
   return [
     a.description,
     [
@@ -147,7 +177,11 @@ export function abilityText(a) {
       ...(a.keywords || []),
       distanceText(a.distance),
       a.target,
-      a.cost === 'signature' ? 'Signature' : typeof a.cost === 'number' ? a.cost + ' essence' : '',
+      a.cost === 'signature'
+        ? 'Signature'
+        : typeof a.cost === 'number'
+          ? a.cost + ' ' + (a.resource || 'Essence').toLowerCase()
+          : '',
     ]
       .filter(Boolean)
       .join(' · '),
@@ -174,6 +208,12 @@ export function evaluate(db, draft) {
     warnings = [];
   const picks = draft.picks || {},
     exceptions = draft.exceptions || {};
+  // Drafts created before class selection are Elementalists.
+  const requested = draft.classId ?? 'elementalist';
+  const classId = Object.hasOwn(CLASSES, requested) ? requested : 'elementalist';
+  const heroClass = CLASSES[classId],
+    catalog = db[classId];
+  if (classId !== requested) errors.push({ step: 'Identity', message: 'Choose a supported class.' });
   const level = Number(draft.level);
   if (!Number.isInteger(level) || level < 1 || level > 10)
     errors.push({ step: 'Identity', message: 'Choose a level from 1 to 10.' });
@@ -223,7 +263,7 @@ export function evaluate(db, draft) {
     return records.find((x) => (x.id ?? x.name) === id);
   }
   let ancestry, former, career, complication, subclass, incident;
-  function visit(f, step, source, prefix = '') {
+  function visit(f, step, source, prefix = '', earnedAt = level) {
     const key = prefix + (f.id || f.ability?.id || f.kind);
     const title = featureName(f),
       description = featureText(f);
@@ -277,14 +317,17 @@ export function evaluate(db, draft) {
       return;
     }
     if (f.kind === 'ClassAbilityChoice') {
-      const list = db.elementalist.abilities.filter(
+      const list = catalog.abilities.filter(
         (a) =>
           a.cost === f.cost &&
-          (a.minLevel || 1) <= Math.min(level, f.maxLevel || level) &&
+          (a.minLevel || 1) <= Math.min(earnedAt, f.maxLevel || earnedAt) &&
           (a.minLevel || 1) >= (f.minLevel || 1) &&
           !usedAbilities.has(a.id),
       );
-      const label = f.cost === 'signature' ? 'Signature abilities' : f.cost + '-essence ability';
+      const label =
+        f.cost === 'signature'
+          ? 'Signature abilities'
+          : f.cost + '-' + heroClass.resource.toLowerCase() + ' ability';
       const selected = choose(
         step,
         key,
@@ -423,33 +466,39 @@ export function evaluate(db, draft) {
   ])[0];
   complication = db.complications.find((c) => c.id === complicationId);
   complication?.features.forEach((f) => visit(f, 'Background', complication.name));
-  subclass = pickRecord('Class', 'subclass', 'Elemental specialization', db.elementalist.subclasses);
+  subclass = pickRecord('Class', 'subclass', heroClass.subclassLabel, catalog.subclasses);
+  const otherStats = STATS.filter((stat) => !heroClass.primary.includes(stat));
+  const statPrefix = classId === 'elementalist' ? '' : classId + '-';
   const [arrayId] = choose(
     'Class',
-    'array',
+    statPrefix + 'array',
     'Starting characteristics',
-    ARRAYS.map((a, i) =>
+    heroClass.arrays.map((a, i) =>
       option(
         String(i),
         a.map(plus).join(' / '),
-        'Reason starts at +2. Assign these four scores to the other characteristics.',
+        heroClass.primary.join(' and ') +
+          (heroClass.primary.length === 1 ? ' starts' : ' start') +
+          ' at +2. Assign the remaining scores.',
       ),
     ),
   );
   if (arrayId !== undefined) {
-    const arrangements = perms(ARRAYS[Number(arrayId)]);
+    const arrangements = perms(heroClass.arrays[Number(arrayId)]);
     const [assigned] = choose(
       'Class',
-      'assign-' + arrayId,
+      statPrefix + 'assign-' + arrayId,
       'Assign the array',
-      arrangements.map((p) => option(p.join(','), OTHER.map((s, i) => s + ' ' + plus(p[i])).join(' · '))),
+      arrangements.map((p) =>
+        option(p.join(','), otherStats.map((s, i) => s + ' ' + plus(p[i])).join(' · ')),
+      ),
     );
-    if (assigned) OTHER.forEach((s, i) => (stats[s] = Number(assigned.split(',')[i])));
+    if (assigned) otherStats.forEach((s, i) => (stats[s] = Number(assigned.split(',')[i])));
   }
-  stats.Reason = 2;
-  for (const tier of db.elementalist.featuresByLevel.filter((t) => t.level <= level)) {
-    const source = 'Elementalist · Level ' + tier.level;
-    for (const f of tier.features) visit(f, 'Class', source);
+  for (const stat of heroClass.primary) stats[stat] = 2;
+  for (const tier of catalog.featuresByLevel.filter((t) => t.level <= level)) {
+    const source = heroClass.name + ' · Level ' + tier.level;
+    for (const f of tier.features) visit(f, 'Class', source, '', tier.level);
     const specialized = subclass?.featuresByLevel.find((t) => t.level === tier.level);
     specialized?.features.forEach((f) => visit(f, 'Class', subclass.name + ' · Level ' + tier.level));
   }
@@ -571,7 +620,24 @@ export function evaluate(db, draft) {
     culture,
     skills,
     languages,
-    actions,
+    actions: actions.map((a) =>
+      a.enhancementTag
+        ? {
+            ...a,
+            sections: [
+              ...a.sections,
+              ...grants
+                .filter((f) => f.tag === a.enhancementTag)
+                .map((f) => ({
+                  kind: 'AbilitySectionText',
+                  args: [f.name + ' · ' + f.description],
+                })),
+            ],
+          }
+        : a,
+    ),
+    heroClass,
+    classId,
     grants,
   };
 }

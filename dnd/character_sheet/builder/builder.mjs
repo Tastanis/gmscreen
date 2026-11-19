@@ -1,4 +1,4 @@
-import { STEPS, STATS, newDraft, evaluate, setPick, abilityText } from './rules.mjs';
+import { CLASSES, STEPS, STATS, newDraft, evaluate, setPick, abilityText } from './rules.mjs';
 import { buildSheet, vitals } from './build-sheet.mjs';
 
 const $ = (selector) => document.querySelector(selector);
@@ -16,7 +16,7 @@ let db,
   storageProblem = false;
 const filters = new Map();
 const instructions = {
-  Identity: 'Name your hero and choose the level you want to build.',
+  Identity: 'Name your hero and choose a class and level.',
   Ancestry: 'Choose an ancestry, then spend its trait points. Open a rule to read what a trait does.',
   Background: 'Choose the community and career that shaped your hero. A complication is optional.',
   Class:
@@ -59,7 +59,13 @@ const stepBtn = (s, text = s) =>
   `<button type="button" data-step="${esc(s)}"${step === s ? ' aria-current="step"' : ''}>${esc(text)}</button>`;
 function identity() {
   return `<fieldset><legend>Hero</legend><label>Name<input name="hero-name" maxlength="90" autocomplete="off" value="${esc(draft.name)}"></label>
-  <label>Class<select name="hero-class"><option>Elementalist</option></select></label><label>Level<select name="hero-level">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${draft.level === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label></fieldset>`;
+  <label>Class<select name="hero-class">${Object.entries(CLASSES)
+    .map(
+      ([id, c]) => `<option value="${id}" ${id === model.classId ? 'selected' : ''}>${esc(c.name)}</option>`,
+    )
+    .join(
+      '',
+    )}</select></label><label>Level<select name="hero-level">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${draft.level === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label></fieldset>`;
 }
 function cultures() {
   return `<fieldset><legend>Culture</legend><label>Use a published culture<select name="culture-preset"><option value="">Build your own</option>${db.cultures.map((c) => `<option ${draft.preset === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
@@ -135,7 +141,7 @@ function review() {
 function summary() {
   const v = vitals(model);
   $('#summary').innerHTML =
-    `<div class="eyebrow">Hero</div><h3>${esc(draft.name || 'Unnamed hero')}</h3><p>${esc([model.ancestry?.name, model.subclass?.name, 'Elementalist'].filter(Boolean).join(' '))} · Level ${esc(draft.level)}</p>
+    `<div class="eyebrow">Hero</div><h3>${esc(draft.name || 'Unnamed hero')}</h3><p>${esc([model.ancestry?.name, model.subclass?.name, model.heroClass.name].filter(Boolean).join(' '))} · Level ${esc(draft.level)}</p>
   <dl>${[...STATS.map((k) => [k, model.stats[k]]), ['Stamina', v.staminaMax], ['Recoveries', v.recoveriesMax], ['Speed', v.speed]].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="hint">${model.complete ? 'Ready to download' : model.errors.length + ' unfinished choices'}</p>
   <p class="hint">${storageProblem ? 'Browser storage is unavailable. Keep this window open.' : 'Draft saved in this browser.'}</p>`;
 }
@@ -154,7 +160,7 @@ function draw() {
     .join('');
   const n = STEPS.indexOf(step);
   $('#main').innerHTML =
-    `<h2>${step}</h2><p>${instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
+    `<h2>${step}</h2><p>${step === 'Class' && model.classId === 'null' ? 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.' : instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
     <div class="controls">${n ? stepBtn(STEPS[n - 1], 'Back') : ''}${n < STEPS.length - 1 ? stepBtn(STEPS[n + 1], 'Next · ' + STEPS[n + 1]) : ''}</div><p class="status" role="status">${esc(status)}</p>`;
   summary();
 }
@@ -202,7 +208,7 @@ document.addEventListener('click', async (e) => {
       sheet = buildSheet(db, draft);
     const url = URL.createObjectURL(new Blob([JSON.stringify(sheet, null, 2)], { type: 'application/json' }));
     a.href = url;
-    a.download = (draft.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, '-') || 'elementalist') + '.json';
+    a.download = (draft.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, '-') || model.classId) + '.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     status = 'Your hero file is ready.';
@@ -253,6 +259,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.name === 'hero-level') draft.level = Number(e.target.value);
+  else if (e.target.name === 'hero-class') draft.classId = e.target.value;
   else if (e.target.name === 'culture-preset') {
     const culture = db.cultures.find((c) => c.name === e.target.value);
     draft.preset = culture?.name || '';

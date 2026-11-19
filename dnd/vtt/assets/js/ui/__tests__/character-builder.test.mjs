@@ -9,12 +9,14 @@ const db = JSON.parse(
 );
 function build({
   ancestry = 'Polder',
-  specialization = 'Fire',
+  classId = 'elementalist',
+  specialization = classId === 'null' ? 'Chronokinetic' : 'Fire',
+  augmentation = 'Speed Augmentation',
   level = 1,
   career = 'Agent',
   complication,
 } = {}) {
-  const draft = { ...newDraft(), name: 'Test hero', level };
+  const draft = { ...newDraft(), name: 'Test hero', classId, level };
   if (complication) delete draft.picks.complication;
   const known = {
     ancestry,
@@ -22,6 +24,7 @@ function build({
     career,
     complication,
     'elementalist-1-7': 'Enchantment of Celerity',
+    'null-1-7': augmentation,
   };
   for (let i = 0; i < 160; i++) {
     const model = evaluate(db, draft);
@@ -145,4 +148,191 @@ test('gear conditions, potency, free strikes and ward grants survive a standalon
     Number(other.actions.freeStrikes[0].tests[0].tiers.low.damage),
     Number(strike.tiers.low.damage) - 1,
   );
+});
+
+// The lists below come from the Heroes v1.01b Null chapter, independently of the builder catalog.
+const sharedNull = [
+  [
+    1,
+    'Signature abilities',
+    [
+      'Dance of Blows',
+      'Faster Than the Eye',
+      'Inertial Step',
+      'Joint Lock',
+      'Kinetic Strike',
+      'Magnetic Strike',
+      'Phase Inversion Strike',
+      'Pressure Points',
+    ],
+  ],
+  [1, '3-discipline ability', ['Chronal Spike', 'Psychic Pulse', 'Relentless Nemesis', 'Stunning Blow']],
+  [1, '5-discipline ability', ['Arcane Disruptor', 'Impart Force', 'Phase Strike', 'A Squad Unto Myself']],
+  [
+    3,
+    '7-discipline ability',
+    ['Absorption Field', 'Molecular Rearrangement Field', 'Stabilizing Field', 'Synapse Field'],
+  ],
+  [5, '9-discipline ability', ['Anticipating Strike', 'Iron Grip', 'Phase Leap', 'Synaptic Reset']],
+  [8, '11-discipline ability', ['Arcane Purge', 'Phase Hurl', 'Scalar Assault', 'Synaptic Anchor']],
+];
+const traditions = {
+  Chronokinetic: [
+    ['Blur', 'Force Redirected'],
+    ['Interphase', 'Phase Step'],
+    ['Arrestor Cycle', 'Time Loop'],
+  ],
+  Cryokinetic: [
+    ['Entropic Field', 'Heat Sink'],
+    ['Ice Pillars', 'Wall of Ice'],
+    ['Absolute Zero', 'Heat Drain'],
+  ],
+  Metakinetic: [
+    ['Gravitic Strike', 'Kinetic Shield'],
+    ['Gravitic Charge', 'Iron Body'],
+    ['Inertial Absorption', 'Realitas'],
+  ],
+};
+const traditionLevels = [2, 6, 9];
+const ids = (sheet) =>
+  Object.values(sheet.actions)
+    .flat()
+    .map((a) => a.id);
+
+test('Null offers the book’s exact shared and tradition lists, counts, costs and earned levels', () => {
+  for (const [tradition, pairs] of Object.entries(traditions))
+    for (let level = 1; level <= 10; level++) {
+      const { draft, model, sheet } = build({ classId: 'null', specialization: tradition, level });
+      const spells = model.slots.filter((s) => sharedNull.some(([, title]) => s.title === title));
+      assert.equal(spells.length, sharedNull.filter(([at]) => at <= level).length);
+      for (const [at, title, names] of sharedNull.filter(([at]) => at <= level)) {
+        const slot = spells.find((s) => s.title === title);
+        assert.deepEqual(slot.choices.map((c) => c.name).sort(), [...names].sort());
+        assert.equal(slot.count, title === 'Signature abilities' ? 2 : 1);
+        assert.equal(slot.flexible, false);
+        assert.equal(slot.source, 'Null · Level ' + at);
+      }
+      const restricted = model.slots.filter((s) => s.title.endsWith('Tradition Ability'));
+      assert.equal(restricted.length, traditionLevels.filter((at) => at <= level).length);
+      for (const [index, slot] of restricted.entries()) {
+        assert.equal(slot.count, 1);
+        assert.equal(slot.source, tradition + ' · Level ' + traditionLevels[index]);
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), [...pairs[index]].sort());
+        for (const id of slot.selected) {
+          const a = Object.values(sheet.actions)
+            .flat()
+            .find((a) => a.id === id);
+          assert.equal(a.cost, [5, 9, 11][index] + ' Discipline');
+        }
+      }
+      const selectedTraditionAbilities = restricted.flatMap((slot) => slot.selected);
+      assert.deepEqual(
+        ids(sheet)
+          .filter((id) => id.startsWith('null-sub-'))
+          .sort(),
+        selectedTraditionAbilities.sort(),
+      );
+      for (const slot of restricted) {
+        const alternate = structuredClone(draft);
+        const id = slot.choices.find((choice) => !slot.selected.includes(choice.id)).id;
+        assert.ok(setPick(alternate, slot, id));
+        const exported = ids(buildSheet(db, alternate));
+        assert.ok(exported.includes(id));
+        assert.ok(!exported.includes(slot.selected[0]));
+      }
+      const primary = 2 + [4, 7, 10].filter((l) => l <= level).length;
+      assert.equal(sheet.hero.stats.agility, primary);
+      assert.equal(sheet.hero.stats.intuition, primary);
+      assert.equal(sheet.hero.vitals.staminaMax, 21 + 9 * (level - 1) + (level >= 9 ? 21 : 0));
+      assert.equal(sheet.hero.vitals.speed, 5 + 1 + primary);
+      assert.ok(model.grants.some((f) => f.name === 'Graceful Retreat'));
+      assert.equal(sheet.hero.vitals.disengage, 1 + 1 + 1 + primary);
+      assert.equal(sheet.hero.class, 'Null');
+      assert.equal(sheet.hero.classTrack, tradition);
+      assert.equal(sheet.hero.resource.title, 'Discipline');
+      assert.ok(sheet.sidebar.skills.Psionics);
+      assert.ok(
+        sheet.features.some((f) => f.title === 'Null potency' && f.text.includes('Strong ' + primary)),
+      );
+      const mastery = sheet.features.filter((f) => /Mastery · (\d+) Discipline$/.test(f.title));
+      assert.deepEqual(
+        mastery.map((f) => Number(f.title.match(/(\d+) Discipline/)[1])),
+        [2, 4, 6, ...[4, 7, 10].flatMap((at, i) => (at <= level ? [8 + i * 2] : []))],
+      );
+      assert.ok(!ids(sheet).some((id) => id.startsWith('elementalist')));
+      const sig = spells[0],
+        wrong = 'elementalist-ability-1';
+      assert.equal(setPick(draft, sig, wrong, true), false);
+      draft.picks[sig.key] = [wrong, wrong];
+      draft.exceptions[sig.key] = [wrong];
+      assert.throws(() => buildSheet(db, draft));
+    }
+});
+
+test('Null tradition, class and level changes remove stale abilities, including in older browser drafts', () => {
+  const { draft } = build({ classId: 'null', specialization: 'Metakinetic', level: 10 });
+  const taken = evaluate(db, draft).slots.find((s) => s.title.endsWith('Tradition Ability')).selected[0];
+  draft.picks.subclass = ['null-sub-2'];
+  draft.level = 2;
+  let r = evaluate(db, draft);
+  const cryo = r.slots.find((s) => s.title.endsWith('Tradition Ability'));
+  draft.picks[cryo.key] = [taken];
+  draft.exceptions[cryo.key] = [taken];
+  r = evaluate(db, draft);
+  assert.ok(!r.complete);
+  assert.equal(
+    r.actions.some((a) => a.id === taken),
+    false,
+  );
+  assert.equal(r.slots.find((s) => s.key === cryo.key).selected.length, 0);
+  assert.ok(!r.grants.some((f) => f.name === 'Order'));
+  draft.classId = 'elementalist';
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('null-')));
+  const legacy = build().draft;
+  delete legacy.classId;
+  assert.equal(buildSheet(db, legacy).hero.class, 'Elementalist');
+  legacy.classId = 'invalid';
+  assert.throws(() => buildSheet(db, legacy));
+});
+test('Null augmentations, resource rules and action costs are present in the portable sheet', () => {
+  const { sheet, draft } = build({
+    classId: 'null',
+    specialization: 'Cryokinetic',
+    augmentation: 'Density Augmentation',
+    level: 10,
+  });
+  assert.equal(sheet.hero.vitals.stability, 1);
+  assert.equal(sheet.hero.vitals.staminaMax, 21 + 81 + 21 + 24);
+  assert.ok(sheet.sidebar.lists.immunity.includes('Cold 10'));
+  const all = Object.values(sheet.actions).flat();
+  const field = all.find((a) => a.name === 'Null Field'),
+    shield = all.find((a) => a.name === 'Inertial Shield');
+  assert.ok(field.description.includes('Enhanced Null Field'));
+  assert.ok(field.automation.cards.length);
+  assert.ok(shield.description.includes('Elemental Absorption'));
+  assert.ok(shield.description.includes('Grab'));
+  assert.ok(!shield.description.includes('Knockback'));
+  const resource = sheet.hero.resource.automation.rules;
+  assert.equal(resource.find((r) => r.event === 'actionUsed').filter.insideAura, 'Null Field');
+  assert.equal(resource.find((r) => r.event === 'maliceSpent').limit.scope, 'round');
+  assert.deepEqual(
+    resource.find((r) => r.event === 'turnStart').effect.amount.amountByLevel.map((e) => e.amount),
+    [2, 3, 4],
+  );
+  const r = evaluate(db, draft);
+  for (const [title, name, label] of [
+    ['9-discipline ability', 'Phase Leap', 'Move action'],
+    ['11-discipline ability', 'Synaptic Anchor', 'Free triggered action'],
+  ]) {
+    const slot = r.slots.find((s) => s.title === title);
+    draft.picks[slot.key] = [slot.choices.find((o) => o.name === name).id];
+    assert.equal(
+      Object.values(buildSheet(db, draft).actions)
+        .flat()
+        .find((a) => a.name === name).actionLabel,
+      label,
+    );
+  }
+  const force = build({ classId: 'null', augmentation: 'Force Augmentation' }).sheet;
+  assert.equal(force.actions.mains.find((a) => a.name === 'Dance of Blows').tests[0].tiers.low.damage, '4');
 });

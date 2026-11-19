@@ -85,44 +85,60 @@ async function openBuilder(page) {
   await frame.locator('[name="hero-name"]').waitFor();
 }
 
-async function finishIndependentHero(page) {
+async function finishTableNull(page) {
+  await openBuilder(page);
+  const frame = page.frames().find(f => f.url().includes('/character_sheet/builder/'));
+  assert.ok(frame);
+  await finishIndependentHero(page, frame, 'null');
+}
+
+async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
+  const isNull = classId === 'null';
+  const heroName = isNull ? 'Frost Polder' : 'Ember Polder';
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
-  await page.locator('[name="hero-name"]').fill('Ember Polder');
-  await page.locator('nav [data-step="Ancestry"]').click();
-  await page.locator('[data-slot="ancestry"]').getByRole('button',{name:'Polder',exact:true}).click();
-  await page.reload();
-  await page.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
+  await builder.locator('[name="hero-name"]').fill(heroName);
+  await builder.locator('[name="hero-class"]').selectOption(classId);
+  if (isNull) await builder.locator('[name="hero-level"]').selectOption('2');
+  await builder.locator('nav [data-step="Ancestry"]').click();
+  await builder.locator('[data-slot="ancestry"]').getByRole('button',{name:'Polder',exact:true}).click();
+  await builder.goto(builder.url());
+  await builder.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
   for(const step of ['Ancestry','Background','Class','Training']){
-    await page.locator('nav [data-step="'+step+'"]').click();
+    await builder.locator('nav [data-step="'+step+'"]').click();
     for(let i=0;i<70;i++){
-      const key=await page.locator('fieldset[data-slot]').evaluateAll(groups=>{
+      const key=await builder.locator('fieldset[data-slot]').evaluateAll(groups=>{
         return groups.find(group=>{const [used,max]=group.querySelector('legend small').textContent.split('/').map(parseFloat);return used!==max;})?.dataset.slot;
       });
       if(!key)break;
-      const slot=page.locator('fieldset[data-slot="'+key+'"]');
-      if(key==='subclass'){await slot.getByRole('button',{name:'Fire',exact:true}).click();continue;}
+      const slot=builder.locator('fieldset[data-slot="'+key+'"]');
+      if(key==='subclass'){await slot.getByRole('button',{name:isNull?'Cryokinetic':'Fire',exact:true}).click();continue;}
       if(key==='elementalist-1-7'){await slot.getByRole('button',{name:'Enchantment of Celerity',exact:true}).click();continue;}
       if(step==='Training' && key==='env-nomadic'){
         await slot.locator('.soft button').first().click();
-        await page.getByRole('button',{name:'Keep choosing'}).click();
+        await builder.getByRole('button',{name:'Keep choosing'}).click();
         await slot.locator('.soft button').first().click();
-        await page.getByRole('button',{name:'Use this choice'}).click();
+        await builder.getByRole('button',{name:'Use this choice'}).click();
         await slot.locator('.soft button[aria-pressed="true"]').waitFor();
       }else await slot.locator('.choice:not(.soft) button[aria-pressed="false"]:enabled').first().click();
     }
   }
-  await page.locator('nav [data-step="Review"]').click();
-  assert.ok(await page.getByRole('heading',{name:'Accepted house rules'}).count());
+  await builder.locator('nav [data-step="Review"]').click();
+  assert.ok(await builder.getByRole('heading',{name:'Accepted house rules'}).count());
   const download=page.waitForEvent('download');
-  await page.getByRole('button',{name:'Download hero JSON'}).click();
+  await builder.getByRole('button',{name:'Download hero JSON'}).click();
   const saved=await download;
   const sheet=JSON.parse(readFileSync(await saved.path(),'utf8'));
-  assert.equal(sheet.hero.name,'Ember Polder'); assert.equal(sheet.hero.classTrack,'Fire');assert.equal(sheet.hero.vitals.size,'1S');
+  assert.equal(sheet.hero.name,heroName); assert.equal(sheet.hero.classTrack,isNull?'Cryokinetic':'Fire');assert.equal(sheet.hero.vitals.size,'1S');
   assert.ok(sheet.features.some(f=>f.title==='House rules'));
-  assert.ok(sheet.actions.mains.some(a=>a.name==='Hurl Element'));
-  assert.deepEqual(await unrelatedStorage(),before);
+  if (isNull) {
+    assert.equal(sheet.hero.resource.title,'Discipline');
+    assert.equal(sheet.hero.level,2);
+    assert.ok(sheet.actions.mains.some(a=>a.name==='Entropic Field' && a.cost==='5 Discipline'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a=>a.id.startsWith('elementalist')));
+  } else assert.ok(sheet.actions.mains.some(a=>a.name==='Hurl Element'));
+  if (builder === page.mainFrame()) assert.deepEqual(await unrelatedStorage(),before);
 }
 
 // Each page: who opens it, where, and how it shows that it has started.
@@ -134,7 +150,7 @@ const PAGES = [
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
   { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:openBuilder, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:openBuilder, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishTableNull, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
   { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishIndependentHero,
     started: () => !!document.querySelector('[data-step="Identity"]') && !!document.querySelector('[name="hero-name"]') },
 ];
@@ -163,7 +179,8 @@ test('every page starts: the map as Director and as a player, the character shee
       try {
         assert.ok(await answers(origin), 'PHP\'s own server did not come up');
         const page = await context.newPage();
-        if(one.check===finishIndependentHero)page.on('request',request=>{
+        if(one.check===finishIndependentHero || one.check===finishTableNull)page.on('request',request=>{
+          if (one.check === finishTableNull && !request.frame().url().includes('/character_sheet/builder/')) return;
           const url=new URL(request.url());
           if(request.method()!=='GET' || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
         });
