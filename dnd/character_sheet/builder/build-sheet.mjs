@@ -182,6 +182,26 @@ function resourceAutomation(r) {
       target: 'self',
       markOn: 'offered',
     });
+  if (classId === 'fury') {
+    const firstWindedOrDying = {
+      scope: 'encounter',
+      key: 'fury-first-winded-or-dying',
+      target: 'self',
+      markOn: 'offered',
+    };
+    return {
+      schema: 'heroic-resource/v1',
+      rules: [
+        rule('fury-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+        rule('fury-turn', 'turnStart', { whose: 'self' }, 'gain', { dice: '1d3', bonus: level >= 7 ? 1 : 0 }),
+        firstDamage('fury-first-damage', 'damage', { whose: 'self', minAmount: 1 }, furyDamageGain(level)),
+        ...['winded', 'dying'].map((event) =>
+          rule('fury-' + event, event, { whose: 'self' }, 'gain', { dice: '1d3' }, false, firstWindedOrDying),
+        ),
+        rule('fury-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+      ],
+    };
+  }
   if (classId === 'conduit') {
     const domainEvents = {
       Creation: ['actionUsed', { withinSquares: 10, distanceTo: 'actor', keywordsAny: ['area'] }],
@@ -255,6 +275,9 @@ function resourceAutomation(r) {
     ],
   };
 }
+function furyDamageGain(level) {
+  return level >= 10 ? 3 : level >= 4 ? 2 : 1;
+}
 export function buildSheet(db, draft) {
   const r = evaluate(db, draft);
   if (!r.complete) throw Error('Complete the required choices before downloading.');
@@ -311,28 +334,34 @@ export function buildSheet(db, draft) {
   sheet.sidebar.resource = {
     title: resource,
     text:
-      r.classId === 'conduit'
-        ? 'Start combat with Piety equal to Victories. Gain ' +
+      r.classId === 'fury'
+        ? 'Start combat with Ferocity equal to Victories. Gain ' +
           (r.level >= 7 ? '1d3 + 1' : '1d3') +
-          ' at the start of each turn. Decide whether to pray before rolling. On a natural 1 or 2, gain 1 extra Piety. On a 1, also take 1d6 + level irreducible psychic damage. On a 3, gain 2 extra Piety and you may activate one domain effect.' +
-          (r.level >= 10 ? ' Gain 1 additional Piety whenever you pray.' : '') +
-          ' Each chosen domain can grant ' +
-          (r.level >= 4 ? 3 : 2) +
-          ' Piety once per encounter. Lose remaining Piety when combat ends.'
-        : 'Start combat with ' +
-          resource +
-          ' equal to Victories. ' +
-          (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
-          ' at the start of each turn. Gain ' +
-          (r.level >= 4 ? 2 : 1) +
-          (isNull
-            ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
-            : r.classId === 'censor'
-              ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
-              : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
-          ' Lose remaining ' +
-          resource +
-          ' at the end of combat.',
+          ' at the start of each turn, and ' +
+          furyDamageGain(r.level) +
+          ' the first time you take damage each round. Gain 1d3 the first time you become winded or are dying in an encounter. Lose remaining Ferocity when combat ends.'
+        : r.classId === 'conduit'
+          ? 'Start combat with Piety equal to Victories. Gain ' +
+            (r.level >= 7 ? '1d3 + 1' : '1d3') +
+            ' at the start of each turn. Decide whether to pray before rolling. On a natural 1 or 2, gain 1 extra Piety. On a 1, also take 1d6 + level irreducible psychic damage. On a 3, gain 2 extra Piety and you may activate one domain effect.' +
+            (r.level >= 10 ? ' Gain 1 additional Piety whenever you pray.' : '') +
+            ' Each chosen domain can grant ' +
+            (r.level >= 4 ? 3 : 2) +
+            ' Piety once per encounter. Lose remaining Piety when combat ends.'
+          : 'Start combat with ' +
+            resource +
+            ' equal to Victories. ' +
+            (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
+            ' at the start of each turn. Gain ' +
+            (r.level >= 4 ? 2 : 1) +
+            (isNull
+              ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
+              : r.classId === 'censor'
+                ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
+                : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
+            ' Lose remaining ' +
+            resource +
+            ' at the end of combat.',
   };
   sheet.sidebar.lists.languages = [...r.languages];
   sheet.sidebar.skills = Object.fromEntries(

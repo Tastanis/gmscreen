@@ -36,6 +36,14 @@ export const CLASSES = {
     arrays: ARRAYS,
     resource: 'Essence',
   },
+  fury: {
+    name: 'Fury',
+    subclassLabel: 'Primordial aspect',
+    primary: ['Might', 'Agility'],
+    potency: 'Might',
+    arrays: martialArrays,
+    resource: 'Ferocity',
+  },
   null: {
     name: 'Null',
     subclassLabel: 'Null tradition',
@@ -185,12 +193,13 @@ export function featureText(f) {
   return distinct(lines.filter(Boolean)).join('\n');
 }
 export function actionLabel(a) {
+  if (a.type?.kind === 'Maneuver' && a.type.free) return 'Free maneuver';
   if (a.type?.kind === 'Trigger' && (a.type.free || a.type.args?.[1]?.free)) return 'Free triggered action';
   return { Main: 'Main action', Maneuver: 'Maneuver', Trigger: 'Triggered action', Move: 'Move action' }[
     a.type?.kind
   ];
 }
-function kitText(kit) {
+function kitText(kit, level) {
   return [
     kit.description,
     kit.equipment,
@@ -201,9 +210,30 @@ function kitText(kit) {
       kit[reach + 'Distance'] && reach + ' distance +' + kit[reach + 'Distance'],
     ]),
     kit.ability.name + ' · ' + abilityText(kit.ability),
+    ...(kit.featuresByLevel || [])
+      .filter((t) => t.level <= level)
+      .flatMap((t) => t.features.map((f) => featureName(f) + ' · ' + featureText(f))),
   ]
     .filter(Boolean)
     .join('\n');
+}
+function stormAbility(a, kit) {
+  if (!a.usesStormDamage || !kit?.stormDamage) return a;
+  const damage = kit.stormDamage.toLowerCase();
+  return {
+    ...a,
+    description: a.description + ' Your primordial damage type is ' + damage + '.',
+    sections: a.sections.map((s) =>
+      s.kind === 'PowerRoll'
+        ? {
+            ...s,
+            ...Object.fromEntries(
+              ['tier1', 'tier2', 'tier3'].map((k) => [k, s[k].replace(/\bdamage\b/, damage + ' damage')]),
+            ),
+          }
+        : s,
+    ),
+  };
 }
 export function abilityText(a) {
   const type = actionLabel(a);
@@ -475,15 +505,22 @@ export function evaluate(db, draft) {
       return;
     }
     if (f.kind === 'KitChoice') {
+      const isStormwight = f.group === 'stormwight';
+      const kits = isStormwight ? catalog.stormwightKits : db.kits;
       const [id] = choose(
         step,
         key,
-        'Kit',
-        catalog.kits.map((k) => option(k.id, k.name, kitText(k))),
+        isStormwight ? 'Stormwight kit' : 'Kit',
+        kits.map((k) => option(k.id, k.name, kitText(k, level))),
         config,
       );
-      kit = catalog.kits.find((k) => k.id === id);
-      if (kit) actions.push(kit.ability);
+      kit = kits.find((k) => k.id === id);
+      if (kit) {
+        actions.push(kit.ability);
+        for (const t of kit.featuresByLevel || []) {
+          if (t.level <= level) t.features.forEach((child) => visit(child, step, kit.name, prefix, t.level));
+        }
+      }
       return;
     }
     if (f.kind === 'Choice') {
@@ -502,10 +539,17 @@ export function evaluate(db, draft) {
         key,
         title,
         opts.map((o) =>
-          option(o.id, featureName(o.child), featureText(o.child), {
-            cost: o.value,
-            family: /^Prismatic Scales/.test(featureName(o.child)) ? 'prismatic' : undefined,
-          }),
+          option(
+            o.id,
+            featureName(o.child),
+            o.child.ability?.usesStormDamage
+              ? abilityText(stormAbility(o.child.ability, kit))
+              : featureText(o.child),
+            {
+              cost: o.value,
+              family: /^Prismatic Scales/.test(featureName(o.child)) ? 'prismatic' : undefined,
+            },
+          ),
         ),
         {
           ...config,
@@ -597,7 +641,7 @@ export function evaluate(db, draft) {
       return;
     }
     if (f.kind === 'GrantAbility') {
-      actions.push(f.ability);
+      actions.push(stormAbility(f.ability, kit));
       return;
     }
     grants.push({ ...f, id: key, name: title, description, source, earnedAt });

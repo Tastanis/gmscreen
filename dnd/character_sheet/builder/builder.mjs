@@ -29,6 +29,7 @@ const classInstructions = {
     'Choose your order, deity, domain, and kit. Your order grants its own ability choices at levels 2, 6, and 9.',
   elementalist:
     'Choose your specialization and the features earned at each level. Shared spells are available to every Elementalist.',
+  fury: 'Choose your primordial aspect and kit. At levels 2, 6, and 9, choose one ability from your aspect.',
   null: 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.',
 };
 function store() {
@@ -138,6 +139,12 @@ function review() {
           .filter(Boolean)
           .map(esc)
           .join(' · ') +
+        '</p></section>',
+    );
+  if (model.classId === 'fury')
+    boxes.push(
+      '<section class="review-box"><h3>Aspect and kit</h3><p>' +
+        [model.classTrack, model.kit?.name].filter(Boolean).map(esc).join(' · ') +
         '</p></section>',
     );
   for (const [title, entries] of [

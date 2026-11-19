@@ -510,8 +510,8 @@ test('only the chosen deity’s domain grants features at levels 1, 4 and 7; Tem
   }
 });
 test('Censor exports all 21 kit signatures with published bonuses once; dual modes and area distance use the correct kit', () => {
-  assert.equal(db.censor.kits.length, 21);
-  for (const kit of db.censor.kits) {
+  assert.equal(db.kits.length, 21);
+  for (const kit of db.kits) {
     const { sheet } = censor(1, { 'censor-1-5': kit.name });
     assert.equal(sheet.hero.kit.name, kit.name);
     assert.deepEqual(
@@ -784,4 +784,275 @@ test('Conduit prayers, ward, immunity and domain Piety bonuses apply once and re
     1,
   );
   for (const ancestry of db.ancestries) assert.ok(conduit(1, {}, ancestry.name).model.complete);
+});
+
+const furyPools = [
+  [1, 'signature', ['Brutal Slam', 'Hit and Run', 'Impaled!', 'To the Death!']],
+  [1, 3, ['Back!', 'Out of the Way!', 'Tide of Death', 'Your Entrails Are Your Extrails!']],
+  [1, 5, ['Blood for Blood!', 'Make Peace With Your God!', 'Thunder Roar', 'To the Uttermost End']],
+  [3, 7, ['Demon Unleashed', 'Face the Storm!', 'Steelbreaker', 'You Are Already Dead']],
+  [5, 9, ['Debilitating Strike', 'My Turn!', 'Rebounding Storm', 'To Stone!']],
+  [8, 11, ['Elemental Ferocity', 'Overkill', 'Primordial Rage', 'Relentless Death']],
+];
+const furyAspects = {
+  Berserker: {
+    skill: 'Lift',
+    trigger: 'Lines of Force',
+    abilities: [
+      ['Special Delivery', 'Wrecking Ball'],
+      ['Avalanche Impact', 'Force of Storms'],
+      ['Death Comes for You All!', 'Primordial Vortex'],
+    ],
+  },
+  Reaver: {
+    skill: 'Hide',
+    trigger: 'Unearthly Reflexes',
+    abilities: [
+      ['Death … Death!', 'Phalanx-Breaker'],
+      ['Death Strike', 'Seek and Destroy'],
+      ['Primordial Bane', 'Shower of Blood'],
+    ],
+  },
+  Stormwight: {
+    skill: 'Track',
+    trigger: 'Furious Change',
+    abilities: [
+      ['Apex Predator', 'Visceral Roar'],
+      ['Pounce', 'Riders on the Storm'],
+      ['Death Rattle', 'Deluge'],
+    ],
+  },
+};
+const fury = (specialization, level, preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'fury',
+    specialization,
+    level,
+    ancestry,
+    preferences: {
+      'polder-feature-3': ['Fearless', 'Nimblestep'],
+      'fury-perk-2': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+
+test('Fury offers each published shared and aspect pool only at its earned level, and every choice exports', () => {
+  for (const [aspect, { abilities, trigger, skill }] of Object.entries(furyAspects)) {
+    const { draft } = fury(aspect, 10);
+    for (let level = 1; level <= 10; level++) {
+      draft.level = level;
+      const model = evaluate(db, draft),
+        sheet = buildSheet(db, draft);
+      assert.ok(model.complete && !model.warnings.length);
+      assert.equal(sheet.hero.classTrack, aspect);
+      assert.ok(sheet.sidebar.skills[skill] && sheet.sidebar.skills.Nature);
+      assert.deepEqual(
+        sheet.actions.triggers
+          .filter((a) => Object.values(furyAspects).some((s) => s.trigger === a.name))
+          .map((a) => a.name),
+        [trigger],
+      );
+      const pools = [
+        ...furyPools.map(([at, cost, names]) => [at, cost, 'fury-ability-' + cost, names]),
+        ...abilities.map((names, i) => [
+          [2, 6, 9][i],
+          [5, 9, 11][i],
+          'fury-' + aspect.toLowerCase() + '-ability-' + [2, 6, 9][i],
+          names,
+        ]),
+      ];
+      for (const [at, cost, key, names] of pools) {
+        const slot = model.slots.find((s) => s.key === key);
+        assert.equal(!!slot, level >= at, key);
+        if (!slot) continue;
+        assert.equal(slot.count, 1);
+        assert.equal(slot.flexible, false);
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+        if (at !== level) continue;
+        for (const option of slot.choices) {
+          const alternate = structuredClone(draft);
+          alternate.picks[key] = [option.id];
+          const cards = Object.values(buildSheet(db, alternate).actions)
+            .flat()
+            .filter((a) => names.includes(a.name));
+          assert.deepEqual(
+            cards.map((a) => [a.name, a.cost]),
+            [[option.name, cost === 'signature' ? '' : cost + ' Ferocity']],
+          );
+        }
+      }
+      const stat = 2 + [4, 7, 10].filter((n) => n <= level).length;
+      const v = sheet.hero.vitals,
+        kit = model.kit;
+      assert.equal(sheet.hero.stats.might, stat);
+      assert.equal(sheet.hero.stats.agility, stat);
+      assert.equal(v.staminaMax, 21 + 9 * (level - 1) + kit.stamina * Math.ceil(level / 3));
+      assert.equal(v.recoveriesMax, 10);
+      assert.equal(v.stability, kit.stability + (aspect === 'Berserker' && level >= 3 ? stat : 0));
+      assert.equal(v.speed, 5 + kit.speed + (aspect === 'Reaver' && level >= 2 ? stat : 0));
+      assert.equal(v.disengage, 1 + kit.disengage + (aspect === 'Reaver' && level >= 8 ? stat : 0));
+      if (aspect !== 'Stormwight') {
+        assert.equal(sheet.sidebar.lists.immunity.length, level >= 7 ? 7 : 0);
+        if (level >= 7)
+          for (const type of ['Acid', 'Cold', 'Corruption', 'Fire', 'Lightning', 'Poison', 'Sonic'])
+            assert.ok(sheet.sidebar.lists.immunity.includes(type + ' ' + stat * (level === 10 ? 2 : 1)));
+      }
+      const owner = aspect === 'Stormwight' ? kit.name : aspect;
+      for (const [i, n] of [2, 4, 6, 8, 10, 12].entries()) {
+        assert.equal(
+          model.grants.some((g) => g.name === owner + ' · ' + n + ' Ferocity'),
+          level >= [1, 1, 1, 4, 7, 10][i],
+        );
+      }
+      const rules = sheet.hero.resource.automation.rules;
+      assert.deepEqual(rules.find((r) => r.event === 'turnStart').effect.amount, {
+        dice: '1d3',
+        bonus: level >= 7 ? 1 : 0,
+      });
+      const firstHit = rules.find((r) => r.event === 'damage');
+      assert.equal(firstHit.effect.amount.amount, level >= 10 ? 3 : level >= 4 ? 2 : 1);
+      assert.deepEqual(firstHit.filter, { whose: 'self', minAmount: 1 });
+      assert.equal(firstHit.limit.scope, 'round');
+      assert.deepEqual(
+        rules.find((r) => r.event === 'winded').limit,
+        rules.find((r) => r.event === 'dying').limit,
+      );
+      assert.equal(rules.find((r) => r.event === 'winded').limit.scope, 'encounter');
+      assert.equal(rules.find((r) => r.event === 'combatStart').effect.amount.from, 'victories');
+      assert.equal(rules.find((r) => r.event === 'combatEnd').effect.amount.amount, 0);
+      assert.equal(new Set(ids(sheet)).size, ids(sheet).length);
+    }
+  }
+});
+
+test('each Stormwight kit supplies its own form rules, signature, Ferocity benefits and primordial damage', () => {
+  const { draft } = fury('Stormwight', 10, {
+    'fury-stormwight-ability-2': 'Visceral Roar',
+    'fury-stormwight-ability-6': 'Riders on the Storm',
+    'fury-stormwight-ability-9': 'Deluge',
+    'fury-ability-5': 'Make Peace With Your God!',
+    'fury-ability-9': 'My Turn!',
+  });
+  const kits = [
+    ['Boren', 'Bear', 'Bear Claws', 'cold', 9, 0, 2, 0, 4],
+    ['Corven', 'Crow', 'Wing Buffet', 'fire', 3, 3, 0, 1, 2],
+    ['Raden', 'Rat', 'Driving Pounce', 'corruption', 3, 3, 0, 1, 2],
+    ['Vuken', 'Wolf', 'Unbalancing Attack', 'lightning', 9, 2, 0, 1, 2],
+  ];
+  const kitSlot = evaluate(db, draft).slots.find((s) => s.key === 'fury-stormwight-kit');
+  assert.deepEqual(
+    kitSlot.choices.map((c) => c.name),
+    kits.map(([k]) => k),
+  );
+  for (const [kit, animal, signature, type, stamina, speed, stability, disengage, highBonus] of kits) {
+    draft.picks[kitSlot.key] = [kitSlot.choices.find((c) => c.name === kit).id];
+    for (const level of [1, 4, 7, 10]) {
+      const at = { ...draft, level };
+      const model = evaluate(db, at),
+        sheet = mergeWithDefaults(JSON.parse(JSON.stringify(buildSheet(db, at))));
+      assert.equal(effectiveKit(sheet).values.name, kit);
+      assert.equal(sheet.hero.resource.title, 'Ferocity');
+      const v = sheet.hero.vitals;
+      assert.equal(v.size, '1S');
+      assert.equal(v.speed, 5 + speed);
+      assert.equal(v.stability, stability);
+      assert.equal(v.disengage, 1 + disengage);
+      assert.equal(v.staminaMax, 21 + 9 * (level - 1) + Math.ceil(level / 3) * stamina);
+      const might = sheet.hero.stats.might;
+      assert.deepEqual(
+        sheet.sidebar.lists.immunity,
+        level >= 7 ? [type[0].toUpperCase() + type.slice(1) + ' ' + (level === 10 ? 3 : 2) * might] : [],
+      );
+      const shape = sheet.actions.maneuvers.find((a) => a.name === 'Aspect of the Wild');
+      assert.ok(shape.description.includes('Animal Form: ' + animal));
+      assert.equal(shape.description.includes('At 4th level'), level >= 4);
+      if (animal === 'Crow' || animal === 'Rat') assert.match(shape.description, /can’t use any abilities/);
+      for (const [name] of kits)
+        assert.equal(
+          model.grants.some((g) => g.name === name + ' · 2 Ferocity'),
+          name === kit,
+        );
+      assert.deepEqual(
+        sheet.actions.mains.filter((a) => kits.some((k) => k[2] === a.name)).map((a) => a.name),
+        [signature],
+      );
+      assert.equal(Number(sheet.actions.freeStrikes[0].tests[0].tiers.high.damage), 7 + might + highBonus);
+      if (kit === 'Boren')
+        assert.equal(
+          Number(sheet.actions.mains.find((a) => a.name === signature).tests[0].tiers.high.damage),
+          11 + might,
+        );
+      if (level >= 2)
+        assert.equal(
+          sheet.actions.mains.find((a) => a.name === 'Visceral Roar').tests[0].tiers.low.damageType,
+          type,
+        );
+      if (level >= 6)
+        assert.ok(
+          sheet.actions.maneuvers
+            .find((a) => a.name === 'Riders on the Storm')
+            .description.includes('primordial damage type is ' + type),
+        );
+      if (level >= 9)
+        assert.equal(
+          sheet.actions.mains.find((a) => a.name === 'Deluge').tests[0].tiers.high.damageType,
+          type,
+        );
+      assert.equal(
+        sheet.actions.maneuvers.find((a) => a.name === 'Make Peace With Your God!').actionLabel,
+        'Free maneuver',
+      );
+      if (level >= 5)
+        assert.equal(
+          sheet.actions.triggers.find((a) => a.name === 'My Turn!').actionLabel,
+          'Free triggered action',
+        );
+    }
+  }
+  const lastSlot = evaluate(db, draft).slots.find((s) => s.key === 'fury-stormwight-ability-9');
+  draft.picks[lastSlot.key] = [lastSlot.choices.find((c) => c.name === 'Death Rattle').id];
+  assert.equal(
+    buildSheet(db, draft).actions.mains.find((a) => a.name === 'Death Rattle').tests[0].tiers.low.damageType,
+    'psychic',
+  );
+});
+
+test('Fury drafts reject foreign and stale picks even with exceptions, and every core ancestry can finish', () => {
+  for (const ancestry of db.ancestries) assert.ok(fury('Reaver', 1, {}, ancestry.name).model.complete);
+  const { draft, model } = fury('Berserker', 10);
+  const gear = model.slots.find((s) => s.key === 'fury-standard-kit');
+  assert.deepEqual(gear.choices.map((o) => o.id).sort(), db.kits.map((k) => k.id).sort());
+  const signature = model.slots.find((s) => s.key === 'fury-ability-signature');
+  const aspect = model.slots.find((s) => s.key === 'fury-berserker-ability-2');
+  for (const [slot, id] of [
+    [signature, 'null-ability-1'],
+    [aspect, 'fury-visceral-roar'],
+    [aspect, 'fury-thunder-roar'],
+    [gear, 'kit-boren'],
+  ]) {
+    const edited = structuredClone(draft);
+    assert.equal(setPick(edited, slot, id, true), false);
+    edited.picks[slot.key] = [id];
+    edited.exceptions[slot.key] = [id];
+    assert.deepEqual(evaluate(db, edited).slots.find((s) => s.key === slot.key).selected, []);
+    assert.throws(() => buildSheet(db, edited));
+  }
+  draft.picks.subclass = ['fury-stormwight'];
+  draft.level = 1;
+  const changed = evaluate(db, draft);
+  assert.equal(changed.kit, undefined);
+  assert.ok(
+    !changed.actions.some(
+      (a) =>
+        a.name === 'Lines of Force' ||
+        a.name === 'Special Delivery' ||
+        a.cost >= 7 ||
+        a.id === model.kit.ability.id,
+    ),
+  );
+  assert.ok(!changed.grants.some((g) => g.id.startsWith('fury-berserker-')));
+  draft.picks['fury-stormwight-kit'] = [model.kit.id];
+  assert.throws(() => buildSheet(db, draft));
+  draft.classId = 'elementalist';
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('fury-')));
 });
