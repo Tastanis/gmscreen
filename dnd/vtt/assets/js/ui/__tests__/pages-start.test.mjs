@@ -102,6 +102,8 @@ async function finishPlayerBuilds(page) {
   const frame = await finishTableHeroes(page, 'null', 'conduit');
   await frame.locator('nav [data-step="Identity"]').click();
   await finishIndependentHero(page, frame, 'shadow');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'talent');
 }
 async function finishDirectorBuilds(page) {
   const frame = await finishTableHeroes(page, 'censor');
@@ -114,8 +116,8 @@ async function finishDirectorBuilds(page) {
 async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
   const isNull = classId === 'null';
   const isCensor = classId === 'censor';
-  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard' }[classId];
-  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder' }[classId];
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard', talent: 'Telepathy' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder', talent: 'Dream Polder' }[classId];
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
@@ -160,6 +162,8 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
         'fury-stormwight-kit': 'Vuken', 'fury-stormwight-ability-2': 'Visceral Roar', 'fury-perk-2': 'Expert Artisan',
         'shadow-kit': 'Cloak and Dagger', 'shadow-caustic-alchemy-ability-2': 'Sticky Bomb',
         'tactician-vanguard-ability-2': 'Squad! On Me!',
+        'talent-augmentation': 'Distance Augmentation', 'talent-ward': 'Vanishing Ward',
+        'talent-telepathy-ability-2': 'Synaptic Override',
       }[key];
       if (preferred) {
         await slot.getByRole('button', { name: preferred, exact: true }).click();
@@ -211,6 +215,14 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
     assert.equal(grace.tests[0].tiers.high.damage, String(13 + Math.max(sheet.hero.stats.might, sheet.hero.stats.agility)));
     assert.ok(sheet.actions.mains.some(a => a.name === 'Pain for Pain'));
     assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Visceral Roar' || a.name === 'Overwatch'));
+  } else if (classId === 'talent') {
+    assert.equal(sheet.hero.resource.title, 'Clarity');
+    assert.equal(sheet.hero.resource.allowNegative, true);
+    assert.ok(sheet.sidebar.lists.languages.includes('Mindspeech'));
+    assert.equal(sheet.actions.freeStrikes.find(a => a.name === 'Mind Spike').range, 'Ranged 12');
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Synaptic Override' && a.cost === '5 Clarity'));
+    assert.ok(sheet.features.some(f => f.title === 'Vanishing Ward'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Minor Telekinesis' || a.name === 'Sticky Bomb'));
   } else if (classId === 'shadow') {
     assert.equal(sheet.hero.resource.title, 'Insight');
     assert.equal(sheet.hero.resource.discountOnPowerRollEdge, true);

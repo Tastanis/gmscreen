@@ -68,6 +68,14 @@ export const CLASSES = {
     arrays: martialArrays,
     resource: 'Focus',
   },
+  talent: {
+    name: 'Talent',
+    subclassLabel: 'Talent tradition',
+    primary: ['Reason', 'Presence'],
+    potency: 'Reason',
+    arrays: martialArrays,
+    resource: 'Clarity',
+  },
 };
 export const newDraft = () => ({
   version: 1,
@@ -113,7 +121,7 @@ function modifierText(f) {
     .filter(Boolean)
     .join(', ');
 }
-export function abilityLines(a) {
+export function abilityLines(a, rangeBonus = 0) {
   return (a.sections || []).flatMap((s) => {
     if (s.kind === 'PowerRoll')
       return [
@@ -133,7 +141,10 @@ export function abilityLines(a) {
           s.effect +
           (s.repeatable ? ' (repeatable)' : ''),
       ];
-    return [s.title, s.text, ...(s.args || []), s.effect].filter((x) => typeof x === 'string');
+    const text = [s.title, s.text, ...(s.args || []), s.effect].filter((x) => typeof x === 'string');
+    return s.rangedDistance
+      ? text.map((line) => line.replace('{distance}', String(s.rangedDistance + rangeBonus)))
+      : text;
   });
 }
 export function distanceText(d) {
@@ -417,7 +428,7 @@ export function evaluate(db, draft) {
     const [id] = choose(step, key, title, records.map(entry), config);
     return records.find((x) => (x.id ?? x.name) === id);
   }
-  let ancestry, former, career, complication, subclass, incident, deity, kit;
+  let ancestry, former, career, complication, subclass, incident, deity, kit, battleGear;
   let domains = [];
   const firstDomainAtTier = new Map();
   function visit(f, step, source, prefix = '', earnedAt = 1) {
@@ -749,8 +760,9 @@ export function evaluate(db, draft) {
       return;
     }
     grants.push({ ...f, id: key, name: title, description, source, earnedAt });
-    if (f.id === 'elementalist-1-7a' || f.id === 'conduit-prayer-of-soldiers-skill') {
-      const gearKey = classId === 'conduit' ? 'conduit-gear-' : 'battle-';
+    if (f.language) languages.add(f.language);
+    if (f.requiresLightGear || f.id === 'elementalist-1-7a' || f.id === 'conduit-prayer-of-soldiers-skill') {
+      const gearKey = classId === 'elementalist' ? 'battle-' : classId + '-gear-';
       const [armor] = choose(
         step,
         gearKey + 'armor',
@@ -765,6 +777,10 @@ export function evaluate(db, draft) {
         [option('yes', 'Light weapon'), option('no', 'Other weapon or implement')],
         { source: title },
       );
+      battleGear = {
+        armor: armor === 'yes' ? 'Light armor' : '',
+        weapon: weapon === 'yes' ? 'Light weapon' : '',
+      };
       f.features
         .filter(
           (child) =>
@@ -1021,6 +1037,7 @@ export function evaluate(db, draft) {
     domain: domains[0],
     domains,
     kit,
+    battleGear,
     culture,
     skills,
     languages,

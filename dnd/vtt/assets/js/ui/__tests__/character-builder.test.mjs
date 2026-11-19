@@ -3,9 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { newDraft, evaluate, setPick } from '../../../../../character_sheet/builder/rules.mjs';
 import { buildSheet } from '../../../../../character_sheet/builder/build-sheet.mjs';
-import { effectiveKit, mergeWithDefaults } from '../../../../../character_sheet/parts/sheet-model.js';
+import {
+  effectiveKit,
+  heroResourceFloor,
+  mergeWithDefaults,
+} from '../../../../../character_sheet/parts/sheet-model.js';
 import {
   normalizeHeroicResourceAutomation,
+  resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from '../heroic-resource-automation.js';
 
@@ -1725,4 +1730,329 @@ test('the printed Field Arsenal examples, illegal picks, skills and perk restric
     !evaluate(db, changed).actions.some((a) => a.id.startsWith('tactician-') || a.name === 'Battle Grace'),
   );
   for (const a of db.ancestries) assert.ok(tactician(1, 'Insurgent', {}, a.name).model.complete);
+});
+
+const talentPools = [
+  [
+    1,
+    'signature',
+    [
+      'Entropic Bolt',
+      'Hoarfrost',
+      'Incinerate',
+      'Kinetic Grip',
+      'Kinetic Pulse',
+      'Materialize',
+      'Optic Blast',
+      'Spirit Sword',
+    ],
+  ],
+  [1, 3, ['Awe', 'Choke', 'Precognition', 'Smolder']],
+  [1, 5, ['Flashback', 'Inertia Soak', 'Iron', 'Perfect Clarity']],
+  [3, 7, ['Fling Through Time', 'Force Orbs', 'Reflector Field', 'Soul Burn']],
+  [5, 9, ['Exothermic Shield', 'Hypersonic', 'Mind Snare', 'Soulbound']],
+  [8, 11, ['Doubt', 'Mindwipe', 'Rejuvenate', 'Steel']],
+];
+const talentTraditions = {
+  Chronopathy: {
+    features: [
+      [1, 'Accelerate'],
+      [1, 'Again'],
+      [2, 'Ease the Hours'],
+      [5, 'Distortion Temporal'],
+      [5, 'Speed of Thought'],
+      [8, 'Doubling the Hours'],
+      [8, 'Stasis Shield'],
+    ],
+    pairs: [
+      ['Applied Chronometrics', 'Slow'],
+      ['Fate', 'Stasis Field'],
+      ['Acceleration Field', 'Borrow From the Future'],
+    ],
+  },
+  Telekinesis: {
+    features: [
+      [1, 'Minor Telekinesis'],
+      [1, 'Repel'],
+      [2, 'Ease Their Fall'],
+      [5, 'Kinetic Amplifier'],
+      [5, 'Triangulate'],
+      [8, 'Levitation Field'],
+      [8, 'Low Gravity'],
+    ],
+    pairs: [
+      ['Gravitic Burst', 'Levity and Gravity'],
+      ['Gravitic Well', 'Greater Kinetic Grip'],
+      ['Fulcrum', 'Gravitic Nova'],
+    ],
+  },
+  Telepathy: {
+    features: [
+      [1, 'Remote Assistance'],
+      [1, 'Feedback Loop'],
+      [2, 'Ease the Mind'],
+      [5, 'Compulsion'],
+      [5, 'Remote Amplification'],
+      [8, 'Mindlink'],
+      [8, 'Universal Connection'],
+    ],
+    pairs: [
+      ['Overwhelm', 'Synaptic Override'],
+      ['Synaptic Conditioning', 'Synaptic Dissipation'],
+      ['Resonant Mind Spike', 'Synaptic Terror'],
+    ],
+  },
+};
+const talent = (level, specialization = 'Telepathy', preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'talent',
+    level,
+    specialization,
+    ancestry,
+    preferences: {
+      'talent-augmentation': 'Force Augmentation',
+      'talent-ward': 'Repulsive Ward',
+      'talent-perk-2': 'Charming Liar',
+      'talent-perk-4': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+
+test('Talent grants only the selected tradition at each level while allowing all published shared psionic powers', () => {
+  for (const [name, trad] of Object.entries(talentTraditions)) {
+    const { draft } = talent(10, name);
+    for (let level = 1; level <= 10; level++) {
+      draft.level = level;
+      const model = evaluate(db, draft),
+        sheet = buildSheet(db, draft);
+      assert.ok(model.complete && !model.warnings.length);
+      assert.equal(sheet.hero.classTrack, name);
+      const available = new Set([...model.grants, ...model.actions].map((f) => f.name));
+      for (const [other, info] of Object.entries(talentTraditions))
+        for (const [at, feature] of info.features)
+          assert.equal(available.has(feature), other === name && level >= at, feature);
+      const stat = 2 + [4, 7, 10].filter((at) => level >= at).length;
+      assert.equal(sheet.hero.stats.reason, stat);
+      assert.equal(sheet.hero.stats.presence, stat);
+      assert.equal(sheet.hero.vitals.staminaMax, 18 + 6 * (level - 1));
+      assert.equal(sheet.hero.vitals.recoveriesMax, 8);
+      assert.equal(sheet.sidebar.lists.immunity.includes('Psychic 10'), level >= 9);
+      assert.ok(sheet.sidebar.skills.Psionics && sheet.sidebar.skills['Read Person']);
+      assert.equal(sheet.sidebar.lists.languages.filter((l) => l === 'Mindspeech').length, 1);
+      const speech = sheet.features.find((f) => f.title === 'Telepathic Speech');
+      if (name === 'Telepathy' && level >= 5)
+        assert.ok(speech.text.endsWith(level >= 8 ? 'anywhere on the same world' : '1 mile'));
+      for (const [at, cost, key, names] of [
+        ...talentPools.map(([at, cost, names]) => [at, cost, 'talent-ability-' + cost, names]),
+        ...trad.pairs.map((names, i) => [
+          [2, 6, 9][i],
+          [5, 9, 11][i],
+          'talent-' + name.toLowerCase() + '-ability-' + [2, 6, 9][i],
+          names,
+        ]),
+      ]) {
+        const slot = model.slots.find((s) => s.key === key);
+        assert.equal(!!slot, level >= at, key);
+        if (!slot) continue;
+        assert.equal(slot.count, cost === 'signature' ? 2 : 1);
+        assert.equal(slot.flexible, false);
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+        if (level !== at) continue;
+        const selections =
+          cost === 'signature'
+            ? slot.choices.flatMap((a, i) => slot.choices.slice(i + 1).map((b) => [a, b]))
+            : slot.choices.map((a) => [a]);
+        for (const options of selections) {
+          const copy = structuredClone(draft);
+          copy.picks[key] = options.map((o) => o.id);
+          const cards = Object.values(buildSheet(db, copy).actions)
+            .flat()
+            .filter((a) => names.includes(a.name));
+          assert.deepEqual(cards.map((c) => c.name).sort(), options.map((o) => o.name).sort());
+          assert.ok(cards.every((c) => c.cost === (cost === 'signature' ? '' : cost + ' Clarity')));
+        }
+      }
+      assert.equal(ids(sheet).length, new Set(ids(sheet)).size);
+    }
+  }
+});
+
+test('all Talent wards and augmentations grant their own benefits and recalculate when gear or level changes', () => {
+  const wards = ['Entropy Ward', 'Repulsive Ward', 'Steel Ward', 'Vanishing Ward'];
+  const augmentations = ['Battle', 'Density', 'Distance', 'Force', 'Speed'];
+  for (const aug of augmentations)
+    for (const ward of wards) {
+      const { draft } = talent(10, 'Telepathy', {
+        'talent-augmentation': aug + ' Augmentation',
+        'talent-ward': ward,
+        'talent-gear-armor': 'Light armor',
+        'talent-gear-weapon': 'Light weapon',
+        'talent-ability-signature': ['Incinerate', 'Spirit Sword'],
+        'talent-ability-7': 'Force Orbs',
+        'talent-ability-9': 'Hypersonic',
+      });
+      for (const level of [1, 4, 5, 7, 10]) {
+        const at = { ...draft, level },
+          model = evaluate(db, at),
+          sheet = mergeWithDefaults(buildSheet(db, at));
+        const textOf = (name) => sheet.features.find((f) => f.title === name)?.text;
+        for (const w of wards) assert.equal(!!textOf(w), w === ward);
+        for (const a of augmentations) assert.equal(!!textOf(a + ' Augmentation'), a === aug);
+        const trained = model.slots.find((s) => s.key === 'talent-skills');
+        assert.equal(trained.count, 2);
+        assert.ok(
+          trained.choices.every(
+            (o) =>
+              !o.warning ===
+              ['Interpersonal', 'Lore'].includes(db.skills.find((s) => s.name === o.name).list),
+          ),
+        );
+        for (const n of [2, 6, 10].filter((n) => n <= level)) {
+          const perk = model.slots.find((s) => s.key === 'talent-perk-' + n);
+          assert.ok(
+            perk.choices.every((o) =>
+              ['Interpersonal', 'Lore', 'Supernatural'].includes(db.perks.find((p) => p.id === o.id).list),
+            ),
+          );
+        }
+        const spike = sheet.actions.mains.find((a) => a.name === 'Mind Spike');
+        const range = 10 + (aug === 'Distance' ? 2 : 0) + (level >= 5 ? 5 : 0) + (level === 10 ? 10 : 0);
+        const free = sheet.actions.freeStrikes.find((a) => a.name === 'Mind Spike');
+        assert.equal(spike.range, 'Ranged ' + range);
+        assert.equal(free.range, spike.range);
+        assert.deepEqual(free.tests[0].tiers, spike.tests[0].tiers);
+        assert.equal(
+          Number(free.tests[0].tiers.low.damage),
+          2 + sheet.hero.stats.reason + Number(aug === 'Force'),
+        );
+        assert.equal(free.tests[0].tiers.high.damageType, 'psychic');
+        assert.match(free.description, /Strained.*extra 2 psychic damage/);
+        assert.equal(
+          sheet.actions.mains.find((a) => a.name === 'Incinerate').range,
+          '3 Cube within ' + range,
+        );
+        assert.equal(sheet.actions.mains.find((a) => a.name === 'Spirit Sword').range, 'Melee 2');
+        if (level >= 5)
+          assert.equal(sheet.actions.mains.find((a) => a.name === 'Hypersonic').range, '5 × 2 Line within 1');
+        if (level >= 3)
+          assert.ok(
+            sheet.actions.mains
+              .find((a) => a.name === 'Force Orbs')
+              .description.includes('within ' + (range - 5) + ' squares as a ranged strike'),
+          );
+        assert.equal(
+          sheet.hero.vitals.staminaMax,
+          18 + 6 * (level - 1) + Math.ceil(level / 3) * (aug === 'Density' ? 6 : aug === 'Battle' ? 3 : 0),
+        );
+        assert.equal(sheet.hero.vitals.stability, Number(aug === 'Density'));
+        assert.equal(sheet.hero.vitals.speed, 5 + Number(aug === 'Speed'));
+        if (aug === 'Battle') {
+          assert.equal(sheet.hero.kit.armor, 'Light armor');
+          assert.equal(sheet.hero.kit.weapon, 'Light weapon');
+          const unarmored = structuredClone(at);
+          unarmored.picks['talent-gear-armor'] = ['no'];
+          unarmored.picks['talent-gear-weapon'] = ['no'];
+          const empty = buildSheet(db, unarmored);
+          assert.equal(empty.hero.vitals.staminaMax, 18 + 6 * (level - 1));
+          assert.equal(
+            Number(empty.actions.freeStrikes[0].tests[0].tiers.low.damage) + 1,
+            Number(sheet.actions.freeStrikes[0].tests[0].tiers.low.damage),
+          );
+          assert.equal(
+            empty.actions.freeStrikes.find((a) => a.name === 'Mind Spike').tests[0].tiers.low.damage,
+            free.tests[0].tiers.low.damage,
+          );
+        } else assert.ok(!model.slots.some((s) => s.key.startsWith('talent-gear-')));
+      }
+    }
+});
+
+test('Talent export uses the native Clarity floor, forced-movement limits, turn gains and optional damage at level 10', () => {
+  const { draft } = talent(10, 'Chronopathy', { 'talent-chronopathy-ability-6': 'Fate' });
+  for (let level = 1; level <= 10; level++) {
+    const sheet = mergeWithDefaults(buildSheet(db, { ...draft, level })),
+      resource = sheet.hero.resource;
+    assert.equal(resource.title, 'Clarity');
+    assert.equal(resource.allowNegative, true);
+    assert.equal(heroResourceFloor(sheet.hero), -(1 + sheet.hero.stats.reason));
+    const { rules, warnings } = normalizeHeroicResourceAutomation(resource.automation);
+    assert.deepEqual(warnings, []);
+    assert.equal(rules.find((r) => r.event === 'combatStart').effect.amount.from, 'victories');
+    assert.equal(rules.find((r) => r.event === 'combatEnd').effect.amount.amount, 0);
+    const turn = rules.find((r) => r.event === 'turnStart');
+    assert.equal(turn.effect.amount.dice, '1d3');
+    assert.equal(turn.effect.amount.bonus, level === 10 ? 2 : level >= 7 ? 1 : 0);
+    const moved = rules.find((r) => r.event === 'forcedMovement');
+    assert.equal(moved.limit.scope, 'round');
+    assert.equal(moved.effect.amount.amount, level === 10 ? 3 : level >= 4 ? 2 : 1);
+    for (const [payload, expected] of [
+      [{ distance: 2 }, true],
+      [{ distance: 0 }, false],
+      [{ distance: 1, resisted: true }, false],
+    ])
+      assert.equal(
+        ruleMatchesHeroicResourceEvent(
+          moved,
+          'forcedMovement',
+          { placementId: 'other', ...payload },
+          { casterId: 'hero' },
+        ),
+        expected,
+      );
+    const strain = rules.find((r) => r.event === 'turnEnd');
+    assert.equal(strain.effect.kind, 'damage');
+    assert.equal(strain.autoApply, level < 10);
+    for (const clarity of [-3, 0, 4])
+      assert.equal(
+        resolveHeroicResourceAmount(strain.effect.amount, { currentResource: clarity }).amount,
+        Math.max(0, -clarity),
+      );
+    assert.equal(
+      ruleMatchesHeroicResourceEvent(strain, 'turnEnd', { placementId: 'other' }, { casterId: 'hero' }),
+      false,
+    );
+    const boost = sheet.features.find((f) => f.title === 'Psi Boost');
+    assert.equal(!!boost, level >= 6);
+    if (boost)
+      for (const name of [
+        'Dynamic',
+        'Expanded',
+        'Extended',
+        'Heightened',
+        'Magnified',
+        'Shared',
+        'Sharpened',
+      ])
+        assert.ok(boost.text.includes(name + ' Power'));
+    if (level >= 6)
+      assert.match(sheet.actions.mains.find((a) => a.name === 'Fate').tests[0].label, /While strained/);
+  }
+});
+
+test('Talent rejects foreign powers, duplicate signatures and stale picks across classes, traditions and levels', () => {
+  const { draft, model } = talent(10, 'Telekinesis');
+  const slot = model.slots.find((s) => s.key === 'talent-telekinesis-ability-2');
+  for (const id of ['talent-slow', 'talent-iron', 'talent-gravitic-well', 'null-ability-1']) {
+    const copy = structuredClone(draft);
+    copy.picks[slot.key] = [id];
+    copy.exceptions[slot.key] = [id];
+    assert.equal(setPick(copy, slot, id, true), false);
+    assert.throws(() => buildSheet(db, copy));
+  }
+  const bad = structuredClone(draft);
+  bad.picks['talent-ability-signature'] = ['talent-hoarfrost', 'talent-hoarfrost'];
+  assert.throws(() => buildSheet(db, bad));
+  draft.picks.subclass = ['talent-chronopathy'];
+  draft.level = 1;
+  const changed = evaluate(db, draft);
+  assert.ok(changed.complete);
+  assert.ok(
+    !changed.actions.some((a) =>
+      ['Repel', 'Gravitic Well', 'Levitation Field', 'Stasis Shield'].includes(a.name),
+    ),
+  );
+  assert.ok(changed.actions.some((a) => a.name === 'Again'));
+  draft.classId = 'null';
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('talent-')));
+  for (const a of db.ancestries) assert.ok(talent(1, 'Chronopathy', {}, a.name).model.complete);
 });

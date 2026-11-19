@@ -110,7 +110,7 @@ function action(a, r, group) {
     );
   const description = [
     a.description,
-    ...abilityLines({ ...a, sections: sections.filter((s) => s.kind !== 'PowerRoll') }),
+    ...abilityLines({ ...a, sections: sections.filter((s) => s.kind !== 'PowerRoll') }, rangeBonus),
   ];
   if (group === 'freeStrikes' && r.classId === 'tactician')
     description.push(
@@ -185,19 +185,41 @@ function resourceAutomation(r) {
     autoApply,
     enabled: true,
   });
-  const firstDamage = (id, event, filter, amount) =>
+  const oncePerRound = (id, event, filter, amount) =>
     rule(id, event, filter, 'gain', fixed(amount), false, {
       scope: 'round',
       key: id,
       target: 'self',
       markOn: 'offered',
     });
+  if (classId === 'talent') {
+    return {
+      schema: 'heroic-resource/v1',
+      rules: [
+        rule('talent-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+        rule('talent-turn', 'turnStart', { whose: 'self' }, 'gain', {
+          dice: '1d3',
+          bonus: level === 10 ? 2 : level >= 7 ? 1 : 0,
+        }),
+        oncePerRound('talent-force-moved', 'forcedMovement', { minDistance: 1 }, roundGain(level)),
+        rule(
+          'talent-strain',
+          'turnEnd',
+          { whose: 'self' },
+          'damage',
+          { from: 'negativeResource' },
+          level < 10,
+        ),
+        rule('talent-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+      ],
+    };
+  }
   if (classId === 'fury' || classId === 'shadow') {
-    const damageGain = firstDamageGain(level);
+    const damageGain = roundGain(level);
     const damageRules = [];
     if (classId === 'shadow') {
       damageRules.push(
-        firstDamage(
+        oncePerRound(
           'shadow-surge-damage',
           'damageDealt',
           { whose: 'self', includesSurge: true, minAmount: 1 },
@@ -206,7 +228,7 @@ function resourceAutomation(r) {
       );
     } else {
       damageRules.push(
-        firstDamage('fury-first-damage', 'damage', { whose: 'self', minAmount: 1 }, damageGain),
+        oncePerRound('fury-first-damage', 'damage', { whose: 'self', minAmount: 1 }, damageGain),
       );
       const limit = {
         scope: 'encounter',
@@ -275,16 +297,16 @@ function resourceAutomation(r) {
       ? []
       : classId === 'censor'
         ? [
-            firstDamage(
+            oncePerRound(
               'censor-damage-dealt',
               'damageDealt',
               { whose: 'self', targetWhose: 'judgedTarget' },
               level >= 4 ? 2 : 1,
             ),
-            firstDamage('censor-damage-taken', 'damage', { whose: 'self', sourceWhose: 'judgedTarget' }, 1),
+            oncePerRound('censor-damage-taken', 'damage', { whose: 'self', sourceWhose: 'judgedTarget' }, 1),
           ]
         : [
-            firstDamage(
+            oncePerRound(
               'elementalist-first-damage',
               'damage',
               { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
@@ -307,11 +329,26 @@ function resourceAutomation(r) {
     ],
   };
 }
-function firstDamageGain(level) {
+function roundGain(level) {
   return level >= 10 ? 3 : level >= 4 ? 2 : 1;
 }
 function resourceSummary(r) {
   const resource = r.heroClass.resource;
+  if (r.classId === 'talent') {
+    const gain = r.level === 10 ? '1d3 + 2' : r.level >= 7 ? '1d3 + 1' : '1d3';
+    return (
+      'Start combat with Clarity equal to Victories. Gain ' +
+      gain +
+      ' at the start of each turn and ' +
+      roundGain(r.level) +
+      ' the first time each round a creature is force moved. Your Clarity can fall to −' +
+      (1 + r.stats.Reason) +
+      '. While below zero, you are strained. At turn end take 1 damage per negative point. Reset Clarity to zero at combat end.' +
+      (r.level === 10
+        ? ' Psion lets you decline the turn-end damage or use an ability’s strained effect while unstrained.'
+        : '')
+    );
+  }
   if (r.classId === 'tactician')
     return (
       'Start combat with Focus equal to Victories. Gain ' +
@@ -328,7 +365,7 @@ function resourceSummary(r) {
       ' equal to Victories. Gain ' +
       turnGain +
       ' at the start of each turn, and ' +
-      firstDamageGain(r.level);
+      roundGain(r.level);
     if (r.classId === 'fury')
       return (
         start +
@@ -392,15 +429,10 @@ export function buildSheet(db, draft) {
   Object.assign(hero.resource, {
     title: resource,
     automation: resourceAutomation(r),
+    ...(r.classId === 'talent' ? { allowNegative: true } : {}),
     ...(r.classId === 'shadow' ? { discountOnPowerRollEdge: true } : {}),
   });
-  if (r.grants.some((f) => f.id === 'elementalist-1-7a' || f.id === 'conduit-prayer-of-soldiers-skill')) {
-    const key = r.classId === 'conduit' ? 'conduit-gear-' : 'battle-';
-    Object.assign(hero.kit, {
-      armor: draft.picks[key + 'armor']?.[0] === 'yes' ? 'Light armor' : '',
-      weapon: draft.picks[key + 'weapon']?.[0] === 'yes' ? 'Light weapon' : '',
-    });
-  }
+  if (r.battleGear) Object.assign(hero.kit, r.battleGear);
   if (r.kit) {
     const k = r.kit;
     Object.assign(hero.kit, {
@@ -466,7 +498,17 @@ export function buildSheet(db, draft) {
     sheet.actions[group].push(action(a, r, group));
   }
   sheet.actions.freeStrikes.push(weaponStrike(r, true), weaponStrike(r, false));
-  const ray = r.actions.find((a) => a.id === 'conduit-ray-of-wrath');
-  if (ray) sheet.actions.freeStrikes.push(action({ ...ray, id: ray.id + '-free-strike' }, r, 'freeStrikes'));
+  for (const a of r.actions.filter((a) => a.asFreeStrike || a.id === 'conduit-ray-of-wrath'))
+    sheet.actions.freeStrikes.push(action({ ...a, id: a.id + '-free-strike' }, r, 'freeStrikes'));
+  if (r.classId === 'talent') {
+    const speech = sheet.features.find((f) => f.id === 'builder-talent-telepathic-speech');
+    const spike = sheet.actions.mains.find((a) => a.id === 'talent-mind-spike');
+    const distance = r.grants.some((f) => f.id === 'talent-universal-connection')
+      ? 'anywhere on the same world'
+      : r.grants.some((f) => f.id === 'talent-remote-amplification')
+        ? '1 mile'
+        : spike.range.replace(/^Ranged (\d+)$/, '$1 squares');
+    speech.text += '<br>Current range · ' + html(distance);
+  }
   return sheet;
 }

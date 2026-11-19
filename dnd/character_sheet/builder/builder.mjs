@@ -34,6 +34,8 @@ const classInstructions = {
   shadow: 'Choose a college and a kit. At levels 2, 6, and 9, choose one of your college’s two abilities.',
   tactician:
     'Choose a tactical doctrine and two kits. Both kits grant their signatures. Choose which bonus to use when the kits overlap.',
+  talent:
+    'Choose a tradition, one augmentation, one ward, and two different signatures. At levels 2, 6, and 9, choose one ability from your tradition.',
 };
 function store() {
   try {
