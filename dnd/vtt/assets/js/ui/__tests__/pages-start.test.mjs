@@ -111,13 +111,15 @@ async function finishDirectorBuilds(page) {
   await finishIndependentHero(page, frame, 'fury');
   await frame.locator('nav [data-step="Identity"]').click();
   await finishIndependentHero(page, frame, 'tactician');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'troubadour');
 }
 
 async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
   const isNull = classId === 'null';
   const isCensor = classId === 'censor';
-  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard', talent: 'Telepathy' }[classId];
-  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder', talent: 'Dream Polder' }[classId];
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard', talent: 'Telepathy', troubadour: 'Virtuoso' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder', talent: 'Dream Polder', troubadour: 'Ballad Polder' }[classId];
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
@@ -164,6 +166,8 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
         'tactician-vanguard-ability-2': 'Squad! On Me!',
         'talent-augmentation': 'Distance Augmentation', 'talent-ward': 'Vanishing Ward',
         'talent-telepathy-ability-2': 'Synaptic Override',
+        'troubadour-kit': 'Swashbuckler', 'troubadour-virtuoso-ability-2': 'Encore',
+        'troubadour-invocation': 'Formal Introductions',
       }[key];
       if (preferred) {
         await slot.getByRole('button', { name: preferred, exact: true }).click();
@@ -215,6 +219,15 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
     assert.equal(grace.tests[0].tiers.high.damage, String(13 + Math.max(sheet.hero.stats.might, sheet.hero.stats.agility)));
     assert.ok(sheet.actions.mains.some(a => a.name === 'Pain for Pain'));
     assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Visceral Roar' || a.name === 'Overwatch'));
+  } else if (classId === 'troubadour') {
+    assert.equal(sheet.hero.resource.title, 'Drama');
+    assert.equal(sheet.hero.kit.name, 'Swashbuckler');
+    assert.ok(sheet.sidebar.skills.Music);
+    assert.ok(sheet.features.some(f => f.title === 'Formal Introductions'));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Encore' && a.cost === '5 Drama'));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Thunder Mother' && a.actionLabel === 'No action'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Harmonize'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => ['Riposte', 'Mark', 'Guest Star'].includes(a.name)));
   } else if (classId === 'talent') {
     assert.equal(sheet.hero.resource.title, 'Clarity');
     assert.equal(sheet.hero.resource.allowNegative, true);

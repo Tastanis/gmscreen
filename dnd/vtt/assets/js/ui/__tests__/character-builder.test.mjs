@@ -2056,3 +2056,335 @@ test('Talent rejects foreign powers, duplicate signatures and stale picks across
   assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('talent-')));
   for (const a of db.ancestries) assert.ok(talent(1, 'Chronopathy', {}, a.name).model.complete);
 });
+
+const troubadour = (specialization, level = 10, preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'troubadour',
+    specialization,
+    level,
+    ancestry,
+    preferences: {
+      'troubadour-kit': 'Swashbuckler',
+      'troubadour-perk-2': 'Charming Liar',
+      'troubadour-perk-4': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+const troubadourActs = {
+  Auteur: {
+    skill: 'Brag',
+    initial: ['Blocking', 'Dramatic Monologue', 'Turnabout Is Fair Play'],
+    third: ['Missed Cue'],
+    fifth: ['Fix It in Post', 'Take Two!'],
+    eighth: ['Deleted Scene'],
+    pairs: [
+      ['Guest Star', 'Twist at the End'],
+      ['Here’s How Your Story Ends', 'You’re All My Understudies'],
+      ['Epic', 'Rising Tension'],
+    ],
+  },
+  Duelist: {
+    skill: 'Gymnastics',
+    initial: ['Acrobatics', 'Star Power', 'Riposte'],
+    third: ['Foil'],
+    fifth: ['Verbal Duel', 'We Can’t Be Upstaged!'],
+    eighth: ['Masterwork'],
+    pairs: [
+      ['Classic Chandelier Stunt', 'En Garde!'],
+      ['Blood on the Stage', 'Fight Choreography'],
+      ['Expert Fencer', 'Renegotiated Contract'],
+    ],
+  },
+  Virtuoso: {
+    skill: 'Music',
+    initial: ['Power Chord', 'Thunder Mother', 'Ballad of the Beast', 'Harmonize'],
+    third: ['Second Album', 'Fire Up the Night', 'Never-Ending Hero'],
+    fifth: ['Bolstering Banter', 'Medley'],
+    eighth: ['Crowd Favorites', 'Moonlight Sonata', 'Radical Fantasia'],
+    pairs: [
+      ['Encore', 'Tough Crowd'],
+      ['Feedback', 'Legendary Drum Fill'],
+      ['Jam Session', 'Melt Their Faces'],
+    ],
+  },
+};
+const troubadourPools = [
+  [1, 'signature', ['Artful Flourish', 'Cutting Sarcasm', 'Instigator', 'Witty Banter']],
+  [1, 3, ['Harsh Critic', 'Hypnotic Overtones', 'Quick Rewrite', 'Upstage']],
+  [1, 5, ['Dramatic Reversal', 'Fake Your Death', 'Flip the Script', 'Method Acting']],
+  [3, 7, ['Extensive Rewrites', 'Infernal Gavotte', 'Star Solo', 'We Meet at Last']],
+  [5, 9, ['Action Hero', 'Continuity Error', 'Love Song', 'Patter Song']],
+  [8, 11, ['Dramatic Reveal', 'Power Ballad', 'Saved in the Edit', 'The Show Must Go On']],
+];
+
+test('Troubadour awards the right class act, class abilities, skills, and performances at each level', () => {
+  for (const [name, act] of Object.entries(troubadourActs)) {
+    const { draft } = troubadour(name, 10, { 'troubadour-masterwork': 'Fancy Footwork' });
+    for (let level = 1; level <= 10; level++) {
+      const at = { ...draft, level },
+        model = evaluate(db, at),
+        sheet = buildSheet(db, at),
+        actions = Object.values(sheet.actions).flat();
+      const slots = new Map(model.slots.map((s) => [s.key, s]));
+      assert.ok(model.complete && !model.warnings.length);
+      assert.ok(sheet.sidebar.skills[act.skill] && sheet.sidebar.skills['Read Person']);
+      const classStat = 2 + [4, 7, 10].filter((x) => x <= level).length;
+      assert.equal(sheet.hero.stats.agility, classStat);
+      assert.equal(sheet.hero.stats.presence, classStat);
+      assert.equal(sheet.hero.vitals.recoveriesMax, 8);
+      assert.equal(
+        sheet.hero.vitals.staminaMax,
+        18 + 6 * (level - 1) + model.kit.stamina * Math.ceil(level / 3),
+      );
+      assert.equal(sheet.hero.vitals.save, level >= 7 ? 5 : 6);
+      assert.equal(slots.get('troubadour-interpersonal').count, 2);
+      assert.equal(slots.get('troubadour-intrigue-lore').count, 1);
+      for (const [slot, groups] of [
+        ['troubadour-interpersonal', ['Interpersonal']],
+        ['troubadour-intrigue-lore', ['Intrigue', 'Lore']],
+      ]) {
+        for (const o of slots.get(slot).choices)
+          assert.equal(!o.warning, groups.includes(db.skills.find((s) => s.name === o.name).list));
+      }
+      const owned = new Set([...model.grants, ...model.actions].map((f) => f.name));
+      for (const [other, info] of Object.entries(troubadourActs))
+        for (const [min, features] of [
+          [1, info.initial],
+          [3, info.third],
+          [8, info.eighth],
+        ])
+          for (const f of features)
+            assert.equal(owned.has(f), other === name && level >= min, name + ' ' + level + ' ' + f);
+      for (const routine of ['Choreography', 'Revitalizing Limerick', 'Spotlight'])
+        assert.equal(
+          actions.some((a) => a.name === routine && a.actionLabel === 'No action'),
+          routine !== 'Spotlight' || level >= 6,
+        );
+      const routines = actions.filter((a) => a.tags.includes('Performance'));
+      for (const a of routines) {
+        assert.equal(a.actionLabel, 'No action');
+        assert.equal(a.range === 'Encounter map within line of effect', level === 10);
+      }
+      if (name === 'Virtuoso') {
+        const thunder = actions.find((a) => a.name === 'Thunder Mother');
+        assert.equal(thunder.range, level === 10 ? 'Encounter map within line of effect' : 'Ranged 10');
+        assert.deepEqual(
+          Object.values(thunder.tests[0].tiers).map((t) => [Number(t.damage), t.damageType]),
+          [level, level + 5, level + 10].map((n) => [n, 'lightning']),
+        );
+      }
+      const fifth = slots.get('troubadour-' + name.toLowerCase() + '-feature-5');
+      assert.equal(!!fifth, level >= 5);
+      if (fifth) {
+        assert.deepEqual(
+          fifth.choices.map((o) => o.name),
+          act.fifth,
+        );
+        for (const o of fifth.choices) {
+          const swapped = structuredClone(at);
+          swapped.picks[fifth.key] = [o.id];
+          const result = evaluate(db, swapped);
+          assert.deepEqual(
+            [...result.actions, ...result.grants]
+              .filter((f) => act.fifth.includes(f.name))
+              .map((f) => f.name),
+            [o.name],
+          );
+        }
+      }
+      for (const [min, cost, key, names] of [
+        ...troubadourPools.map(([min, cost, names]) => [min, cost, 'troubadour-ability-' + cost, names]),
+        ...act.pairs.map((names, i) => [
+          [2, 6, 9][i],
+          [5, 9, 11][i],
+          'troubadour-' + name.toLowerCase() + '-ability-' + [2, 6, 9][i],
+          names,
+        ]),
+      ]) {
+        const slot = slots.get(key);
+        assert.equal(!!slot, level >= min, key);
+        if (!slot) continue;
+        assert.equal(slot.count, 1);
+        assert.equal(slot.flexible, false);
+        assert.deepEqual(slot.choices.map((c) => c.name).sort(), names.toSorted());
+        if (level === min)
+          for (const o of slot.choices) {
+            const copy = structuredClone(at);
+            copy.picks[key] = [o.id];
+            const cards = Object.values(buildSheet(db, copy).actions)
+              .flat()
+              .filter((a) => names.includes(a.name));
+            assert.deepEqual(
+              cards.map((a) => a.name),
+              [o.name],
+            );
+            assert.equal(cards[0].cost, cost === 'signature' ? '' : cost + ' Drama');
+          }
+      }
+      for (const n of [2, 4, 6, 8, 10].filter((x) => x <= level)) {
+        const lists = new Set(
+          slots.get('troubadour-perk-' + n).choices.map((o) => db.perks.find((p) => p.id === o.id).list),
+        );
+        if ([2, 6, 10].includes(n))
+          assert.deepEqual([...lists].sort(), ['Interpersonal', 'Lore', 'Supernatural']);
+        else assert.ok(lists.has('Crafting'));
+      }
+      const invocation = slots.get('troubadour-invocation');
+      assert.equal(!!invocation, level >= 2);
+      if (level === 2)
+        for (const o of invocation.choices) {
+          const copy = structuredClone(at);
+          copy.picks[invocation.key] = [o.id];
+          const s = buildSheet(db, copy);
+          assert.deepEqual(
+            s.features.filter((f) => invocation.choices.some((c) => c.name === f.title)).map((f) => f.title),
+            [o.name],
+          );
+        }
+    }
+  }
+});
+
+test('Melodrama resolves two ordered choices, including improving a newly learned event, and exports the exact Drama gains', () => {
+  const { draft } = troubadour('Auteur');
+  for (const level of [1, 4, 7, 10]) {
+    const sheet = buildSheet(db, { ...draft, level });
+    const { rules, warnings } = normalizeHeroicResourceAutomation(sheet.hero.resource.automation);
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(
+      rules.map((r) => r.event),
+      ['combatStart', 'turnStart', 'combatEnd'],
+    );
+    assert.equal(rules[0].effect.amount.from, 'victories');
+    assert.equal(rules[1].effect.amount.dice, '1d3');
+    assert.equal(rules[1].effect.amount.bonus, level >= 7 ? 1 : 0);
+    assert.equal(rules[2].effect.amount.amount, 0);
+    assert.equal(
+      sheet.features.some((f) => f.title === 'Appeal to the Muses'),
+      level >= 2,
+    );
+    assert.equal(
+      sheet.features.some((f) => f.title === 'Applause'),
+      level === 10,
+    );
+  }
+  const at = { ...draft, level: 4 },
+    first = 'troubadour-melodrama-1',
+    second = 'troubadour-melodrama-2';
+  const base = { ensemble: 2, winded: 2, roll: 3, death: 10 };
+  const fresh = ['natural-two', 'villain', 'fall', 'surges', 'recovery'];
+  function expected(values) {
+    return [
+      ...Object.keys(values).map((k) => 'improve-' + k),
+      ...fresh.filter((k) => !(k in values)).map((k) => 'add-' + k),
+    ].sort();
+  }
+  function apply(values, id) {
+    const key = id.slice(id.indexOf('-') + 1);
+    return { ...values, [key]: id.startsWith('add-') ? 2 : values[key] + 1 };
+  }
+  for (const a of expected(base)) {
+    const plan = structuredClone(at);
+    plan.picks[first] = [a];
+    const model = evaluate(db, plan),
+      slot = model.slots.find((s) => s.key === second),
+      one = apply(base, a);
+    assert.deepEqual(
+      model.slots
+        .find((s) => s.key === first)
+        .choices.map((o) => o.id)
+        .sort(),
+      expected(base),
+    );
+    assert.deepEqual(slot.choices.map((o) => o.id).sort(), expected(one));
+    for (const b of expected(one)) {
+      plan.picks[second] = [b];
+      const result = evaluate(db, plan),
+        s = buildSheet(db, plan);
+      assert.deepEqual(Object.fromEntries(result.dramaEvents.map((e) => [e.id, e.value])), apply(one, b));
+      for (const e of result.dramaEvents)
+        assert.ok(s.sidebar.resource.text.includes(e.trigger + ' · +' + e.value + ' Drama'));
+    }
+  }
+  const invalid = structuredClone(at);
+  invalid.picks[first] = ['improve-roll'];
+  invalid.picks[second] = ['improve-fall'];
+  invalid.exceptions[second] = ['improve-fall'];
+  assert.throws(() => buildSheet(db, invalid));
+});
+
+test('Duelist Masterwork names an owned signature and preserves only the named kit ability when equipment changes', () => {
+  const key = 'troubadour-masterwork';
+  const { draft } = troubadour('Duelist', 8, { 'troubadour-kit': 'Arcane Archer', [key]: 'Exploding Arrow' });
+  const sheet = buildSheet(db, draft);
+  const archer = db.kits.find((k) => k.name === 'Arcane Archer');
+  const spike = sheet.actions.mains.find((a) => a.id === archer.ability.id);
+  assert.equal(spike.name, 'Test hero’s Exploding Arrow');
+  assert.equal(spike.range, 'Ranged 15');
+  draft.masterworkName = 'Sol’s Last Arrow';
+  const swash = db.kits.find((k) => k.name === 'Swashbuckler');
+  const slot = evaluate(db, draft).slots.find((s) => s.key === 'troubadour-kit');
+  assert.ok(setPick(draft, slot, swash.id));
+  const saved = JSON.parse(JSON.stringify(draft)),
+    next = buildSheet(db, saved);
+  const named = next.actions.mains.find((a) => a.id === archer.ability.id);
+  assert.equal(named.name, 'Sol’s Last Arrow');
+  assert.match(named.description, /Exploding Arrow.*Masterwork/);
+  assert.equal(named.range, 'Ranged ' + (15 - archer.rangedDistance + swash.rangedDistance));
+  for (const [i, k] of ['low', 'mid', 'high'].entries())
+    assert.equal(
+      Number(named.tests[0].tiers[k].damage),
+      Number(spike.tests[0].tiers[k].damage) - archer.rangedDamage[i] + (swash.rangedDamage?.[i] || 0),
+    );
+  assert.ok(next.actions.mains.some((a) => a.id === swash.ability.id));
+  const master = evaluate(db, saved).slots.find((s) => s.key === key);
+  assert.ok(!master.choices.some((o) => o.name === 'Protective Attack'));
+  assert.ok(setPick(saved, master, swash.ability.id));
+  assert.ok(!buildSheet(db, saved).actions.mains.some((a) => a.id === archer.ability.id));
+  const lowered = buildSheet(db, { ...draft, level: 7 });
+  assert.ok(!lowered.actions.mains.some((a) => a.id === archer.ability.id));
+  const forged = structuredClone(draft);
+  forged.picks[key] = ['troubadour-encore'];
+  forged.exceptions[key] = ['troubadour-encore'];
+  assert.throws(() => buildSheet(db, forged));
+  const dragon = troubadour('Duelist', 8, {}, 'Dragon Knight');
+  const dragonSlot = dragon.model.slots.find((s) => s.key === key);
+  for (const a of dragon.model.actions.filter((a) => a.cost === 'signature'))
+    assert.ok(dragonSlot.choices.some((o) => o.id === a.id));
+});
+
+test('Troubadour rejects other acts, late abilities and stale class choices, and works with every ancestry and standard kit', () => {
+  const { draft, model } = troubadour('Virtuoso');
+  const slot = model.slots.find((s) => s.key === 'troubadour-virtuoso-ability-2');
+  for (const id of [
+    'troubadour-guest-star',
+    'troubadour-jam-session',
+    'troubadour-dramatic-reversal',
+    'talent-mind-spike',
+  ]) {
+    const forged = structuredClone(draft);
+    forged.picks[slot.key] = [id];
+    forged.exceptions[slot.key] = [id];
+    assert.equal(setPick(forged, slot, id, true), false);
+    assert.throws(() => buildSheet(db, forged));
+  }
+  draft.picks.subclass = ['troubadour-auteur'];
+  draft.level = 1;
+  const actions = evaluate(db, draft).actions;
+  assert.ok(actions.some((a) => a.name === 'Blocking'));
+  assert.ok(!actions.some((a) => ['Encore', 'Harmonize', 'Thunder Mother'].includes(a.name)));
+  const { draft: trained } = troubadour('Auteur', 1);
+  for (const k of db.kits) {
+    const at = structuredClone(trained);
+    at.picks['troubadour-kit'] = [k.id];
+    const sheet = buildSheet(db, at);
+    assert.equal(sheet.hero.kit.name, k.name);
+    assert.equal(
+      Object.values(sheet.actions)
+        .flat()
+        .filter((a) => a.id === k.ability.id).length,
+      1,
+    );
+  }
+  for (const a of db.ancestries) assert.ok(troubadour('Virtuoso', 1, {}, a.name).model.complete);
+});

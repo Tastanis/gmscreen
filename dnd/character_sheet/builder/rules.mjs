@@ -76,6 +76,14 @@ export const CLASSES = {
     arrays: martialArrays,
     resource: 'Clarity',
   },
+  troubadour: {
+    name: 'Troubadour',
+    subclassLabel: 'Class act',
+    primary: ['Agility', 'Presence'],
+    potency: 'Presence',
+    arrays: martialArrays,
+    resource: 'Drama',
+  },
 };
 export const newDraft = () => ({
   version: 1,
@@ -220,6 +228,7 @@ export function featureText(f) {
   return distinct(lines.filter(Boolean)).join('\n');
 }
 export function actionLabel(a) {
+  if (a.type?.kind === 'NoAction') return 'No action';
   if (a.type?.kind === 'Maneuver' && a.type.free) return 'Free maneuver';
   if (a.type?.kind === 'Trigger' && (a.type.free || a.type.args?.[1]?.free)) return 'Free triggered action';
   return { Main: 'Main action', Maneuver: 'Maneuver', Trigger: 'Triggered action', Move: 'Move action' }[
@@ -245,7 +254,7 @@ function kitText(kit, level) {
     .join('\n');
 }
 // Each printed signature already includes its original kit. Replace just those bonuses.
-function arsenalSignature(kit, arsenal) {
+function arsenalSignature(kit, arsenal, enhancementTag = 'tactician-arsenal') {
   const ability = kit.ability;
   const modes = ability.distance.map((d) => d.kind);
   const damageChange = (mode) => {
@@ -255,7 +264,7 @@ function arsenalSignature(kit, arsenal) {
   const split = modes.length === 2 && damageChange(modes[0]).some((n, i) => n !== damageChange(modes[1])[i]);
   return {
     ...ability,
-    enhancementTag: 'tactician-arsenal',
+    enhancementTag,
     distance: ability.distance.map((d) => {
       const field = d.kind.toLowerCase() + 'Distance';
       return { ...d, args: [d.args[0] + arsenal[field] - kit[field]] };
@@ -430,12 +439,89 @@ export function evaluate(db, draft) {
   }
   let ancestry, former, career, complication, subclass, incident, deity, kit, battleGear;
   let domains = [];
+  const dramaEvents = new Map();
   const firstDomainAtTier = new Map();
   function visit(f, step, source, prefix = '', earnedAt = 1) {
     const key = prefix + (f.id || f.ability?.id || f.kind);
     const title = featureName(f),
       description = featureText(f);
     const config = { source, description: f.description || '' };
+    if (f.kind === 'Drama') {
+      for (const event of f.events) dramaEvents.set(event.id, { ...event });
+      grants.push({
+        ...f,
+        source,
+        earnedAt,
+        description: [description, ...f.events.map((e) => e.trigger + ' · +' + e.value + ' Drama')].join(
+          '\n',
+        ),
+      });
+      return;
+    }
+    if (f.kind === 'Melodrama') {
+      const selections = [];
+      for (let n = 1; n <= 2; n++) {
+        const available = [
+          ...f.events
+            .filter((e) => !dramaEvents.has(e.id))
+            .map((e) =>
+              option('add-' + e.id, 'Add · ' + e.name, e.trigger + ' · +' + e.value + ' Drama', { event: e }),
+            ),
+          ...Array.from(dramaEvents.values(), (e) =>
+            option(
+              'improve-' + e.id,
+              'Improve · ' + e.name,
+              e.trigger + ' · +' + e.value + ' → +' + (e.value + 1) + ' Drama',
+              { event: e },
+            ),
+          ),
+        ];
+        const [id] = choose(step, key + '-' + n, 'Melodrama · choice ' + n, available, config);
+        if (!id) break;
+        const chosen = available.find((o) => o.id === id);
+        const event = chosen.event;
+        selections.push(chosen.name + ' · ' + chosen.description);
+        dramaEvents.set(event.id, { ...event, value: event.value + Number(id.startsWith('improve-')) });
+      }
+      grants.push({ ...f, source, earnedAt, description: [description, ...selections].join('\n') });
+      return;
+    }
+    if (f.kind === 'Masterwork') {
+      const owned = actions.filter((a) => a.cost === 'signature');
+      const retained = db.kits.find(
+        (k) => k.id === draft.masterworkKitId && k.ability.id === picks[key]?.[0],
+      );
+      if (retained && kit?.id !== retained.id)
+        owned.push(
+          kit ? { ...arsenalSignature(retained, kit, ''), includesKitBonuses: true } : retained.ability,
+        );
+      const [id] = choose(
+        step,
+        key,
+        'Masterwork signature',
+        owned.map((a) =>
+          option(a.id, a.name, abilityText(a), {
+            kitId: a.id === kit?.ability.id ? kit.id : a.id === retained?.ability.id ? retained.id : '',
+          }),
+        ),
+        config,
+      );
+      const chosen = owned.find((a) => a.id === id);
+      if (chosen) {
+        const named = {
+          ...chosen,
+          name: escapeWord(draft.masterworkName) || (escapeWord(draft.name) || 'Hero') + '’s ' + chosen.name,
+          description:
+            chosen.name +
+            ' · ' +
+            chosen.description +
+            '\nMasterwork · Gain an edge and 1 surge usable only on this ability.',
+        };
+        const index = actions.findIndex((a) => a.id === id);
+        if (index < 0) actions.push(named);
+        else actions[index] = named;
+      }
+    }
     if (f.kind === 'SkillChoice') {
       skillQueue.push({ f, key, source, earnedAt });
       return;
@@ -1038,10 +1124,27 @@ export function evaluate(db, draft) {
     domains,
     kit,
     battleGear,
+    dramaEvents: [...dramaEvents.values()],
     culture,
     skills,
     languages,
     actions: actions.map((a) => {
+      if (a.keywords?.includes('Performance') && classId === 'troubadour') {
+        return {
+          ...a,
+          distance: level >= 10 ? [{ kind: 'Encounter map within line of effect' }] : a.distance,
+          sections: a.sections.map((s) =>
+            s.levelDamage
+              ? {
+                  ...s,
+                  ...Object.fromEntries(
+                    s.levelDamage.map((bonus, i) => ['tier' + (i + 1), level + bonus + ' lightning damage']),
+                  ),
+                }
+              : s,
+          ),
+        };
+      }
       if (!a.enhancementTag) return a;
       const upgrades = grants.filter((f) => f.tag === a.enhancementTag);
       return {
@@ -1065,6 +1168,7 @@ export function setPick(draft, slot, id, accepted = false) {
   const previous = slot.selected;
   if (previous.includes(id)) {
     draft.picks[slot.key] = previous.filter((v) => v !== id);
+    if (slot.key === 'troubadour-masterwork') delete draft.masterworkKitId;
     return true;
   }
   if (o.warning && !accepted) return false;
@@ -1076,5 +1180,6 @@ export function setPick(draft, slot, id, accepted = false) {
     draft.picks[slot.key] = [...previous, id];
   }
   if (o.warning) draft.exceptions[slot.key] = distinct([...(draft.exceptions[slot.key] || []), id]);
+  if (slot.key === 'troubadour-masterwork') draft.masterworkKitId = o.kitId;
   return true;
 }

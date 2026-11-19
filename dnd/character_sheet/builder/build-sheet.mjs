@@ -74,7 +74,8 @@ function action(a, r, group) {
     .filter((f) => f.kind === 'AbilityDistance' && matches(f, a))
     .reduce((sum, f) => sum + f.value, 0);
   // The published kit signature card already includes that kit's bonuses.
-  const isKitSignature = a.id === r.kit?.ability?.id || r.kit?.signatureIds?.includes(a.id);
+  const isKitSignature =
+    a.id === r.kit?.ability?.id || r.kit?.signatureIds?.includes(a.id) || a.includesKitBonuses;
   const kit = !isKitSignature && a.keywords?.includes('Weapon') ? r.kit : null;
   const reachModes = ['Melee', 'Ranged'].filter((mode) => a.keywords?.includes(mode));
   const kitDistance = (mode) => kit?.[mode?.toLowerCase() + 'Distance'] || 0;
@@ -136,7 +137,7 @@ function action(a, r, group) {
     id: a.id,
     name: a.name,
     actionLabel:
-      a.type?.free || a.type?.args?.[1]?.free || a.type?.kind === 'Move'
+      a.type?.free || a.type?.args?.[1]?.free || a.type?.kind === 'Move' || a.type?.kind === 'NoAction'
         ? actionLabel(a)
         : ACTION_LABELS[group],
     tags: a.keywords || [],
@@ -293,7 +294,7 @@ function resourceAutomation(r) {
     };
   }
   const damageRules =
-    classId === 'tactician'
+    classId === 'tactician' || classId === 'troubadour'
       ? []
       : classId === 'censor'
         ? [
@@ -322,7 +323,9 @@ function resourceAutomation(r) {
         'turnStart',
         { whose: 'self' },
         'gain',
-        fixed(level >= 10 ? 4 : level >= 7 ? 3 : 2),
+        classId === 'troubadour'
+          ? { dice: '1d3', bonus: level >= 7 ? 1 : 0 }
+          : fixed(level >= 10 ? 4 : level >= 7 ? 3 : 2),
       ),
       ...damageRules,
       rule(classId + '-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
@@ -334,6 +337,14 @@ function roundGain(level) {
 }
 function resourceSummary(r) {
   const resource = r.heroClass.resource;
+  if (r.classId === 'troubadour')
+    return [
+      'Start combat with Drama equal to Victories. Gain ' +
+        (r.level >= 7 ? '1d3 + 1' : '1d3') +
+        ' at the start of each of your turns. Reset Drama to zero at combat end.',
+      ...r.dramaEvents.map((e) => e.trigger + ' · +' + e.value + ' Drama'),
+      'In the encounter in which you died, an intact body can still gain Drama. At 30 Drama you may return with 1 Stamina and 0 Drama.',
+    ].join('\n');
   if (r.classId === 'talent') {
     const gain = r.level === 10 ? '1d3 + 2' : r.level >= 7 ? '1d3 + 1' : '1d3';
     return (

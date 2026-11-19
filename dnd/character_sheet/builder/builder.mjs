@@ -36,6 +36,8 @@ const classInstructions = {
     'Choose a tactical doctrine and two kits. Both kits grant their signatures. Choose which bonus to use when the kits overlap.',
   talent:
     'Choose a tradition, one augmentation, one ward, and two different signatures. At levels 2, 6, and 9, choose one ability from your tradition.',
+  troubadour:
+    'Choose a class act, a kit, and one Troubadour signature. Your act grants performances or features and its own ability choices at levels 2, 6, and 9.',
 };
 function store() {
   try {
@@ -67,6 +69,10 @@ function clean() {
   }
   draft.picks = picks;
   draft.exceptions = exceptions;
+  if (!picks['troubadour-masterwork']) {
+    delete draft.masterworkKitId;
+    delete draft.masterworkName;
+  }
 }
 const stepBtn = (s, text = s) =>
   `<button type="button" data-step="${esc(s)}"${step === s ? ' aria-current="step"' : ''}>${esc(text)}</button>`;
@@ -105,11 +111,19 @@ function card(o, slot) {
     ${o.description || o.warning ? `<details><summary>Rule</summary><p>${esc([o.description, o.warning].filter(Boolean).join('\n'))}</p></details>` : ''}</div>`;
 }
 function field(slot) {
+  const masterwork =
+    slot.key === 'troubadour-masterwork' && slot.selected.length
+      ? '<label>Name your masterwork<input name="masterwork-name" value="' +
+        esc(draft.masterworkName || '') +
+        '" placeholder="' +
+        esc(model.actions.find((a) => a.id === slot.selected[0])?.name) +
+        '"></label>'
+      : '';
   const desc =
     slot.description && slot.description !== slot.title ? `<p class="hint">${esc(slot.description)}</p>` : '';
   return `<fieldset data-slot="${esc(slot.key)}"><legend>${esc(slot.title)}<small>${slot.total}/${slot.count}${slot.points ? ' pts' : ''}</small></legend>
     <p class="source">${esc(slot.source)}</p>${desc}${slot.choices.length > 14 ? `<label class="hint">Filter ${esc(slot.title.toLowerCase())}<input type="search" value="${esc(filters.get(slot.key) || '')}"></label>` : ''}
-    <div class="choices">${slot.choices.map((o) => card(o, slot)).join('')}</div>${!slot.choices.length ? '<p>Complete the earlier choices to unlock this selection.</p>' : ''}</fieldset>`;
+    <div class="choices">${slot.choices.map((o) => card(o, slot)).join('')}</div>${masterwork}${!slot.choices.length ? '<p>Complete the earlier choices to unlock this selection.</p>' : ''}</fieldset>`;
 }
 function review() {
   const boxes = [];
@@ -155,6 +169,7 @@ function review() {
     fury: 'Aspect and kit',
     shadow: 'College and kit',
     tactician: 'Doctrine and Field Arsenal',
+    troubadour: 'Class act and kit',
   }[model.classId];
   if (kitHeading)
     boxes.push(
@@ -296,6 +311,7 @@ document.addEventListener('input', (e) => {
   }
   const property = {
     'hero-name': 'name',
+    'masterwork-name': 'masterworkName',
     'culture-name': 'cultureName',
     'deity-name': 'deityName',
     incident: 'incident',
