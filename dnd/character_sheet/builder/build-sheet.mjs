@@ -20,13 +20,14 @@ function total(r, field, base = 0) {
 }
 export function vitals(r) {
   const size = r.grants.find((f) => f.kind === 'Size') || r.former?.features.find((f) => f.kind === 'Size');
-  const stamina = total(r, 'Stamina'),
+  const kit = r.kit;
+  const stamina = total(r, 'Stamina') + (kit?.stamina || 0) * Math.ceil(r.level / 3),
     recoveries = total(r, 'Recoveries');
   return {
     size: size ? String(size.sizeValue) + (size.sizeMod || '') : '1M',
-    speed: total(r, 'Speed', r.grants.find((f) => f.kind === 'Speed')?.speed || 5),
-    stability: total(r, 'Stability'),
-    disengage: total(r, 'Disengage', 1),
+    speed: total(r, 'Speed', r.grants.find((f) => f.kind === 'Speed')?.speed || 5) + (kit?.speed || 0),
+    stability: total(r, 'Stability') + (kit?.stability || 0),
+    disengage: total(r, 'Disengage', 1) + (kit?.disengage || 0),
     save: Math.min(6, ...r.grants.filter((f) => f.kind === 'SaveThreshold').map((f) => f.value)),
     staminaMax: stamina,
     currentStamina: stamina,
@@ -39,14 +40,17 @@ const types = { Main: 'mains', Maneuver: 'maneuvers', Trigger: 'triggers', Move:
 const characteristics = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' };
 function tier(text, stats, bonus) {
   const t = defaultTestTier(),
-    match = /^(\d+)(?:\s*\+\s*([MARIP](?: or [MARIP])*))?\s+(?:(\w+)\s+)?damage\b[;,.:]?\s*(.*)$/is.exec(
-      text || '',
-    );
+    match =
+      /^(\d+)(?:\s*\+\s*([MARIP](?:(?:,\s*(?:or\s+)?|\s+or\s+)[MARIP])*))?\s+(?:(\w+)\s+)?damage\b[;,.:]?\s*(.*)$/is.exec(
+        text || '',
+      );
   if (!match) {
     t.notes = text || '';
     return t;
   }
-  const modifier = match[2] ? Math.max(...match[2].split(' or ').map((c) => stats[characteristics[c]])) : 0;
+  const modifier = match[2]
+    ? Math.max(...match[2].match(/[MARIP]/g).map((c) => stats[characteristics[c]]))
+    : 0;
   t.damage = String(Number(match[1]) + modifier + bonus);
   t.damageType = match[3] || '';
   t.notes = match[4];
@@ -62,28 +66,52 @@ function action(a, r, group) {
   const rangeBonus = r.grants
     .filter((f) => f.kind === 'AbilityDistance' && matches(f, a))
     .reduce((sum, f) => sum + f.value, 0);
-  const distance = (a.distance || []).map((p) =>
-    p.kind === 'Ranged'
-      ? { ...p, args: [(p.args?.[0] || 5) + rangeBonus] }
-      : p.within && rangeBonus
-        ? { ...p, within: p.within + rangeBonus }
-        : p,
-  );
+  // The published kit signature card already includes that kit's bonuses.
+  const kit = a.id !== r.kit?.ability.id && a.keywords?.includes('Weapon') ? r.kit : null;
+  const reachModes = ['Melee', 'Ranged'].filter((mode) => a.keywords?.includes(mode));
+  const kitDistance = (mode) => kit?.[mode?.toLowerCase() + 'Distance'] || 0;
+  const distance = (a.distance || []).map((p) => {
+    if (p.kind === 'Ranged') return { ...p, args: [(p.args?.[0] || 5) + rangeBonus + kitDistance('Ranged')] };
+    if (p.kind === 'Melee') return { ...p, args: [(p.args?.[0] || 1) + kitDistance('Melee')] };
+    if (p.within) return { ...p, within: p.within + rangeBonus + kitDistance(reachModes[0]) };
+    return p;
+  });
+  const damage = (mode) => kit?.[mode.toLowerCase() + 'Damage'] || [0, 0, 0];
+  const splitRoll =
+    kit && reachModes.length === 2 && damage('Melee').some((v, i) => v !== damage('Ranged')[i]);
+  const modes = splitRoll ? reachModes : [reachModes[0] || ''];
   const sections = a.sections || [];
   const tests = sections
     .filter((s) => s.kind === 'PowerRoll')
-    .map((s, i) => ({
-      id: a.id + '-roll-' + i,
-      label: 'Power Roll · ' + (s.characteristic || []).join(' or '),
-      rollMod: s.characteristic?.length ? String(Math.max(...s.characteristic.map((c) => r.stats[c]))) : '',
-      tiers: Object.fromEntries(
-        ['low', 'mid', 'high'].map((key, i) => [key, tier(s['tier' + (i + 1)], r.stats, bonus)]),
-      ),
-    }));
+    .flatMap((s, i) =>
+      modes.map((mode) => ({
+        id: a.id + '-roll-' + i + (splitRoll ? '-' + mode.toLowerCase() : ''),
+        label: (splitRoll ? mode + ' · ' : '') + 'Power Roll · ' + (s.characteristic || []).join(' or '),
+        rollMod: s.characteristic?.length ? String(Math.max(...s.characteristic.map((c) => r.stats[c]))) : '',
+        tiers: Object.fromEntries(
+          ['low', 'mid', 'high'].map((key, i) => [
+            key,
+            tier(s['tier' + (i + 1)], r.stats, bonus + damage(mode)[i]),
+          ]),
+        ),
+      })),
+    );
   const description = [
     a.description,
     ...abilityLines({ ...a, sections: sections.filter((s) => s.kind !== 'PowerRoll') }),
   ];
+  if (tests.some((test) => Object.values(test.tiers).some((tier) => tier.damage))) {
+    if (r.grants.some((f) => f.id === 'domain-sun-7'))
+      description.push(
+        'Light of the Burning Sun · Deal an extra 5 fire damage to another creature, or 15 if it is undead.',
+      );
+    if (r.grants.some((f) => f.id === 'domain-storm-7'))
+      description.push(
+        'Ride the Lightning · Deal an extra ' + r.stats.Presence + ' lightning damage to another creature.',
+      );
+    if (r.grants.some((f) => f.id === 'domain-death-7'))
+      description.push('Word of Death Deferred · Deal an extra 5 damage to winded creatures.');
+  }
   if (a.name === 'Hurl Element')
     description.push(
       'Can be used as a ranged free strike. Apply fire-specific damage bonuses when choosing fire damage.',
@@ -128,7 +156,9 @@ function weaponStrike(r, melee) {
     'freeStrikes',
   );
 }
-function essence(level) {
+function resourceAutomation(r) {
+  const { level, classId } = r;
+  if (classId === 'null') return structuredClone(r.grants.find((f) => f.id === 'null-resource').automation);
   const fixed = (amount) => ({ amount });
   const rule = (id, event, filter, kind, amount, autoApply = false, limit = null) => ({
     id,
@@ -139,28 +169,45 @@ function essence(level) {
     autoApply,
     enabled: true,
   });
-  const id = 'elementalist-first-damage';
+  const firstDamage = (id, event, filter, amount) =>
+    rule(id, event, filter, 'gain', fixed(amount), false, {
+      scope: 'round',
+      key: id,
+      target: 'self',
+      markOn: 'offered',
+    });
+  const damageRules =
+    classId === 'censor'
+      ? [
+          firstDamage(
+            'censor-damage-dealt',
+            'damageDealt',
+            { whose: 'self', targetWhose: 'judgedTarget' },
+            level >= 4 ? 2 : 1,
+          ),
+          firstDamage('censor-damage-taken', 'damage', { whose: 'self', sourceWhose: 'judgedTarget' }, 1),
+        ]
+      : [
+          firstDamage(
+            'elementalist-first-damage',
+            'damage',
+            { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
+            level >= 4 ? 2 : 1,
+          ),
+        ];
   return {
     schema: 'heroic-resource/v1',
     rules: [
-      rule('elementalist-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+      rule(classId + '-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
       rule(
-        'elementalist-turn',
+        classId + '-turn',
         'turnStart',
         { whose: 'self' },
         'gain',
         fixed(level >= 10 ? 4 : level >= 7 ? 3 : 2),
       ),
-      rule(
-        id,
-        'damage',
-        { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
-        'gain',
-        fixed(level >= 4 ? 2 : 1),
-        false,
-        { scope: 'round', key: id, target: 'self', markOn: 'offered' },
-      ),
-      rule('elementalist-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+      ...damageRules,
+      rule(classId + '-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
     ],
   };
 }
@@ -193,15 +240,28 @@ export function buildSheet(db, draft) {
   const resource = r.heroClass.resource;
   Object.assign(hero.resource, {
     title: resource,
-    automation: isNull
-      ? structuredClone(r.grants.find((f) => f.id === 'null-resource').automation)
-      : essence(r.level),
+    automation: resourceAutomation(r),
   });
   if (r.grants.some((f) => f.id === 'elementalist-1-7a'))
     Object.assign(hero.kit, {
       armor: draft.picks['battle-armor']?.[0] === 'yes' ? 'Light armor' : '',
       weapon: draft.picks['battle-weapon']?.[0] === 'yes' ? 'Light weapon' : '',
     });
+  if (r.kit) {
+    const k = r.kit;
+    Object.assign(hero.kit, {
+      name: k.name,
+      armor: k.armor.join(', ') || 'None',
+      weapon: k.weapon.join(', '),
+    });
+    for (const key of ['speed', 'stability', 'disengage', 'meleeDistance', 'rangedDistance'])
+      hero.kit[key] = String(k[key]);
+    hero.kit.stamina = String(k.stamina * Math.ceil(r.level / 3));
+    for (const mode of ['melee', 'ranged'])
+      ['Low', 'Mid', 'High'].forEach((t, i) => {
+        hero.kit[mode + 'Damage' + t] = String(k[mode + 'Damage']?.[i] || 0);
+      });
+  }
   sheet.sidebar.resource = {
     title: resource,
     text:
@@ -213,7 +273,9 @@ export function buildSheet(db, draft) {
       (r.level >= 4 ? 2 : 1) +
       (isNull
         ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
-        : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
+        : r.classId === 'censor'
+          ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
+          : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
       ' Lose remaining ' +
       resource +
       ' at the end of combat.',
@@ -238,6 +300,8 @@ export function buildSheet(db, draft) {
               : m.value;
       values.set(m.damageType, Math.max(n, values.get(m.damageType) || 0));
     }
+    if (type === 'Immunity' && r.grants.some((f) => f.id === 'domain-sun-7'))
+      values.set('Fire', (values.get('Fire') || 0) + r.level);
     sheet.sidebar.lists[field] = [...values].map(([k, v]) => k + ' ' + v);
   }
   const feature = (id, title, text, tags = []) => ({ id, title, text: html(text), tags, useWhen: '' });

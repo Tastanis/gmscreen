@@ -19,10 +19,15 @@ const instructions = {
   Identity: 'Name your hero and choose a class and level.',
   Ancestry: 'Choose an ancestry, then spend its trait points. Open a rule to read what a trait does.',
   Background: 'Choose the community and career that shaped your hero. A complication is optional.',
-  Class:
-    'Choose your specialization and the features earned at each level. Shared spells are available to every Elementalist.',
   Training: 'Choose skills and languages from each source. Muted choices require a house rule.',
   Review: 'Check the grants and choices before downloading your new hero.',
+};
+const classInstructions = {
+  censor:
+    'Choose your order, deity, domain, and kit. Your order grants its own ability choices at levels 2, 6, and 9.',
+  elementalist:
+    'Choose your specialization and the features earned at each level. Shared spells are available to every Elementalist.',
+  null: 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.',
 };
 function store() {
   try {
@@ -122,6 +127,15 @@ function review() {
       `<section class="review-box"><h3>${esc(name)}</h3><p>${esc(items.filter(Boolean).join(' · ') || '—')}</p></section>`,
     );
   }
+  if (model.classId === 'censor')
+    boxes.push(
+      '<section class="review-box"><h3>Order, faith, and kit</h3><p>' +
+        [model.subclass?.name, model.deity?.name, model.domain?.name, model.kit?.name]
+          .filter(Boolean)
+          .map(esc)
+          .join(' · ') +
+        '</p></section>',
+    );
   for (const [title, entries] of [
     ['Abilities', model.actions.map((a) => [a.name, abilityText(a)])],
     ['Features', model.grants.map((f) => [f.name, f.description])],
@@ -155,12 +169,15 @@ function draw() {
         field(s) +
         (s.key.startsWith('incident-') && model.incident?.id === 'original'
           ? `<label>Your inciting incident<textarea name="incident">${esc(draft.incident)}</textarea></label>`
+          : '') +
+        (s.key === 'censor-1-2' && model.deity?.id === 'custom'
+          ? `<label>Custom deity name<input name="deity-name" maxlength="100" value="${esc(draft.deityName)}"></label>`
           : ''),
     )
     .join('');
   const n = STEPS.indexOf(step);
   $('#main').innerHTML =
-    `<h2>${step}</h2><p>${step === 'Class' && model.classId === 'null' ? 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.' : instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
+    `<h2>${step}</h2><p>${step === 'Class' ? classInstructions[model.classId] : instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
     <div class="controls">${n ? stepBtn(STEPS[n - 1], 'Back') : ''}${n < STEPS.length - 1 ? stepBtn(STEPS[n + 1], 'Next · ' + STEPS[n + 1]) : ''}</div><p class="status" role="status">${esc(status)}</p>`;
   summary();
 }
@@ -249,7 +266,12 @@ document.addEventListener('input', (e) => {
     });
     return;
   }
-  const property = { 'hero-name': 'name', 'culture-name': 'cultureName', incident: 'incident' }[f.name];
+  const property = {
+    'hero-name': 'name',
+    'culture-name': 'cultureName',
+    'deity-name': 'deityName',
+    incident: 'incident',
+  }[f.name];
   if (property) {
     draft[property] = f.value;
     model = evaluate(db, draft);

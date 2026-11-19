@@ -7,7 +7,20 @@ export const ARRAYS = [
   [2, 1, 0, 0],
   [1, 1, 1, 0],
 ];
+const martialArrays = [
+  [2, -1, -1],
+  [1, 1, -1],
+  [1, 0, 0],
+];
 export const CLASSES = {
+  censor: {
+    name: 'Censor',
+    subclassLabel: 'Censor order',
+    primary: ['Might', 'Presence'],
+    potency: 'Presence',
+    arrays: martialArrays,
+    resource: 'Wrath',
+  },
   elementalist: {
     name: 'Elementalist',
     subclassLabel: 'Elemental specialization',
@@ -21,11 +34,7 @@ export const CLASSES = {
     subclassLabel: 'Null tradition',
     primary: ['Agility', 'Intuition'],
     potency: 'Intuition',
-    arrays: [
-      [2, -1, -1],
-      [1, 1, -1],
-      [1, 0, 0],
-    ],
+    arrays: martialArrays,
     resource: 'Discipline',
   },
 };
@@ -168,6 +177,21 @@ export function actionLabel(a) {
     a.type?.kind
   ];
 }
+function kitText(kit) {
+  return [
+    kit.description,
+    kit.equipment,
+    kit.stamina && '+' + kit.stamina + ' Stamina per echelon',
+    ...['speed', 'stability', 'disengage'].filter((k) => kit[k]).map((k) => '+' + kit[k] + ' ' + k),
+    ...['melee', 'ranged'].flatMap((reach) => [
+      kit[reach + 'Damage'] && reach + ' damage ' + kit[reach + 'Damage'].map(plus).join('/'),
+      kit[reach + 'Distance'] && reach + ' distance +' + kit[reach + 'Distance'],
+    ]),
+    kit.ability.name + ' · ' + abilityText(kit.ability),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 export function abilityText(a) {
   const type = actionLabel(a);
   return [
@@ -262,14 +286,14 @@ export function evaluate(db, draft) {
     const [id] = choose(step, key, title, records.map(entry), config);
     return records.find((x) => (x.id ?? x.name) === id);
   }
-  let ancestry, former, career, complication, subclass, incident;
-  function visit(f, step, source, prefix = '', earnedAt = level) {
+  let ancestry, former, career, complication, subclass, incident, deity, domain, kit;
+  function visit(f, step, source, prefix = '', earnedAt = 1) {
     const key = prefix + (f.id || f.ability?.id || f.kind);
     const title = featureName(f),
       description = featureText(f);
     const config = { source, description: f.description || '' };
     if (f.kind === 'SkillChoice') {
-      skillQueue.push({ f, key, source });
+      skillQueue.push({ f, key, source, earnedAt });
       return;
     }
     if (f.kind === 'LanguageChoice') {
@@ -288,6 +312,90 @@ export function evaluate(db, draft) {
         db.ancestries.filter((a) => a.id !== ancestry.id),
         config,
       );
+      return;
+    }
+    if (f.kind === 'DomainChoice') {
+      const records = catalog.deities.map((d) => ({ ...d, description: d.domains.join(', ') }));
+      deity = pickRecord(
+        step,
+        key,
+        'God or saint',
+        [
+          ...records,
+          {
+            id: 'custom',
+            name: 'Custom deity (Director-approved)',
+            description:
+              'Name your deity and choose four domains for their portfolio with your Director’s permission.',
+          },
+        ],
+        config,
+      );
+      if (!deity) return;
+      if (deity.id === 'custom') {
+        const name = escapeWord(draft.deityName);
+        if (!name) errors.push({ step, message: 'Name your custom deity.' });
+        const domains = choose(
+          step,
+          'censor-portfolio',
+          'Deity’s four domains',
+          catalog.domains.map((d) => option(d.name, d.name)),
+          { source: name, count: 4 },
+        );
+        deity = { ...deity, name, domains };
+      }
+      if (deity.id === 'custom' && deity.domains.length !== 4) return;
+      domain = pickRecord(
+        step,
+        'censor-domain',
+        'Domain',
+        catalog.domains
+          .filter((d) => deity.domains.includes(d.name))
+          .map((d) => ({
+            ...d,
+            description: d.featuresByLevel
+              .flatMap((t) =>
+                t.features.map(
+                  (f) =>
+                    'Level ' +
+                    t.level +
+                    ' · ' +
+                    (f.kind === 'SkillChoice'
+                      ? 'One ' + f.listOptions.join(' or ').toLowerCase() + ' skill'
+                      : featureName(f) + '\n' + featureText(f)),
+                ),
+              )
+              .join('\n\n'),
+          })),
+        { source: deity.name },
+      );
+      if (domain)
+        grants.push({
+          id: key,
+          name: 'Deity and domain',
+          kind: 'Text',
+          source,
+          description: deity.name + ' · ' + domain.name + '\nPortfolio · ' + deity.domains.join(', '),
+        });
+      return;
+    }
+    if (f.kind === 'DomainFeature') {
+      const tier = domain?.featuresByLevel.find((t) => t.level === f.level);
+      tier?.features.forEach((child) =>
+        visit(child, step, domain.name + ' · Level ' + earnedAt, prefix, earnedAt),
+      );
+      return;
+    }
+    if (f.kind === 'KitChoice') {
+      const [id] = choose(
+        step,
+        key,
+        'Kit',
+        catalog.kits.map((k) => option(k.id, k.name, kitText(k))),
+        config,
+      );
+      kit = catalog.kits.find((k) => k.id === id);
+      if (kit) actions.push(kit.ability);
       return;
     }
     if (f.kind === 'Choice') {
@@ -313,7 +421,7 @@ export function evaluate(db, draft) {
         ),
         { ...config, count: isBudget ? ancestry.ancestryPoints : f.count || 1, points: isBudget },
       );
-      for (const id of selected) visit(opts.find((o) => o.id === id).child, step, source, prefix);
+      for (const id of selected) visit(opts.find((o) => o.id === id).child, step, source, prefix, earnedAt);
       return;
     }
     if (f.kind === 'ClassAbilityChoice') {
@@ -356,7 +464,7 @@ export function evaluate(db, draft) {
         const perk = available.find((p) => p.id === id);
         usedPerks.add(id);
         grants.push({ id, name: perk.name, description: perk.description, source, kind: 'Perk' });
-        perk.features.forEach((child) => visit(child, step, perk.name, prefix));
+        perk.features.forEach((child) => visit(child, step, perk.name, prefix, earnedAt));
       }
       return;
     }
@@ -369,8 +477,8 @@ export function evaluate(db, draft) {
         [option('no', 'No'), option('yes', 'Yes')],
         config,
       );
-      if (state === 'yes' && f.featureChecked) visit(f.featureChecked, step, title, prefix);
-      if (state === 'no' && f.featureUnchecked) visit(f.featureUnchecked, step, title, prefix);
+      if (state === 'yes' && f.featureChecked) visit(f.featureChecked, step, title, prefix, earnedAt);
+      if (state === 'no' && f.featureUnchecked) visit(f.featureUnchecked, step, title, prefix, earnedAt);
       return;
     }
     if (f.kind === 'ItemChoice') {
@@ -421,8 +529,35 @@ export function evaluate(db, draft) {
             (child.kind !== 'Bonus' || armor === 'yes') &&
             (child.kind !== 'AbilityDamage' || weapon === 'yes'),
         )
-        .forEach((child) => visit(child, step, title, prefix));
-    } else if (f.kind === 'Multiple') f.features.forEach((child) => visit(child, step, title, prefix));
+        .forEach((child) => visit(child, step, title, prefix, earnedAt));
+    } else if (f.kind === 'Multiple')
+      f.features.forEach((child) => visit(child, step, title, prefix, earnedAt));
+    if (f.id === 'censor-10-4' && domain)
+      grants.push({
+        id: 'censor-templar-prayer',
+        name: domain.name + ' domain effect',
+        description: domain.prayer,
+        kind: 'Text',
+        source: 'Templar',
+      });
+    if (f.id === 'censor-10-5' && domain) {
+      for (const d of catalog.domains.filter((d) => d.id !== domain.id && deity.domains.includes(d.name))) {
+        const rules = d.featuresByLevel
+          .flatMap((t) => t.features.filter((f) => f.kind !== 'SkillChoice'))
+          .map((f) => featureName(f) + ' · ' + featureText(f));
+        grants.push({
+          id: 'virtue-reference-' + d.id,
+          name: 'Virtue option · ' + d.name,
+          kind: 'Text',
+          source: 'Virtue',
+          description: [
+            'Spend 3 virtue to access this domain until your next respite.',
+            ...rules,
+            'Domain effect · ' + d.prayer,
+          ].join('\n'),
+        });
+      }
+    }
   }
   ancestry = pickRecord('Ancestry', 'ancestry', 'Ancestry', db.ancestries);
   ancestry?.features.forEach((f) => visit(f, 'Ancestry', ancestry.name));
@@ -500,7 +635,9 @@ export function evaluate(db, draft) {
     const source = heroClass.name + ' · Level ' + tier.level;
     for (const f of tier.features) visit(f, 'Class', source, '', tier.level);
     const specialized = subclass?.featuresByLevel.find((t) => t.level === tier.level);
-    specialized?.features.forEach((f) => visit(f, 'Class', subclass.name + ' · Level ' + tier.level));
+    specialized?.features.forEach((f) =>
+      visit(f, 'Class', subclass.name + ' · Level ' + tier.level, '', tier.level),
+    );
   }
   for (const f of grants.filter((g) => g.kind === 'CharacteristicBonus')) stats[f.characteristic] += f.value;
   const trainingChoices = (list, already, allowed, why) =>
@@ -523,33 +660,38 @@ export function evaluate(db, draft) {
       skills.set(name, q.source);
     }
   };
-  const replacements = [];
-  for (const q of skillQueue)
-    for (const fixed of q.f.selected || []) {
-      if (skills.has(fixed))
-        replacements.push({
-          ...q,
-          key: q.key + '-replace-' + fixed,
-          source: q.source + ' · duplicate ' + fixed,
-        });
-      else skills.set(fixed, q.source);
+  function resolveTraining(queue) {
+    const replacements = [];
+    for (const q of queue)
+      for (const fixed of q.f.selected || []) {
+        if (skills.has(fixed))
+          replacements.push({
+            ...q,
+            key: q.key + '-replace-' + fixed,
+            source: q.source + ' · duplicate ' + fixed,
+          });
+        else skills.set(fixed, q.source);
+      }
+    for (const q of queue.filter((q) => !q.f.selected?.length)) {
+      const allowed = (s) =>
+        (!q.f.options?.length && !q.f.listOptions?.length) ||
+        q.f.options?.includes(s.name) ||
+        q.f.listOptions?.includes(s.list);
+      if (q.f.selectAt === 'respite' && !db.skills.some((s) => allowed(s) && !skills.has(s.name))) continue;
+      openSkill(
+        q,
+        q.f.count || 1,
+        allowed,
+        q.f.listOptions?.length || q.f.options?.length
+          ? 'Choose from ' + [...(q.f.listOptions || []), ...(q.f.options || [])].join(', ') + '.'
+          : 'Choose any available skill.',
+      );
     }
-  for (const q of skillQueue.filter((q) => !q.f.selected?.length)) {
-    const allowed = (s) =>
-      (!q.f.options?.length && !q.f.listOptions?.length) ||
-      q.f.options?.includes(s.name) ||
-      q.f.listOptions?.includes(s.list);
-    openSkill(
-      q,
-      q.f.count || 1,
-      allowed,
-      q.f.listOptions?.length || q.f.options?.length
-        ? 'Choose from ' + [...(q.f.listOptions || []), ...(q.f.options || [])].join(', ') + '.'
-        : 'Choose any available skill.',
-    );
+    for (const q of replacements)
+      openSkill(q, 1, () => true, 'A duplicate fixed grant can be replaced by any skill.');
   }
-  for (const q of replacements)
-    openSkill(q, 1, () => true, 'A duplicate fixed grant can be replaced by any skill.');
+  const library = grants.find((f) => f.id === 'domain-knowledge-7');
+  resolveTraining(library ? skillQueue.filter((q) => q.earnedAt < 7) : skillQueue);
   for (const q of cancelQueue) {
     const eligible = db.skills.filter((s) =>
       q.f.knownSkillsOnly
@@ -568,6 +710,19 @@ export function evaluate(db, draft) {
         kind: 'Text',
       });
     }
+  }
+  if (library) {
+    const lore = db.skills.filter((s) => s.list === 'Lore');
+    const known = lore.filter((s) => skills.has(s.name)).length;
+    for (const s of lore) if (!skills.has(s.name)) skills.set(s.name, library.name);
+    if (known)
+      openSkill(
+        { f: {}, key: 'censor-library-skills', source: library.name },
+        known,
+        (s) => s.list !== 'Lore',
+        'Choose one non-lore skill for each lore skill you already knew.',
+      );
+    resolveTraining(skillQueue.filter((q) => q.earnedAt >= 7));
   }
   for (const [perk, group] of [
     ['perk-area-of-expertise', 'Crafting'],
@@ -617,6 +772,9 @@ export function evaluate(db, draft) {
     incident,
     complication,
     subclass,
+    deity,
+    domain,
+    kit,
     culture,
     skills,
     languages,

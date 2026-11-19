@@ -1430,3 +1430,8 @@ its own competency and pins. The board (period, level, competency, mode, pins) i
 teacher id; opening Grading with no filters restores it. A competency not in the current level falls back to All.
 Verify with asl/tests/grading-pins-browser.test.cjs (PW_CHANNEL=chrome works). The navigation browser test's
 "headings stay pinned" assertion fails identically on the earlier page.
+
+The Table character builder stores independent drafts in the browser and downloads
+native hero files. Keep its rules and tests separate from player-sheet storage.
+For supported classes and the book chapters used by the Censor’s order, domain,
+and kit choices, see `docs/character-builder.md`.

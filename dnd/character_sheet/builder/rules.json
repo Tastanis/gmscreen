@@ -14418,5 +14418,4972 @@
         "abilities": []
       }
     ]
+  },
+  "censor": {
+    "id": "class-censor",
+    "name": "Censor",
+    "description": "Demons and deathless fear you. Criminals run from the sight of your shadow. Agents of chaos, blasphemers, and heretics tremble at the sound of your voice. You carry the power of the gods, armed with wrath and sent out into the world first to seek, then censor those whose actions—or even existence—are anathema to your church.\n\nAs a censor, you’re at your best against the strongest foes. Your judgment terrifies heretics, stops enemies in their tracks, and even hurls them across the battlefield.",
+    "featuresByLevel": [
+      {
+        "level": 1,
+        "features": [
+          {
+            "kind": "Bonus",
+            "id": "censor-stamina",
+            "field": "Stamina",
+            "value": 21,
+            "valuePerLevel": 9
+          },
+          {
+            "kind": "Bonus",
+            "id": "censor-recoveries",
+            "field": "Recoveries",
+            "value": 12
+          },
+          {
+            "kind": "HeroicResource",
+            "id": "censor-resource",
+            "name": "Wrath",
+            "gains": [
+              {
+                "tag": "start",
+                "trigger": "Start of your turn",
+                "value": "2",
+                "frequency": "Per Round",
+                "used": false
+              },
+              {
+                "tag": "take-damage",
+                "trigger": "A creature judged by you deals damage to you",
+                "value": "1",
+                "frequency": "Per Round",
+                "used": false
+              },
+              {
+                "tag": "deal-damage",
+                "trigger": "You deal damage to a creature judged by you",
+                "value": "1",
+                "frequency": "Per Round",
+                "used": false
+              }
+            ],
+            "description": "Start combat with wrath equal to your Victories. Lose remaining wrath at the end of the encounter. Outside combat, each wrath ability or effect is free once until you earn a Victory or finish a respite. For unlimited spending outside combat, use your Victories as the amount spent."
+          },
+          {
+            "kind": "SkillChoice",
+            "id": "censor-1-1",
+            "listOptions": [
+              "Interpersonal",
+              "Lore"
+            ],
+            "count": 2
+          },
+          {
+            "kind": "DomainChoice",
+            "id": "censor-1-2",
+            "characteristic": "Presence",
+            "levels": [
+              1,
+              4,
+              7
+            ]
+          },
+          {
+            "kind": "GrantAbility",
+            "ability": {
+              "kind": "Ability",
+              "id": "censor-1-4",
+              "name": "Judgment",
+              "description": "You utter a prayer that outlines your foe in holy energy.",
+              "type": {
+                "kind": "Maneuver"
+              },
+              "keywords": [
+                "Magic",
+                "Ranged"
+              ],
+              "distance": [
+                {
+                  "kind": "Ranged",
+                  "args": [
+                    10
+                  ]
+                }
+              ],
+              "target": "One enemy",
+              "sections": [
+                {
+                  "kind": "AbilitySectionText",
+                  "args": [
+                    "The target is judged by you until the end of the encounter, you use this ability again, you willingly end this effect (no action required), or another censor judges the target. Whenever a creature judged by you uses a main action and is within your line of effect, you can use a free triggered action to deal holy damage equal to twice your Presence score to them. When a creature judged by you is reduced to 0 Stamina, you can use a free triggered action to use this ability against a new target. Additionally, you can spend 1 wrath to take one of the following free triggered actions: \n• When an adjacent creature judged by you starts to shift, you make a melee free strike against them and their speed becomes 0 until the end of the current turn, preventing them from shifting. \n• When a creature judged by you within 10 squares makes a power roll, you cause them to take a bane on the roll. \n• When a creature judged by you within 10 squares uses an ability with a potency that targets only one creature, the potency is reduced by 1 for that creature. \n• If you damage a creature judged by you with a melee ability, the creature is taunted by you until the end of their next turn. You can choose only one free triggered action option at a time, even if multiple options are triggered by the same effect."
+                  ]
+                }
+              ],
+              "resource": "Wrath",
+              "enhancementTag": "censor-judgment",
+              "automation": {
+                "schema": "ability-automation/v3",
+                "cards": [
+                  {
+                    "id": "judgment-target",
+                    "type": "target",
+                    "name": "primary",
+                    "mode": "token",
+                    "predicate": "enemy",
+                    "count": 1,
+                    "distance": {
+                      "form": "ranged",
+                      "value": 10
+                    }
+                  },
+                  {
+                    "id": "judgment-mark",
+                    "type": "effect",
+                    "target": "primary",
+                    "effects": [
+                      {
+                        "kind": "applyMark",
+                        "markType": "judgment",
+                        "target": "primary"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "kind": "KitChoice",
+            "id": "censor-1-5"
+          },
+          {
+            "kind": "GrantAbility",
+            "ability": {
+              "kind": "Ability",
+              "id": "censor-1-6",
+              "name": "My Life for Yours",
+              "description": "You channel some of your vitality into more resilience for you or an ally.",
+              "type": {
+                "kind": "Trigger",
+                "args": [
+                  "The target starts their turn or takes damage."
+                ]
+              },
+              "keywords": [
+                "Magic",
+                "Ranged"
+              ],
+              "distance": [
+                {
+                  "kind": "Ranged",
+                  "args": [
+                    10
+                  ]
+                }
+              ],
+              "target": "Self or one ally",
+              "sections": [
+                {
+                  "kind": "AbilitySectionText",
+                  "args": [
+                    "You spend a Recovery and the target regains Stamina equal to your recovery value."
+                  ]
+                },
+                {
+                  "kind": "AbilitySectionSpend",
+                  "value": 1,
+                  "effect": "You can end one effect on the target that is ended by a saving throw or that ends at the end of their turn, or a prone target can stand up."
+                }
+              ],
+              "resource": "Wrath",
+              "enhancementTag": "censor-my-life"
+            }
+          },
+          {
+            "kind": "DomainFeature",
+            "id": "censor-1-7",
+            "name": "1st-Level Domain Feature",
+            "level": 1
+          },
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-1-8",
+            "cost": "signature"
+          },
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-1-9",
+            "cost": 3
+          },
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-1-10",
+            "cost": 5
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "features": [
+          {
+            "kind": "Perk",
+            "id": "censor-2-1",
+            "lists": [
+              "Interpersonal",
+              "Lore",
+              "Supernatural"
+            ]
+          }
+        ]
+      },
+      {
+        "level": 3,
+        "features": [
+          {
+            "kind": "Text",
+            "id": "censor-3-1",
+            "name": "Look On My Work and Despair",
+            "description": "Your judgment has grown in divine power, instilling fear in those you condemn. Whenever you use your Judgment ability, you can spend 1 wrath, and if the target has P < [average], they are frightened of you (save ends). Additionally, whenever a creature judged by you is reduced to 0 Stamina and you use Judgment as a free triggered action, if the new target has P < [strong], they are frightened of you (save ends). If the target is already frightened of you, they instead take holy damage equal to twice your Presence score.",
+            "tag": "censor-judgment"
+          },
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-3-2",
+            "cost": 7
+          }
+        ]
+      },
+      {
+        "level": 4,
+        "features": [
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-4-1a",
+            "characteristic": "Might",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-4-1b",
+            "characteristic": "Presence",
+            "value": 1
+          },
+          {
+            "kind": "Perk",
+            "id": "censor-4-2",
+            "lists": [
+              "Crafting",
+              "Exploration",
+              "Interpersonal",
+              "Intrigue",
+              "Lore",
+              "Supernatural"
+            ]
+          },
+          {
+            "kind": "SkillChoice",
+            "id": "censor-4-3",
+            "listOptions": [
+              "Crafting",
+              "Exploration",
+              "Interpersonal",
+              "Lore",
+              "Intrigue"
+            ]
+          },
+          {
+            "kind": "HeroicResourceGain",
+            "id": "censor-4-4",
+            "name": "Wrath Beyond Wrath",
+            "tag": "deal-damage 2",
+            "trigger": "You deal damage to a creature judged by you",
+            "value": "2",
+            "frequency": "Per Round",
+            "replacesTags": [
+              "deal-damage"
+            ]
+          },
+          {
+            "kind": "DomainFeature",
+            "id": "censor-4-5",
+            "name": "4th-Level Domain Feature",
+            "level": 4
+          }
+        ]
+      },
+      {
+        "level": 5,
+        "features": [
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-5-1",
+            "cost": 9
+          }
+        ]
+      },
+      {
+        "level": 6,
+        "features": [
+          {
+            "kind": "Text",
+            "id": "censor-6-1",
+            "name": "Implement of Wrath",
+            "description": "Each time you finish a respite, you can choose one hero’s weapon, including your own, to channel supernatural power as an implement of your god’s wrath. The weapon becomes magic and gains the following benefits until your next respite:\n\n* Strikes with the weapon deal extra holy damage equal to the wielder’s highest characteristic score.\n* Any creature struck by the weapon who has holy weakness and has P < [strong] is frightened and weakened (save ends).\n* Any minion targeted by a strike using the weapon dies. That minion’s Stamina maximum is removed from the minion Stamina pool before any damage is applied to the rest of the squad.\n* The weapon’s wielder can’t be made frightened."
+          },
+          {
+            "kind": "Perk",
+            "id": "censor-6-2",
+            "lists": [
+              "Interpersonal",
+              "Lore",
+              "Supernatural"
+            ]
+          }
+        ]
+      },
+      {
+        "level": 7,
+        "features": [
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-7-1a",
+            "characteristic": "Might",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-7-1b",
+            "characteristic": "Agility",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-7-1c",
+            "characteristic": "Reason",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-7-1d",
+            "characteristic": "Intuition",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-7-1e",
+            "characteristic": "Presence",
+            "value": 1
+          },
+          {
+            "kind": "DomainFeature",
+            "id": "censor-7-2",
+            "name": "7th-Level Domain Feature",
+            "level": 7
+          },
+          {
+            "kind": "HeroicResourceGain",
+            "id": "censor-7-3",
+            "name": "Focused Wrath",
+            "tag": "start 2",
+            "trigger": "Start of your turn",
+            "value": "3",
+            "frequency": "Per Round",
+            "replacesTags": [
+              "start"
+            ]
+          },
+          {
+            "kind": "SkillChoice",
+            "id": "censor-7-4",
+            "listOptions": [
+              "Crafting",
+              "Exploration",
+              "Interpersonal",
+              "Lore",
+              "Intrigue"
+            ]
+          }
+        ]
+      },
+      {
+        "level": 8,
+        "features": [
+          {
+            "kind": "Perk",
+            "id": "censor-8-1",
+            "lists": [
+              "Crafting",
+              "Exploration",
+              "Interpersonal",
+              "Intrigue",
+              "Lore",
+              "Supernatural"
+            ]
+          },
+          {
+            "kind": "ClassAbilityChoice",
+            "id": "censor-8-2",
+            "cost": 11
+          }
+        ]
+      },
+      {
+        "level": 9,
+        "features": [
+          {
+            "kind": "Text",
+            "id": "censor-9-1",
+            "name": "Improved Implement of Wrath",
+            "description": "The weapon you target with your Implement of Wrath feature gains the following additional benefits:\n\n* The weapon’s wielder and each ally adjacent to them gain a +2 bonus to saving throws.\n* At the end of each of the weapon wielder’s turns, each ally adjacent to the wielder makes a saving throw against each effect on them that is ended by a saving throw.\n* The weapon’s wielder has corruption immunity 10."
+          }
+        ]
+      },
+      {
+        "level": 10,
+        "features": [
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-10-1a",
+            "characteristic": "Might",
+            "value": 1
+          },
+          {
+            "kind": "CharacteristicBonus",
+            "id": "censor-10-1b",
+            "characteristic": "Presence",
+            "value": 1
+          },
+          {
+            "kind": "Perk",
+            "id": "censor-10-2",
+            "lists": [
+              "Crafting",
+              "Lore",
+              "Supernatural"
+            ]
+          },
+          {
+            "kind": "SkillChoice",
+            "id": "censor-10-3",
+            "listOptions": [
+              "Crafting",
+              "Exploration",
+              "Interpersonal",
+              "Lore",
+              "Intrigue"
+            ]
+          },
+          {
+            "kind": "Package",
+            "id": "censor-10-4",
+            "name": "Templar",
+            "description": "You are the ultimate representation of your god’s justice in the timescape. Whenever you use your Judgment ability, you can use a free triggered action to use a conduit domain effect associated with your chosen domain, or a domain you access with virtue. If the effect calls for the use of your Intuition score, you use your Presence score instead. If the effect uses your conduit level, use your censor level instead.\n\nAdditionally, whenever you take a respite, you can open a portal to rest in the presence of your deity and bring along any allies. When you do, you can ask your deity three questions, which the Director must answer honestly if your deity knows the answers (though they might answer cryptically or incompletely). When you finish your respite, you and your allies can appear at any location in the timescape where someone worships your deity.\n\nWhile you rest in their presence, your god might also give you priority targets to enact justice upon. You and your allies each have a double edge on power rolls made against such targets. If you attempt to open a portal to your deity again before you have defeated your priority targets, you suffer your god’s wrath, as determined by the Director.",
+            "tag": "conduit-prayer"
+          },
+          {
+            "kind": "HeroicResource",
+            "id": "censor-10-5",
+            "name": "Virtue",
+            "type": "epic",
+            "gains": [
+              {
+                "tag": "respite",
+                "trigger": "Finish a respite",
+                "value": "XP gained",
+                "frequency": "At Will",
+                "used": false
+              }
+            ],
+            "description": "You have an epic resource called virtue. Each time you finish a respite, you gain virtue equal to the XP you gain. You can spend virtue on your abilities as if it were wrath. Additionally, you can spend 3 virtue to access one of your deity’s domains that you usually don’t have access to. When you do, you can use that domain’s features until you finish another respite. Virtue remains until you spend it."
+          },
+          {
+            "kind": "HeroicResourceGain",
+            "id": "censor-10-6",
+            "name": "Wrath of the Gods",
+            "tag": "start 3",
+            "trigger": "Start of your turn",
+            "value": "4",
+            "frequency": "Per Round",
+            "replacesTags": [
+              "start",
+              "start 2"
+            ]
+          }
+        ]
+      }
+    ],
+    "abilities": [
+      {
+        "kind": "Ability",
+        "id": "censor-ability-1",
+        "name": "Back Blasphemer!",
+        "description": "You channel power through your weapon to repel foes.",
+        "type": {
+          "kind": "Main"
+        },
+        "cost": "signature",
+        "keywords": [
+          "Area",
+          "Magic",
+          "Melee",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Cube",
+            "value": 2,
+            "within": 1
+          }
+        ],
+        "target": "Each enemy in the area",
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Presence"
+            ],
+            "tier1": "2 holy damage; push 1",
+            "tier2": "4 holy damage; push 2",
+            "tier3": "6 holy damage; push 3"
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-2",
+        "name": "Every Step … Death!",
+        "description": "You show your foe a glimpse of their fate after death.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Ranged",
+          "Strike"
+        ],
+        "distance": [
+          {
+            "kind": "Ranged",
+            "args": [
+              10
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": "signature",
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Presence"
+            ],
+            "tier1": "5 + P psychic damage",
+            "tier2": "7 + P psychic damage",
+            "tier3": "10 + P psychic damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Each time the target willingly moves before the end of your next turn, they take 1 psychic damage for each square they move."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-3",
+        "name": "Halt Miscreant!",
+        "description": "You infuse your weapon with holy magic that makes it difficult for your foe to get away.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature or object",
+        "cost": "signature",
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "2 + M holy damage; P < [weak], slowed (save ends)",
+            "tier2": "5 + M holy damage; P < [average], slowed (save ends)",
+            "tier3": "7 + M holy damage; P < [strong], slowed (save ends)"
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-4",
+        "name": "Your Allies Cannot Save You!",
+        "description": "Your magic strike turns your foe’s guilt into a burst of holy power.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature or object",
+        "cost": "signature",
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "3 + M holy damage",
+            "tier2": "5 + M holy damage",
+            "tier3": "8 + M holy damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Each enemy adjacent to the target is pushed away from the target up to a number of squares equal to your Presence score."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-5",
+        "name": "Behold a Shield of Faith!",
+        "description": "A mighty blow turns your foe’s vitality into a holy light that envelops you and an ally, discouraging enemies who might attack you.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature or object",
+        "cost": 3,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "3 + M holy damage",
+            "tier2": "6 + M holy damage",
+            "tier3": "9 + M holy damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the start of your next turn, enemies take a bane on ability rolls made against you or any ally adjacent to you."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-6",
+        "name": "Driving Assault",
+        "description": "As you force your enemy back with your weapon, you use your faith to stay close.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature or object",
+        "cost": 3,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "3 + M damage; push 1",
+            "tier2": "6 + M damage; push 3",
+            "tier3": "9 + M damage; push 5"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "You can shift up to your speed in a straight line toward the target after pushing them."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-7",
+        "name": "The Gods Punish and Defend",
+        "description": "You channel holy energy to smite a foe and heal an ally.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature or object",
+        "cost": 3,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "5 + M holy damage",
+            "tier2": "8 + M holy damage",
+            "tier3": "11 + M holy damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "You can spend a Recovery to allow yourself or one ally within 10 squares to regain Stamina equal to your recovery value."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-8",
+        "name": "Repent!",
+        "description": "You conjure memories of their sins to harry your foes.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Ranged",
+          "Strike"
+        ],
+        "distance": [
+          {
+            "kind": "Ranged",
+            "args": [
+              10
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 3,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Presence"
+            ],
+            "tier1": "5 + P holy damage; I < [weak], dazed (save ends)",
+            "tier2": "8 + P holy damage; I < [average], dazed (save ends)",
+            "tier3": "11 + P holy damage; I < [strong], dazed (save ends)"
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-9",
+        "name": "Arrest",
+        "description": "“I got you, you son of a bitch.”",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 5,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "6 + M holy damage; grabbed",
+            "tier2": "9 + M holy damage; grabbed",
+            "tier3": "13 + M holy damage; grabbed"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "If the target makes a strike against a creature while grabbed this way, you can spend 3 wrath to deal holy damage to them equal to your Presence score, then change the target of the strike to another target within the strike’s distance."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-10",
+        "name": "Behold the Face of Justice!",
+        "description": "You attack a foe and your enemies behold a vision of the true nature of your resolve.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Melee",
+          "Ranged",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          },
+          {
+            "kind": "Ranged",
+            "args": [
+              5
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 5,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "3 + M holy damage; if the target has P < [weak], each enemy within 2 squares of them is frightened of you (save ends)",
+            "tier2": "5 + M holy damage; if the target has P < [average], each enemy within 2 squares of them is frightened of you (save ends)",
+            "tier3": "8 + M holy damage; if the target has P < [strong], each enemy within 2 squares of them is frightened of you (save ends)"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Each enemy frightened this way is pushed up to 2 squares away from the target and takes psychic damage equal to your Presence score."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-11",
+        "name": "Censored",
+        "description": "Judged and sentenced.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 5,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "2 + M holy damage",
+            "tier2": "3 + M holy damage",
+            "tier3": "5 + M holy damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "When a target who is not a leader or solo creature is made winded by this ability, they are reduced to 0 Stamina."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-12",
+        "name": "Purifying Fire",
+        "description": "The gods judge, fire cleanses.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Magic",
+          "Melee",
+          "Ranged",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          },
+          {
+            "kind": "Ranged",
+            "args": [
+              5
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 5,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "5 + M holy damage; M < [weak], the target has fire weakness 3 (save ends)",
+            "tier2": "9 + M holy damage; M < [average], the target has fire weakness 5 (save ends)",
+            "tier3": "12 + M holy damage; M < [strong], the target has fire weakness 7 (save ends)"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "While the target has fire weakness from this ability, you can choose to have your abilities deal fire damage to the target instead of holy damage."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 1
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-13",
+        "name": "Edict of Disruptive Isolation",
+        "description": "The evil within your foes detonates with holy fire that burns only the guilty.",
+        "type": {
+          "kind": "Maneuver"
+        },
+        "keywords": [
+          "Area",
+          "Magic"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Aura",
+            "value": 2
+          }
+        ],
+        "target": "Each enemy in the area",
+        "cost": 7,
+        "sections": [
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter or until you are dying, each target takes holy damage equal to your Presence score at the end of each of your turns. A target takes an extra 2d6 holy damage if they are judged by you or if they are adjacent to any enemy."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 3
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-14",
+        "name": "Edict of Perfect Order",
+        "description": "Within the area of your divine presence, your enemies will regret using their fell abilities.",
+        "type": {
+          "kind": "Maneuver"
+        },
+        "keywords": [
+          "Area",
+          "Magic"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Aura",
+            "value": 2
+          }
+        ],
+        "target": "Each enemy in the area",
+        "cost": 7,
+        "sections": [
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter or until you are dying, whenever a target uses an ability that costs Malice (see Draw Steel: Monsters), they take holy damage equal to three times your Presence score. A target judged by you takes an extra 2d6 holy damage."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 3
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-15",
+        "name": "Edict of Purifying Pacifism",
+        "description": "You shed a righteous energy that punishes enemies who would harm you or your allies.",
+        "type": {
+          "kind": "Maneuver"
+        },
+        "keywords": [
+          "Area",
+          "Magic"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Aura",
+            "value": 2
+          }
+        ],
+        "target": "Each enemy in the area",
+        "cost": 7,
+        "sections": [
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter or until you are dying, whenever a target makes a strike, they take holy damage equal to twice your Presence score. A target judged by you takes an extra 2d6 holy damage."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 3
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-16",
+        "name": "Edict of Stillness",
+        "description": "The holy aura you project makes it painful for evil-doers to leave your reach.",
+        "type": {
+          "kind": "Maneuver"
+        },
+        "keywords": [
+          "Area",
+          "Magic"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Aura",
+            "value": 2
+          }
+        ],
+        "target": "Each enemy in the area",
+        "cost": 7,
+        "sections": [
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter or until you are dying, whenever a target moves or is force moved out of the area, they take holy damage equal to twice your Presence score. A target judged by you who moves willingly takes an extra 2d6 holy damage."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 3
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-17",
+        "name": "Gods Grant Thee Strength",
+        "description": "You channel divine force for movement that cannot be stopped.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Ranged"
+        ],
+        "distance": [
+          {
+            "kind": "Ranged",
+            "args": [
+              10
+            ]
+          }
+        ],
+        "target": "Self or one ally",
+        "cost": 9,
+        "sections": [
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "The target ends any condition or effect on them that is ended by a saving throw or that ends at the end of their turn, or a prone target can stand up. The target then gains 2 surges, can shift up to their speed while ignoring difficult terrain, and can use a strike signature ability as a free triggered action."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 5
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-18",
+        "name": "Orison of Victory",
+        "description": "You channel your god’s will to overcome hardship and inflict pain.",
+        "type": {
+          "kind": "Maneuver"
+        },
+        "keywords": [
+          "Area"
+        ],
+        "distance": [
+          {
+            "kind": "Distance",
+            "type": "Burst",
+            "value": 1
+          }
+        ],
+        "target": "Self and each ally in the area",
+        "cost": 9,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Presence"
+            ],
+            "tier1": "Each target gains 1 surge.",
+            "tier2": "Each target gains 2 surges.",
+            "tier3": "Each target gains 3 surges."
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "A target can end one effect on them that is ended by a saving throw or that ends at the end of their turn, or a prone target can stand up."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 5
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-19",
+        "name": "Righteous Judgment",
+        "description": "You amplify the power of your judgment.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 9,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "10 + M damage",
+            "tier2": "14 + M damage",
+            "tier3": "20 + M damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter, whenever any ally deals damage to a target judged by you, that ally gains 1 surge."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 5
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-20",
+        "name": "Shield of the Righteous",
+        "description": "You strike a foe and create a fleet of divine shields that protect your allies.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 9,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "10 + M damage; you and each ally adjacent to you gain 10 temporary Stamina",
+            "tier2": "14 + M damage; you and each ally adjacent to you gain 15 temporary Stamina",
+            "tier3": "20 + M damage; you and each ally adjacent to you gain 20 temporary Stamina"
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 5
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-21",
+        "name": "Excommunication",
+        "description": "You curse your foe to become a bane to their allies.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 11,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "9 + M damage; I < [weak], weakened (save ends)",
+            "tier2": "13 + M damage; I < [average], weakened (save ends)",
+            "tier3": "18 + M damage; I < [strong], weakened (save ends)"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "At the end of each of your turns, a target weakened this way deals holy damage equal to twice your Presence score to each enemy within 2 squares of them. Additionally, a target weakened this way can’t be targeted by their allies’ abilities."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 8
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-22",
+        "name": "Hand of the Gods",
+        "description": "You use your foe as a tool against your enemies.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Ranged",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Ranged",
+            "args": [
+              10
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 11,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "10 + M damage",
+            "tier2": "15 + M damage",
+            "tier3": "21 + M damage"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "Until the end of the encounter, while the target is judged by you, you can choose to make them the source of any of your abilities. Additionally, the target counts as an ally for the purpose of flanking."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 8
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-23",
+        "name": "Pillar of Holy Fire",
+        "description": "Your enemy’s guilt fuels a holy flame that burns your foes.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Melee",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Melee",
+            "args": [
+              1
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 11,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Might"
+            ],
+            "tier1": "9 + M damage; I < [weak], dazed (save ends)",
+            "tier2": "13 + M damage; I < [average], dazed (save ends)",
+            "tier3": "18 + M damage; I < [strong], dazed (save ends)"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "At the end of each of your turns, a target dazed this way deals holy damage equal to twice your Presence score to each enemy within 2 squares of them."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 8
+      },
+      {
+        "kind": "Ability",
+        "id": "censor-ability-24",
+        "name": "Your Allies Turn on You!",
+        "description": "You turn your enemies’ ire to the target.",
+        "type": {
+          "kind": "Main"
+        },
+        "keywords": [
+          "Ranged",
+          "Strike",
+          "Weapon"
+        ],
+        "distance": [
+          {
+            "kind": "Ranged",
+            "args": [
+              10
+            ]
+          }
+        ],
+        "target": "One creature",
+        "cost": 11,
+        "sections": [
+          {
+            "kind": "PowerRoll",
+            "characteristic": [
+              "Presence"
+            ],
+            "tier1": "5 + P damage; I < [weak], slowed (save ends)",
+            "tier2": "9 + P damage; I < [average], slowed (save ends)",
+            "tier3": "12 + P damage; I < [strong], slowed (save ends)"
+          },
+          {
+            "kind": "AbilitySectionText",
+            "args": [
+              "While the target is slowed this way, each of their allies who starts their turn within 5 squares of them must use a free maneuver to make a free strike against the target. Additionally, while the target is slowed this way, each of their allies within 5 squares of them who can make a triggered free strike against a different creature must make the free strike against the target instead."
+            ]
+          }
+        ],
+        "resource": "Wrath",
+        "minLevel": 8
+      }
+    ],
+    "subclasses": [
+      {
+        "id": "censor-sub-1",
+        "name": "Exorcist",
+        "description": "You specialize in hunting your order’s hidden enemies, knowing that an open mind is an unguarded fortress.",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "SkillChoice",
+                "id": "censor-sub-1-1-1",
+                "selected": [
+                  "Read Person"
+                ]
+              },
+              {
+                "kind": "PackageContent",
+                "id": "censor-sub-1-1-2",
+                "name": "Judgment Order Benefit",
+                "description": "The first time on a turn that you use your Judgment ability to judge a creature, you can teleport up to a number of squares equal to twice your Presence score. This movement must take you closer to the judged creature. You do not need line of effect to your destination.",
+                "tag": "censor-judgment"
+              }
+            ]
+          },
+          {
+            "level": 2,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-1-2-1",
+                "name": "Saint’s Vigilance",
+                "description": "You have honed your ability to detect sin and can use it to find those who hide from justice. Any creature judged by you can’t use the Hide maneuver. Additionally, you gain an edge when searching for hidden creatures. If you find a hidden creature, you can use your Judgment ability against them as a free triggered action."
+              },
+              {
+                "kind": "Text",
+                "id": "censor-sub-1-2-2",
+                "name": "A Sense for Truth",
+                "description": "You are trained in secret techniques from your order that allow you to discern the truth with supernatural precision. If a creature is of a lower level than you, you automatically know when they are lying, though you don’t necessarily know the actual truth behind their lie. Additionally, you gain an edge on tests made to detect lies or hidden motives."
+              },
+              {
+                "kind": "Choice",
+                "id": "censor-sub-1-2-3",
+                "name": "2nd-Level Exorcist Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-2-3a",
+                        "name": "It Is Justice You Fear",
+                        "description": "I am but a vessel. Your own deeds weigh upon you.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged",
+                          "Strike"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Might"
+                            ],
+                            "tier1": "8 + M holy damage; P < [weak], frightened (save ends)",
+                            "tier2": "12 + M holy damage; P < [average], frightened (save ends)",
+                            "tier3": "15 + M holy damage; P < [strong], frightened (save ends)"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "If the target is already frightened of you or another creature and this ability would frighten them again, they instead take psychic damage equal to twice your Presence score."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-2-3b",
+                        "name": "Revelator",
+                        "description": "You channel holy energy to harm unbelievers and reveal those hidden from your judgment.",
+                        "type": {
+                          "kind": "Maneuver"
+                        },
+                        "keywords": [
+                          "Area",
+                          "Magic"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Distance",
+                            "type": "Burst",
+                            "value": 3
+                          }
+                        ],
+                        "target": "Each enemy in the area",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Each target takes holy damage equal to twice your Presence score. Additionally, each hidden target is automatically revealed and can’t become hidden again until the start of your next turn. You can then use your Judgment ability against one target as a free triggered action."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 3,
+            "features": []
+          },
+          {
+            "level": 4,
+            "features": []
+          },
+          {
+            "level": 5,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-1-3-1",
+                "name": "Evil Revealed",
+                "description": "Your order has taught you methods to discern the disguises of both mortals and monsters. You automatically see through disguises and illusions created by creatures of your level or lower, and you gain an edge on tests made to see through the disguises and illusions of more powerful creatures. Whenever you see through a creature’s disguise or illusion, you can use your Judgment ability against them as a free triggered action."
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-1-4-1",
+                "name": "6th-Level Exorcist Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-4-1a",
+                        "name": "Begone!",
+                        "description": "You terrify your enemies into retreating, creating chaos in their ranks.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Area",
+                          "Magic"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Distance",
+                            "type": "Burst",
+                            "value": 3
+                          }
+                        ],
+                        "target": "Each enemy in the area",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Presence"
+                            ],
+                            "tier1": "4 psychic damage; slide 3",
+                            "tier2": "6 psychic damage; slide 5",
+                            "tier3": "8 psychic damage; slide 7"
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-4-1b",
+                        "name": "Pain of Your Own Making",
+                        "description": "You reverse the effects from an evildoer.",
+                        "type": {
+                          "kind": "Trigger",
+                          "free": true,
+                          "args": [
+                            "The target gains a condition or effect that is ended by a saving throw or that ends at the end of their turn."
+                          ]
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "Self or one ally",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "The effect ends on the target and is applied to the creature who imposed the effect on them. That creature also takes damage equal to three times your Presence score."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": []
+          },
+          {
+            "level": 8,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-1-5-1",
+                "name": "Demonologist",
+                "description": "The most esoteric secrets of your order teach you that to defeat your enemy, you must understand them. You treat your Renown as 2 higher than usual when dealing with demons, devils, and other agents of chaos. If you successfully complete a negotiation with one of these creatures, you gain an edge on power rolls made against them and can use your Judgment ability against them as a free triggered action before an encounter begins."
+              }
+            ]
+          },
+          {
+            "level": 9,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-1-6-1",
+                "name": "9th-Level Exorcist Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-6-1a",
+                        "name": "Banish",
+                        "description": "You sever the target’s tenuous connection to the world.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Melee",
+                          "Strike",
+                          "Weapon"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Melee",
+                            "args": [
+                              1
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Might"
+                            ],
+                            "tier1": "5 + M damage; P < [weak], the target is banished (save ends)",
+                            "tier2": "8 + M damage; P < [average], the target is banished (save ends)",
+                            "tier3": "11 + M damage; P < [strong], the target is banished (save ends)"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "This ability gains an edge against demons, devils, undead, and creatures not native to your current world. If you know the target’s true name, this ability has a double edge. While banished, the target is sent to another manifold in the timescape and removed from the encounter map. A banished target can do nothing but make saving throws, and takes 10 holy damage each time they do so. If the target is reduced to 0 Stamina while banished, they are lost to the timescape."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-1-6-1b",
+                        "name": "Terror Manifest",
+                        "description": "“I know what you fear.”",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged",
+                          "Strike"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Presence"
+                            ],
+                            "tier1": "7 + P psychic damage; P < [weak], frightened (save ends)",
+                            "tier2": "10 + P psychic damage; P < [average], frightened (save ends)",
+                            "tier3": "13 + P psychic damage; P < [strong], frightened (save ends)"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "While frightened this way, if a target who is a leader or solo creature is winded, they take an extra 25 psychic damage. If a target frightened this way is not a leader or solo creature and is winded, they are reduced to 0 Stamina."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "features": []
+          }
+        ]
+      },
+      {
+        "id": "censor-sub-2",
+        "name": "Oracle",
+        "description": "Corruption has deep tendrils that can be missed, leading you to specialize in uncovering clandestine threats to your order.",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "SkillChoice",
+                "id": "censor-sub-2-1-1",
+                "selected": [
+                  "Magic"
+                ]
+              },
+              {
+                "kind": "PackageContent",
+                "id": "censor-sub-2-1-2",
+                "name": "Judgment Order Benefit",
+                "description": "The first time on a turn that you use your Judgment ability to judge a creature, you can deal holy damage equal to twice your Presence score to the judged creature.",
+                "tag": "censor-judgment"
+              }
+            ]
+          },
+          {
+            "level": 2,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-2-2-1",
+                "name": "It Was Foretold",
+                "description": "Your order has trained you to understand fragments of the visions granted to you by your deity, giving you a momentary advantage in challenging situations. At the start of an encounter, you can take one main action before any other creature and before your first turn. Additionally, whenever the Director calls for a montage test, you can make one free test before the montage begins, which counts as an earned success or failure as usual."
+              },
+              {
+                "kind": "Text",
+                "id": "censor-sub-2-2-2",
+                "name": "Judge of Character",
+                "description": "Your focus on your fragmentary visions grants divine insight into the world and its creatures beyond your usual senses. Whenever you would make an Intuition test, you can make a Presence test instead."
+              },
+              {
+                "kind": "Choice",
+                "id": "censor-sub-2-2-3",
+                "name": "2nd-Level Oracle Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-2-3a",
+                        "name": "Prescient Grace",
+                        "description": "Gifted by a prescient vision, you warn an ally of an impending attack.",
+                        "type": {
+                          "kind": "Trigger",
+                          "args": [
+                            "An enemy within 10 squares starts their turn."
+                          ]
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "Self or one ally",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "You can spend a Recovery to allow the target to regain Stamina equal to your recovery value. The target can then take their turn immediately before the triggering enemy."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-2-3b",
+                        "name": "With My Blessing",
+                        "description": "A word in prayer, and the gods show the way.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "Self or one ally",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "The target can use a free triggered action to use a strike signature ability or a strike heroic ability, and has a double edge on that ability. If a heroic ability is chosen, reduce its Heroic Resource cost by 3 (to a minimum cost of 0)."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 3,
+            "features": []
+          },
+          {
+            "level": 4,
+            "features": []
+          },
+          {
+            "level": 5,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-2-3-1",
+                "name": "Prophecy",
+                "description": "You can better sift through the constant fragmentary visions from your deity and act to make them manifest. Each time you earn 1 or more Victories, you can make a number of 2d10 rolls equal to the number of Victories you earned. Record each roll in order. Then whenever you or a creature within 10 squares makes a power roll, you can use a free triggered action to replace the total on the dice with your first recorded roll. You discard each roll as it is used, and each time you earn Victories, you add new rolls to the bottom of the list. Any unused rolls are discarded when you finish a respite."
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-2-4-1",
+                "name": "6th-Level Oracle Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-4-1a",
+                        "name": "Burden of Evil",
+                        "description": "You reveal a vision of your enemies’ fate that causes them to scramble as it staggers them.",
+                        "type": {
+                          "kind": "Maneuver"
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged",
+                          "Strike"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "Three enemies",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Presence"
+                            ],
+                            "tier1": "Slide 3; I < [weak], dazed (save ends)",
+                            "tier2": "Slide 5; I < [average], dazed (save ends)",
+                            "tier3": "Slide 7; I < [strong], dazed (save ends)"
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-4-1b",
+                        "name": "Edict of Peace",
+                        "description": "You anticipate your foes’ moves and deny them.",
+                        "type": {
+                          "kind": "Maneuver"
+                        },
+                        "keywords": [
+                          "Area",
+                          "Magic"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Distance",
+                            "type": "Aura",
+                            "value": 3
+                          }
+                        ],
+                        "target": "Each enemy in the area",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Until the end of the encounter or until you are dying, whenever any target takes a triggered action or a free triggered action, that action is negated and the target takes holy damage equal to your Presence score."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": []
+          },
+          {
+            "level": 8,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-2-5-1",
+                "name": "Their Past Revealed",
+                "description": "Your constant fragmentary visions become clearer, and can be honed to understand the past of creatures you interact with. While speaking with any creature, you can make a medium Presence test to see visions from their past. On a success, you see a clear view of any subject related to the creature’s past that you wish to understand. On a success with a consequence, you see two visions, one false and one true. On a failure, you lose 2d6 Stamina."
+              }
+            ]
+          },
+          {
+            "level": 9,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-2-6-1",
+                "name": "9th-Level Oracle Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-6-1a",
+                        "name": "Blessing and a Curse",
+                        "description": "The gods bless and damn in equal measure.",
+                        "type": {
+                          "kind": "Trigger",
+                          "args": [
+                            "The target makes a power roll."
+                          ]
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "The target obtains a tier 1 or tier 3 outcome on their power roll (your choice). You can then choose another target within distance, who obtains the opposite outcome on their next power roll."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-2-6-1b",
+                        "name": "Fulfill Your Destiny",
+                        "description": "You have looked at various futures, and only this one works.",
+                        "type": {
+                          "kind": "Trigger",
+                          "args": [
+                            "You or another hero ends their turn."
+                          ]
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "One ally",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "The target takes their turn after the triggering hero, and immediately removes all conditions and negative effects on themself. During their turn, the target has a double edge on power rolls."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "features": []
+          }
+        ]
+      },
+      {
+        "id": "censor-sub-3",
+        "name": "Paragon",
+        "description": "Without a strong example and a firm hand, the weak will be corrupted. You specialize in setting an example for your order.",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "SkillChoice",
+                "id": "censor-sub-3-1-1",
+                "selected": [
+                  "Lead"
+                ]
+              },
+              {
+                "kind": "PackageContent",
+                "id": "censor-sub-3-1-2",
+                "name": "Judgment Order Benefit",
+                "description": "The first time on a turn that you use your Judgment ability to judge a creature, you can vertical pull the judged creature up to a number of squares equal to twice your Presence score.",
+                "tag": "censor-judgment"
+              }
+            ]
+          },
+          {
+            "level": 2,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-3-2-1",
+                "name": "Lead by Example",
+                "description": "Your devotion to your deity allows you to take command of the battlefield, letting your allies benefit from your wisdom. While you are adjacent to a creature, your allies gain the benefits of flanking against that creature. Additionally, your allies gain an edge on tests made to aid other creatures with their tests."
+              },
+              {
+                "kind": "Text",
+                "id": "censor-sub-3-2-2",
+                "name": "Stalwart Icon",
+                "description": "You exhibit a small spark of your deity’s power, causing creatures to trust or fear you, depending on what you need. You gain an edge on tests made to intimidate or persuade others."
+              },
+              {
+                "kind": "Choice",
+                "id": "censor-sub-3-2-3",
+                "name": "2nd-Level Paragon Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-2-3a",
+                        "name": "Blessing of the Faithful",
+                        "description": "The gods reward your faith.",
+                        "type": {
+                          "kind": "Maneuver"
+                        },
+                        "keywords": [
+                          "Area",
+                          "Magic"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Distance",
+                            "type": "Aura",
+                            "value": 3
+                          }
+                        ],
+                        "target": "Self and each ally in the area",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Until the end of the encounter or until you are dying, each target gains 1 surge at the end of each of your turns."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-2-3b",
+                        "name": "Sentenced",
+                        "description": "The shock of your condemnation freezes your enemy in their boots.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Melee",
+                          "Strike",
+                          "Weapon"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Melee",
+                            "args": [
+                              1
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 5,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Presence"
+                            ],
+                            "tier1": "5 + P damage; P < [weak], restrained (save ends)",
+                            "tier2": "9 + P damage; P < [average], restrained (save ends)",
+                            "tier3": "12 + P damage; P < [strong], restrained (save ends)"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "While the target is restrained this way, your abilities that impose forced movement can still move them."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 3,
+            "features": []
+          },
+          {
+            "level": 4,
+            "features": []
+          },
+          {
+            "level": 5,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-3-3-1",
+                "name": "Stand Fast!",
+                "description": "Your divine spark grows in power, allowing you and your allies to focus and endure. At the start of each of your turns, you can spend 1d6 Stamina to end one effect on you that is ended by a saving throw or that ends at the end of your turn. Any ally who starts their turn within 5 squares of you can also spend Stamina to gain this benefit."
+              }
+            ]
+          },
+          {
+            "level": 6,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-3-4-1",
+                "name": "6th-Level Paragon Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-4-1a",
+                        "name": "Congregation",
+                        "description": "You focus your allies’ wrath on a chosen foe.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Melee",
+                          "Strike",
+                          "Weapon"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Melee",
+                            "args": [
+                              1
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Might"
+                            ],
+                            "tier1": "8 + M damage; as a free triggered action, one ally within 10 squares of the target can use a strike signature ability against the target",
+                            "tier2": "12 + M damage; as a free triggered action, one ally within 10 squares of the target can use a strike signature ability that gains an edge against the target",
+                            "tier3": "16 + M damage; as a free triggered action, two allies within 10 squares of the target can each use a strike signature ability that gains an edge against the target"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Each ally can shift up to 2 squares and gains 2 surges before making the strike."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-4-1b",
+                        "name": "Intercede",
+                        "description": "You take your ally’s place.",
+                        "type": {
+                          "kind": "Trigger",
+                          "free": true,
+                          "args": [
+                            "A creature makes a strike against the target."
+                          ]
+                        },
+                        "keywords": [
+                          "Magic",
+                          "Ranged"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Ranged",
+                            "args": [
+                              10
+                            ]
+                          }
+                        ],
+                        "target": "One ally",
+                        "cost": 9,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "The target is unaffected by the strike and you become the target instead, even if you aren’t a valid target for it. You take half the damage from the strike, and the target gains 3 surges."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": []
+          },
+          {
+            "level": 8,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "censor-sub-3-5-1",
+                "name": "Vow",
+                "description": "Your words take on the power of your deity, with all the authority that entails. If you convince a creature to take an oath, they can’t break it for 7 days. If you take an oath, you can’t break it for 7 days."
+              }
+            ]
+          },
+          {
+            "level": 9,
+            "features": [
+              {
+                "kind": "Choice",
+                "id": "censor-sub-3-6-1",
+                "name": "9th-Level Paragon Ability",
+                "options": [
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-6-1a",
+                        "name": "Apostate",
+                        "description": "You channel holy energy to seal an enemy’s fate.",
+                        "type": {
+                          "kind": "Main"
+                        },
+                        "keywords": [
+                          "Melee",
+                          "Strike",
+                          "Weapon"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Melee",
+                            "args": [
+                              1
+                            ]
+                          }
+                        ],
+                        "target": "One creature",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "PowerRoll",
+                            "characteristic": [
+                              "Might"
+                            ],
+                            "tier1": "13 + M holy damage",
+                            "tier2": "19 + M holy damage",
+                            "tier3": "26 + M holy damage"
+                          },
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Until the end of the encounter or until you are dying, the target has damage weakness 10."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  },
+                  {
+                    "feature": {
+                      "kind": "GrantAbility",
+                      "ability": {
+                        "kind": "Ability",
+                        "id": "censor-sub-3-6-1b",
+                        "name": "Edict of Unyielding Resolve",
+                        "description": "You and your allies are clad in shimmering armor.",
+                        "type": {
+                          "kind": "Maneuver"
+                        },
+                        "keywords": [
+                          "Area",
+                          "Magic"
+                        ],
+                        "distance": [
+                          {
+                            "kind": "Distance",
+                            "type": "Aura",
+                            "value": 2
+                          }
+                        ],
+                        "target": "Self and each ally in the area",
+                        "cost": 11,
+                        "sections": [
+                          {
+                            "kind": "AbilitySectionText",
+                            "args": [
+                              "Until the end of the encounter or until you are dying, each target who starts their turn in the area gains 10 temporary Stamina."
+                            ]
+                          }
+                        ],
+                        "resource": "Wrath"
+                      }
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": 10,
+            "features": []
+          }
+        ]
+      }
+    ],
+    "deities": [
+      {
+        "name": "Adûn",
+        "domains": [
+          "Creation",
+          "Life",
+          "Love",
+          "Protection"
+        ]
+      },
+      {
+        "name": "Cavall",
+        "domains": [
+          "Life",
+          "Love",
+          "Protection",
+          "War"
+        ]
+      },
+      {
+        "name": "Cyrvis",
+        "domains": [
+          "Death",
+          "Fate",
+          "Knowledge",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Kul",
+        "domains": [
+          "Knowledge",
+          "Life",
+          "Sun",
+          "Trickery",
+          "War"
+        ]
+      },
+      {
+        "name": "Nebular the Star Mother",
+        "domains": [
+          "Creation",
+          "Life",
+          "Love",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Nikros",
+        "domains": [
+          "Death",
+          "Fate",
+          "Storm",
+          "War"
+        ]
+      },
+      {
+        "name": "Ord",
+        "domains": [
+          "Creation",
+          "Knowledge",
+          "Protection",
+          "Sun",
+          "War"
+        ]
+      },
+      {
+        "name": "OV the Wave Pilot",
+        "domains": [
+          "Fate",
+          "Knowledge",
+          "Storm",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Salorna",
+        "domains": [
+          "Life",
+          "Nature",
+          "Storm",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Val",
+        "domains": [
+          "Creation",
+          "Knowledge",
+          "Life",
+          "Nature",
+          "Protection"
+        ]
+      },
+      {
+        "name": "Atossa the Shepherd",
+        "domains": [
+          "Fate",
+          "Protection",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Cho’kassa the Time Rider",
+        "domains": [
+          "Storm",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Draighen the Warden",
+        "domains": [
+          "Nature",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Eriarwen the Wroth",
+        "domains": [
+          "Nature",
+          "Storm"
+        ]
+      },
+      {
+        "name": "Eseld the Eye",
+        "domains": [
+          "Knowledge",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Gaed the Confessor",
+        "domains": [
+          "Love",
+          "Protection"
+        ]
+      },
+      {
+        "name": "Grole the One-Handed",
+        "domains": [
+          "Life",
+          "War"
+        ]
+      },
+      {
+        "name": "Gryffyn the Stout",
+        "domains": [
+          "Creation",
+          "Life"
+        ]
+      },
+      {
+        "name": "Gwenllian the Fell-Handed",
+        "domains": [
+          "Protection",
+          "War"
+        ]
+      },
+      {
+        "name": "Illwyv li Orchiax",
+        "domains": [
+          "Nature",
+          "Protection"
+        ]
+      },
+      {
+        "name": "Khorvath Who Slew a Thousand",
+        "domains": [
+          "Sun",
+          "War"
+        ]
+      },
+      {
+        "name": "Khravila Who Ran Forty Leagues",
+        "domains": [
+          "Knowledge",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Kyruyalka the False Principle",
+        "domains": [
+          "Death",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Lady Magnetar",
+        "domains": [
+          "Life",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Llewellyn the Valiant",
+        "domains": [
+          "Life",
+          "Protection"
+        ]
+      },
+      {
+        "name": "Mahsiti the Weaver",
+        "domains": [
+          "Creation",
+          "Knowledge",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Pentalion the Paladin",
+        "domains": [
+          "Death",
+          "War"
+        ]
+      },
+      {
+        "name": "Prexaspes the Stargazer",
+        "domains": [
+          "Nature",
+          "Protection",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Ripples of Honey on a Shore of Gold",
+        "domains": [
+          "Life",
+          "Protection"
+        ]
+      },
+      {
+        "name": "A Sea of Suns",
+        "domains": [
+          "Creation",
+          "Life"
+        ]
+      },
+      {
+        "name": "Stakros the Engineer",
+        "domains": [
+          "Creation",
+          "Knowledge"
+        ]
+      },
+      {
+        "name": "The Taste of Morning",
+        "domains": [
+          "Creation",
+          "Knowledge"
+        ]
+      },
+      {
+        "name": "Thellasko the Great Designer",
+        "domains": [
+          "Knowledge",
+          "War"
+        ]
+      },
+      {
+        "name": "Thyll Hylacae",
+        "domains": [
+          "Life",
+          "Nature"
+        ]
+      },
+      {
+        "name": "Uryal the Subtle",
+        "domains": [
+          "Knowledge",
+          "Trickery"
+        ]
+      },
+      {
+        "name": "Valak-koth the Seeker",
+        "domains": [
+          "Knowledge",
+          "Sun"
+        ]
+      },
+      {
+        "name": "Yllin Dyrvis",
+        "domains": [
+          "Knowledge",
+          "Nature"
+        ]
+      },
+      {
+        "name": "Zarok the Law-Giver",
+        "domains": [
+          "Protection",
+          "War"
+        ]
+      }
+    ],
+    "domains": [
+      {
+        "id": "domain-creation",
+        "name": "Creation",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-creation-1-1",
+                  "name": "Hands of the Maker",
+                  "description": "You craft objects with the power of your mind.",
+                  "type": {
+                    "kind": "Maneuver"
+                  },
+                  "keywords": [
+                    "Magic"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Self"
+                    }
+                  ],
+                  "target": "Self",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "You create a mundane object of size 1S or smaller. You can maintain a number of objects created this way equal to your Presence score. You can destroy an object created this way with a thought, no matter how far you are from it (no action required)."
+                      ]
+                    }
+                  ],
+                  "resource": "Wrath"
+                }
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-creation-1-2",
+                "listOptions": [
+                  "Crafting"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-creation-4",
+                "name": "Improved Hands of the Maker",
+                "description": "When you use your Hands of the Maker ability, you can create a mundane object that is size 2 or smaller."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-creation-7",
+                "name": "Divine Quartermaster",
+                "description": "Each time you finish a respite, you can choose a treasure with a project goal equal to 50 times your level or less. You gain a divine version of this treasure that lasts until you finish another respite or it is consumed."
+              }
+            ]
+          }
+        ],
+        "prayer": "You summon the forces of creation and create a wall of stone within 10 squares whose size is 5 + your Presence score. The wall lasts until the end of the encounter."
+      },
+      {
+        "id": "domain-death",
+        "name": "Death",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-death-1-1",
+                  "name": "Grave Speech",
+                  "description": "You commune with the lingering soul of the recently dead.",
+                  "type": {
+                    "kind": "Maneuver"
+                  },
+                  "keywords": [
+                    "Magic"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Melee",
+                      "args": [
+                        1
+                      ]
+                    }
+                  ],
+                  "target": "One dead creature",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "You can speak to the target if they are a creature who has died within the last 24 hours and who can speak a language you know, even if they are just a head. The target regards you as they would have in life, and you might need to make tests to influence them and convince them to speak with you. The trauma of dying can make a creature’s memory of that event hazy, but the target otherwise knows all they knew in life. After 1 minute, the effect ends. You can’t use this ability on the same creature twice."
+                      ]
+                    }
+                  ],
+                  "resource": "Wrath"
+                }
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-death-1-2",
+                "listOptions": [
+                  "Lore"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-death-4",
+                "name": "Seance",
+                "description": "You can commune with a network of spirits. As a respite activity, you speak the name of a creature who died and isn’t undead. If the creature’s spirit is free and willing to speak with you, they appear and you can have a conversation with them. During this time, the creature responds to you as they would have in life. If the creature isn’t free or willing to appear, you can speak another name or choose another respite activity."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-death-7",
+                "name": "Word of Death Deferred",
+                "description": "You can stop death from taking your allies. When an ally within distance of your My Life for Yours ability dies and you are not dying, you can use a free triggered action to instead have that ally fall unconscious until they regain Stamina. Additionally, your abilities deal an extra 5 damage to winded creatures.",
+                "tag": "censor-my-life"
+              }
+            ]
+          }
+        ],
+        "prayer": "You inflict a deadly curse upon up to two enemies within 10 squares of you. Each target takes corruption damage equal to twice your Presence score."
+      },
+      {
+        "id": "domain-fate",
+        "name": "Fate",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-fate-1-1",
+                "name": "Oracular Visions",
+                "description": "Your deity rewards you with hazy visions of things to come. Each time you earn 1 or more Victories, you earn an equal number of fate points. Whenever you or a creature within 10 squares makes a test, you can spend 1 fate point to tap into a vision of the outcome, granting that creature an edge on the test. You lose any remaining fate points when you finish a respite."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-fate-1-2",
+                "listOptions": [
+                  "Lore"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-fate-4",
+                "name": "Oracular Warning",
+                "description": "Each time you finish a respite, you can share the vague dreams of the future granted to you by the gods with allies who finished the respite with you. These premonitions help you and your allies stay alive, granting each of you temporary Stamina equal to 10 + your level that lasts until you finish another respite."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-fate-7",
+                "name": "Word of Fate Denied",
+                "description": "When an ally within 10 squares takes damage that would leave them dying, you can use a free triggered action to make yourself or another willing creature within 10 squares of you the target of the triggering damage instead. The creature you choose takes the damage and suffers any effects associated with it, and that damage can’t be reduced in any way."
+              }
+            ]
+          }
+        ],
+        "prayer": "You call on the forces of fate to create a reliable future. Choose a creature within 10 squares. That creature automatically gets a tier 1 or tier 3 outcome (your choice) on their next power roll made before the end of the encounter."
+      },
+      {
+        "id": "domain-knowledge",
+        "name": "Knowledge",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-knowledge-1-1",
+                "name": "Blessing of Comprehension",
+                "description": "You can interpret diagrams and charts even if you don’t understand the language associated with them. You are considered fluent in all languages for the purpose of understanding the project source for any crafting or research project (see Chapter 12: Downtime Projects)."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-knowledge-1-2",
+                "listOptions": [
+                  "Lore"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-knowledge-4",
+                "name": "Saint’s Epiphany",
+                "description": "At the start of a respite, you can inspire yourself or another creature taking the same respite with divine knowledge. If the target makes a project roll during this respite, they can add 1d10 plus your Presence score to the roll."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-knowledge-7",
+                "name": "Gods’ Library",
+                "description": "You can gain access to information you need through prayer, so that you no longer require research materials for crafting and research projects (see Chapter 12: Downtime Projects). Additionally, you add your level to project rolls you make for crafting and research projects. You also have any skills in the lore skill group you don’t already have, and you gain a number of skills from any other skill groups equal to the number of skills you had in the lore skill group before you gained this feature."
+              }
+            ]
+          }
+        ],
+        "prayer": "Choose up to five allies within 10 squares of you, or choose yourself instead of one ally. Each target gains 1 surge."
+      },
+      {
+        "id": "domain-life",
+        "name": "Life",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-life-1-1",
+                "name": "Revitalizing Ritual",
+                "description": "Each time you finish a respite, you can choose yourself or one ally who is also finishing a respite to gain the benefit of a divine ritual. The chosen character gains a bonus to their recovery value equal to your level that lasts until you finish another respite."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-life-1-2",
+                "listOptions": [
+                  "Exploration"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-life-4",
+                "name": "Blessing of Life",
+                "description": "Your divine presence causes those you deem worthy to recover quickly from a fight. Whenever an ally within distance of your My Life for Yours ability regains Stamina, they regain additional Stamina equal to your Presence score.",
+                "tag": "censor-my-life"
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-life-7",
+                "name": "Font of Grace",
+                "description": "Each time you use your My Life for Yours ability, you gain 1 wrath that can be spent only on that ability during the same turn. If you don’t use this wrath, it is lost. Additionally, the target of My Life for Yours gains 10 temporary Stamina.",
+                "tag": "censor-my-life"
+              }
+            ]
+          }
+        ],
+        "prayer": "Choose yourself or one ally within 10 squares of you. That character can spend a Recovery, can end one effect on them that is ended by a saving throw or that end at the end of their turn, or can stand up if they are prone. Alternatively, you or one ally within 10 squares gains temporary Stamina equal to 2 times your Presence score."
+      },
+      {
+        "id": "domain-love",
+        "name": "Love",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-love-1-1",
+                "name": "Blessing of Compassion",
+                "description": "You exude a magic presence that can soothe those willing to socially engage with you. You gain an edge on any test made to assist another creature with a test. Additionally, when you are present at the start of a negotiation, one NPC of your choice has their patience increased by 1 (to a maximum of 5), and the first test made to influence them gains an edge."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-love-1-2",
+                "listOptions": [
+                  "Interpersonal"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-love-4",
+                "name": "Invocation of the Heart",
+                "description": "As a main action, you forge a bond of love and friendship with one willing creature you touch. While this bond is active, you can telepathically speak with the creature over any distance, including across different worlds. Additionally, while this bond is active, you can attempt to assist the creature with any test they make regardless of their proximity to you. You can maintain only one bond at a time, and you can end a bond at any time (no action required)."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-love-7-1",
+                "name": "Covenant of the Heart",
+                "description": "You can maintain bonds with up to three willing creatures using your Invocation of the Heart feature. Additionally, you have the following ability."
+              },
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-love-7-2",
+                  "name": "Guided to Your Side",
+                  "description": "You concentrate on a friend and teleport to them.",
+                  "type": {
+                    "kind": "Main"
+                  },
+                  "keywords": [
+                    "Magic",
+                    "Ranged"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Ranged",
+                      "args": [
+                        10
+                      ]
+                    }
+                  ],
+                  "target": "Self and each ally",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "Each target is teleported to unoccupied spaces within 5 squares of a willing creature who you are bonded to with your Invocation of the Heart feature. You don’t need line of effect to the bonded creature but you must be on the same world."
+                      ]
+                    }
+                  ],
+                  "resource": "Wrath"
+                }
+              }
+            ]
+          }
+        ],
+        "prayer": "Each ally within 10 squares of you gains temporary Stamina equal to 2 times your Presence score."
+      },
+      {
+        "id": "domain-nature",
+        "name": "Nature",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-nature-1-1",
+                  "name": "Faithful Friend",
+                  "description": "An animal spirit is drawn to you, sharing their senses with you and serving you faithfully.",
+                  "type": {
+                    "kind": "Main"
+                  },
+                  "keywords": [
+                    "Magic"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Self"
+                    }
+                  ],
+                  "target": "Self",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "You conjure a spirit that takes the form of any animal you have seen. The incorporeal animal has speed 5 and can fly, but can’t physically interact with the world. While you are within 10 squares of the spirit, you automatically sense everything that type of animal would sense, in addition to sensing your own surroundings. You can dismiss the spirit at any time (no action required). If the spirit takes any damage, they are dismissed and you take 1d10 psychic damage that can’t be reduced in any way."
+                      ]
+                    }
+                  ],
+                  "resource": "Wrath"
+                }
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-nature-1-2",
+                "listOptions": [
+                  "Exploration"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-nature-4",
+                "name": "Wode Road",
+                "description": "As a main action, you touch a living tree and make it part of a divine transportation network. You can maintain a number of trees in your network equal to your Presence score. Whenever you touch any tree in your network, you can use a main action to teleport yourself and any willing creatures within 10 squares of you to a tree in your network on the same world. If a tree in your network dies, it is no longer part of the network. You can remove a tree from your network no matter your distance from it, including across different worlds (no action required)."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-nature-7",
+                "name": "Nature’s Bounty",
+                "description": "When you finish a respite, you can prepare a magic meal using local flora for any companions who rested with you. Choose two of the following benefits for creatures who consume the meal: \n• Each creature gains immunity to acid, cold, corruption, fire, lightning, poison, or sonic damage equal to your level. You can choose this benefit twice, choosing a different damage immunity each time. \n• Each creature gains 20 temporary Stamina. \n• Each creature gains a +1 bonus to speed. \n• Each creature gains a +1 bonus to saving throws. \n• Each creature gains an edge on tests made to influence other creatures. Each benefit lasts until the creature who gains it finishes another respite."
+              }
+            ]
+          }
+        ],
+        "prayer": "Vines whip up from the floor or ground within 10 squares, wrapping around a number of creatures of your choice equal to your Presence score. You can slide each creature up to a number of squares equal to your Presence score. The vines then fade away."
+      },
+      {
+        "id": "domain-protection",
+        "name": "Protection",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-protection-1-1",
+                "name": "Protective Circle",
+                "description": "You can spend 10 uninterrupted minutes to create a protective circle on the ground large enough to hold one size 1 creature. The circle lasts for 24 hours, until you create another, or until you dismiss it (no action required). Only creatures you designate at the time of drawing the circle can enter and exit the area. While in the protective circle, a creature can’t be targeted by strikes."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-protection-1-2",
+                "listOptions": [
+                  "Exploration"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-protection-4",
+                "name": "Impervious Touch",
+                "description": "As a maneuver, you can touch an object with a size equal to your Presence score or smaller and place a protective spell on it. The object has immunity all to untyped damage. You can maintain this spell on a number of objects equal to your Presence score, and you can end the spell on any object at any time (no action required). Additionally, you can place this spell on a building or vehicle (or a similar structure with the Director’s approval) that is of a size larger than your Presence score. You can place the spell on only one such target at a time, and you can maintain the spell on a larger target and a number of objects equal to your Presence score simultaneously."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-protection-7",
+                "name": "Blessing of Iron",
+                "description": "The gods send divine favor to you and your allies. While you are not dying, enemies take a bane on strikes against you or any ally within 3 squares of you."
+              }
+            ]
+          }
+        ],
+        "prayer": "One ally within 10 squares gains temporary Stamina equal to four times your Presence score."
+      },
+      {
+        "id": "domain-storm",
+        "name": "Storm",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-storm-1-1",
+                "name": "Blessing of Fortunate Weather",
+                "description": "Each time you finish a respite, you can decide the weather conditions within 100 squares. Until you finish another respite, the weather conditions you establish follow you through any mundane outdoor locations. Choose one of the following types of weather, each of which grants a benefit to you and your allies: Clear: You and your allies gain an edge on tests that use the Search or Navigate skills. Foggy: You and your allies gain an edge on tests that use the Hide skill. Overcast: You and your allies gain an edge on tests that use the Endurance skill. Precipitation: When the ground is muddy or snowy, you and your allies gain an edge on tests that use the Track skill. If you are in the same area as a creature using this or a similar feature who has chosen a different weather effect, the features negate each other where their areas overlap."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-storm-1-2",
+                "listOptions": [
+                  "Exploration"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-storm-4",
+                "name": "Windwalk",
+                "description": "While you have 5 or more Victories, you can fly. If you can already fly, you have a +2 bonus to speed while flying instead."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-storm-7",
+                "name": "Ride the Lightning",
+                "description": "Lightning and thunder infuse your body. Whenever you use an ability to deal rolled damage to another creature, the ability deals extra lightning damage equal to your Presence score. Additionally, if you use an ability that force moves a creature, the forced movement distance gains a bonus equal to your Presence score. While you are under the effect of your Windwalk feature, lightning enhances your locomotion to grant you a bonus to speed equal to your Might score. If Windwalk already grants you a bonus to speed, this bonus adds to that."
+              }
+            ]
+          }
+        ],
+        "prayer": "Each enemy in a 3-cube within 10 squares takes lightning damage equal to twice your Presence score."
+      },
+      {
+        "id": "domain-sun",
+        "name": "Sun",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-sun-1-1",
+                "name": "Inner Light",
+                "description": "Each time you finish a respite, you can choose yourself or one ally who is also finishing a respite to gain the benefit of a divine ritual. You place a ray of morning light into the chosen character’s soul, granting them a +1 bonus to saving throws that lasts until you finish another respite."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-sun-1-2",
+                "listOptions": [
+                  "Lore"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-sun-4",
+                "name": "Light of Revelation",
+                "description": "As a maneuver, you make your body shine brightly, illuminating your space and each square within 5 squares until you dismiss the light (no action required). This light shines through any darkness. Hidden creatures in the area are automatically revealed, and creatures in the light, including you, can’t hide. While this feature is active, you gain an edge on tests made to notice hidden objects and entrances and to detect supernatural illusions."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-sun-7",
+                "name": "Light of the Burning Sun",
+                "description": "Sun infuses your body. Whenever you use an ability to deal rolled damage to another creature, that ability deals an extra 5 fire damage, or an extra 15 fire damage if the creature is undead. Additionally, you have fire immunity equal to your level, which is added to any other fire immunity you have."
+              }
+            ]
+          }
+        ],
+        "prayer": "One enemy within 10 squares takes fire damage equal to three times your Presence score."
+      },
+      {
+        "id": "domain-trickery",
+        "name": "Trickery",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-trickery-1-1",
+                "name": "Inspired Deception",
+                "description": "The gods favor your thievery with magic. Whenever you make a test that uses a skill you have from the intrigue skill group, you can use Presence on the test instead of another characteristic."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-trickery-1-2",
+                "listOptions": [
+                  "Intrigue"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-trickery-4",
+                  "name": "Blessing of Secrets",
+                  "description": "You project an illusory aura that makes you and allies harder to notice.",
+                  "type": {
+                    "kind": "Maneuver"
+                  },
+                  "keywords": [
+                    "Magic"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Distance",
+                      "type": "Aura",
+                      "value": 3
+                    }
+                  ],
+                  "target": "Self and each ally in the area",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "Each creature in the area has a double edge on tests made to hide or sneak. The aura lasts until you end it (no action required) or until a target harms or deals damage to a creature or object."
+                      ]
+                    }
+                  ],
+                  "resource": "Wrath"
+                }
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "GrantAbility",
+                "ability": {
+                  "kind": "Ability",
+                  "id": "domain-trickery-7",
+                  "name": "Trinity of Trickery",
+                  "description": "Hey! I’m over here. No, here, numbskull.",
+                  "type": {
+                    "kind": "Maneuver"
+                  },
+                  "keywords": [
+                    "Magic",
+                    "Ranged"
+                  ],
+                  "distance": [
+                    {
+                      "kind": "Ranged",
+                      "args": [
+                        10
+                      ]
+                    }
+                  ],
+                  "target": "Self or one ally",
+                  "sections": [
+                    {
+                      "kind": "AbilitySectionText",
+                      "args": [
+                        "You create two illusory duplicates of the target, which appear anywhere within distance. These duplicates last until the end of the encounter. On each of their turns, the target can move each duplicate up to their speed. If the target is targeted by an ability, they can use a free triggered action to switch places with a duplicate within their line of effect, making the duplicate the target of the ability instead. When either duplicate takes damage, it is destroyed."
+                      ]
+                    }
+                  ],
+                  "cost": 9,
+                  "resource": "Wrath"
+                }
+              }
+            ]
+          }
+        ],
+        "prayer": "You slide one creature within 10 squares of you up to a number of squares equal to 5 + your censor level."
+      },
+      {
+        "id": "domain-war",
+        "name": "War",
+        "featuresByLevel": [
+          {
+            "level": 1,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-war-1-1",
+                "name": "Sanctified Weapon",
+                "description": "As a respite activity, you can bless a weapon. Any creature who wields the weapon gains a +1 bonus to rolled damage with abilities that use the weapon. This benefit lasts until you finish another respite."
+              },
+              {
+                "kind": "SkillChoice",
+                "id": "domain-war-1-2",
+                "listOptions": [
+                  "Exploration"
+                ]
+              }
+            ]
+          },
+          {
+            "level": 4,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-war-4",
+                "name": "Improved Sanctified Weapon",
+                "description": "The weapon improved by your Sanctified Weapon feature grants a +3 bonus to rolled damage instead of +1."
+              }
+            ]
+          },
+          {
+            "level": 7,
+            "features": [
+              {
+                "kind": "Text",
+                "id": "domain-war-7",
+                "name": "Your Triumphs Are Remembered",
+                "description": "The gods allow you and your companions to bask in the glory of past successes. Whenever you finish a respite, you and any other heroes who rested with you regain 1 Victory after your Victories are converted to XP. This Victory isn’t converted into XP at the end of a subsequent respite."
+              }
+            ]
+          }
+        ],
+        "prayer": "Choose up to three allies within 10 squares of you, or choose yourself instead of one ally. Each target gains 2 surges."
+      }
+    ],
+    "kits": [
+      {
+        "id": "kit-arcane-archer",
+        "name": "Arcane Archer",
+        "description": "The Arcane Archer kit allows you to combine magic and ranged weapon strikes. Your lack of armor keeps you mobile, and your magic makes your arrows explode to devastate your foes.",
+        "armor": [],
+        "weapon": [
+          "Bow"
+        ],
+        "stamina": 0,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": null,
+        "rangedDamage": [
+          2,
+          2,
+          2
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 10,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-arcane-archer-signature",
+          "name": "Exploding Arrow",
+          "description": "Your ammunition explodes with magical energy.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Magic",
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Ranged",
+              "args": [
+                15
+              ]
+            }
+          ],
+          "target": "One creature or object",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Agility",
+                "Reason",
+                "Intuition",
+                "Presence"
+              ],
+              "tier1": "5 + A, R, I, or P fire damage",
+              "tier2": "7 + A, R, I, or P fire damage",
+              "tier3": "10 + A, R, I, or P fire damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "One creature or object of your choice within 2 squares of the target takes fire damage equal to the characteristic score used for this ability’s power roll."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield a bow."
+      },
+      {
+        "id": "kit-battlemind",
+        "name": "Battlemind",
+        "description": "Who says lightly armored heroes can't also be hard to move? You just need to employ some psionics! The Battlemind kit harnesses the power of your mind to make you harder to move—and to make your foes easier to push around.",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Medium Weapon"
+        ],
+        "stamina": 3,
+        "speed": 2,
+        "stability": 1,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-battlemind-signature",
+          "name": "Unmooring",
+          "description": "Your weapon unleashes psionic energy that reduces your target’s weight.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Psionic",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Reason",
+                "Intuition",
+                "Presence"
+              ],
+              "tier1": "5 + M, R, I, or P damage",
+              "tier2": "8 + M, R, I, or P damage",
+              "tier3": "11 + M, R, I, or P damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "Until the end of the target’s next turn, any forced movement that affects the target has its distance increased by 2."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a medium weapon."
+      },
+      {
+        "id": "kit-cloak-and-dagger",
+        "name": "Cloak and Dagger",
+        "description": "Providing throwable light weapons and light armor easily concealed by a cloak to confuse your enemies, the Cloak and Dagger kit makes you more mobile while increasing the effectiveness of your short-range strikes.",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Light Weapon"
+        ],
+        "stamina": 3,
+        "speed": 2,
+        "stability": 0,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": [
+          1,
+          1,
+          1
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 5,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-cloak-and-dagger-signature",
+          "name": "Fade",
+          "description": "A stab, and a few quick, careful steps back.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            },
+            {
+              "kind": "Ranged",
+              "args": [
+                10
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage; you can shift 1 square",
+              "tier2": "6 + M or A damage; you can shift up to 2 squares",
+              "tier3": "8 + M or A damage; you can shift up to 3 squares"
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield one or two light weapons."
+      },
+      {
+        "id": "kit-dual-wielder",
+        "name": "Dual Wielder",
+        "description": "The Dual Wielder kit is for folks who want to excel at using two weapons at the same time. Your fighting style maximizes the power of each weapon you have in hand, making you a whirling dealer of death.",
+        "armor": [
+          "Medium Armor"
+        ],
+        "weapon": [
+          "Light Weapon",
+          "Medium Weapon"
+        ],
+        "stamina": 6,
+        "speed": 2,
+        "stability": 0,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-dual-wielder-signature",
+          "name": "Double Strike",
+          "description": "Why strike once when you could do it twice?",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "Two creatures or objects",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 damage",
+              "tier2": "6 damage",
+              "tier3": "8 damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "If you use this ability on your turn, you can use it against one target, then use your maneuver and your move action for that turn before using the ability against a second target. You still use the same power roll for both targets."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear medium armor and wield a light weapon and a medium weapon."
+      },
+      {
+        "id": "kit-guisarmier",
+        "name": "Guisarmier",
+        "description": "The Guisarmier kit is for those who want to use a polearm for extended reach while remaining protected by sturdy armor. This is the kit that allows you to become the ultimate halberd, longspear, or glaive fighter.",
+        "armor": [
+          "Medium Armor"
+        ],
+        "weapon": [
+          "Polearm"
+        ],
+        "stamina": 6,
+        "speed": 0,
+        "stability": 1,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 1,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-guisarmier-signature",
+          "name": "Forward Thrust, Backward Smash",
+          "description": "In your hands, the haft is as good as the head.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                2
+              ]
+            }
+          ],
+          "target": "Two creatures or objects",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 damage",
+              "tier2": "7 damage",
+              "tier3": "9 damage"
+            }
+          ]
+        },
+        "equipment": "You wear medium armor and wield a polearm."
+      },
+      {
+        "id": "kit-martial-artist",
+        "name": "Martial Artist",
+        "description": "If you want to be fast in a fight, then Martial Artist is the kit for you. Unencumbered by weapons or armor, this fighting style rewards quick, focused unarmed strikes against opponents, and allows you to be the ultimate skirmisher.",
+        "armor": [],
+        "weapon": [
+          "Unarmed Strike"
+        ],
+        "stamina": 3,
+        "speed": 3,
+        "stability": 0,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-martial-artist-signature",
+          "name": "Battle Grace",
+          "description": "You feint to move your enemies into perfect position.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "5 + M or A damage",
+              "tier2": "8 + M or A damage; you can swap places with the target",
+              "tier3": "11 + M or A damage; you can swap places with the target"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "If you obtain a tier 2 or tier 3 outcome and can’t swap places with the target because one or both of you is too big to fit into the swapped space, you both remain in your original spaces and the target takes 1 extra damage."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield only your unarmed strikes."
+      },
+      {
+        "id": "kit-mountain",
+        "name": "Mountain",
+        "description": "The Mountain kit does exactly what it says on the tin. You don heavy armor and raise a heavy weapon to stand strong against your foes, quickly demolishing them when it's your turn to strike.",
+        "armor": [
+          "Heavy Armor"
+        ],
+        "weapon": [
+          "Heavy Weapon"
+        ],
+        "stamina": 9,
+        "speed": 0,
+        "stability": 2,
+        "meleeDamage": [
+          0,
+          0,
+          4
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-mountain-signature",
+          "name": "Pain for Pain",
+          "description": "An enemy who tagged you will pay for that.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage",
+              "tier2": "5 + M or A damage",
+              "tier3": "13 + M or A damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "If the target dealt damage to you since the end of your last turn, this strike deals additional damage equal to your Might or Agility score (your choice)."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear heavy armor and wield a heavy weapon."
+      },
+      {
+        "id": "kit-panther",
+        "name": "Panther",
+        "description": "If you want a good balance of protection, speed, and damage, the Panther kit is for you. This kit increases your Stamina not by wearing armor, but through the focused battle preparation of body and mind, letting you be fast and mobile while swinging a heavy weapon at your foes.",
+        "armor": [],
+        "weapon": [
+          "Heavy Weapon"
+        ],
+        "stamina": 6,
+        "speed": 1,
+        "stability": 1,
+        "meleeDamage": [
+          0,
+          0,
+          4
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-panther-signature",
+          "name": "Devastating Rush",
+          "description": "The faster you move, the harder you hit.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature or object",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage",
+              "tier2": "6 + M or A damage",
+              "tier3": "13 + M or A damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "You can move up to 3 squares straight toward the target before this strike, which deals extra damage equal to the number of squares you move this way."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield a heavy weapon."
+      },
+      {
+        "id": "kit-pugilist",
+        "name": "Pugilist",
+        "description": "Meant for brawlers and boxers, the Pugilist kit gives you access to a melee fighting style that grants a boost to Stamina and damage while allowing you to float like a butterfly. If you want to be a tough, strong hero who doles out punishment with your fists, then this kit is for you.",
+        "armor": [],
+        "weapon": [
+          "Unarmed Strike"
+        ],
+        "stamina": 6,
+        "speed": 2,
+        "stability": 1,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-pugilist-signature",
+          "name": "Let’s Dance",
+          "description": "Keeping your enemies stumbling around the battlefield is second nature to you.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage",
+              "tier2": "6 + M or A damage; slide 1",
+              "tier3": "8 + M or A damage; slide 2"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "You can shift into any square the target leaves after you slide them."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield only your unarmed strikes."
+      },
+      {
+        "id": "kit-raider",
+        "name": "Raider",
+        "description": "The Raider kit keeps you protected while granting you full mobility, providing a boost to speed and distance that lets you run around the battlefield like a Viking warrior.",
+        "armor": [
+          "Light Armor",
+          "Shield"
+        ],
+        "weapon": [
+          "Light Weapon"
+        ],
+        "stamina": 6,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": [
+          1,
+          1,
+          1
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 5,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-raider-signature",
+          "name": "Raider's Awe",
+          "description": "You execute a brutal strike that leaves your foe reeling.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            },
+            {
+              "kind": "Ranged",
+              "args": [
+                10
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage",
+              "tier2": "6 + M or A damage",
+              "tier3": "8 + M or A damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "The target takes a bane on their next power roll made before the end of their next turn."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a shield and a light weapon."
+      },
+      {
+        "id": "kit-ranger",
+        "name": "Ranger",
+        "description": "The Ranger kit outfits you with light armor and weapons for every challenge, letting you easily switch between melee and ranged combat. This kit provides a good balance of bonuses to defense and offense to create a hero who is a jack-of-all-trades.",
+        "armor": [
+          "Medium Armor"
+        ],
+        "weapon": [
+          "Medium Weapon",
+          "Bow"
+        ],
+        "stamina": 6,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": [
+          1,
+          1,
+          1
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 5,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-ranger-signature",
+          "name": "Hamstring Shot",
+          "description": "A well-placed shot leaves your enemy struggling to move.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Ranged",
+              "args": [
+                10
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage; A < [weak], slowed (save ends)",
+              "tier2": "5 + M or A damage; A < [average], slowed (save ends)",
+              "tier3": "7 + M or A damage; A < [strong], slowed (save ends)"
+            }
+          ]
+        },
+        "equipment": "You wear medium armor and wield a bow and a medium weapon."
+      },
+      {
+        "id": "kit-rapid-fire",
+        "name": "Rapid-Fire",
+        "description": "The Rapid-Fire kit is for archers who want to deal maximum damage by shooting as many arrows as possible into nearby enemies. With this kit, your fighting technique focuses on peppering foes before they can get close enough to counterattack.",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Bow"
+        ],
+        "stamina": 3,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": null,
+        "rangedDamage": [
+          2,
+          2,
+          2
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 7,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-rapid-fire-signature",
+          "name": "Two Shot",
+          "description": "When you fire two arrows back-to-back, both hit their mark.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Ranged",
+              "args": [
+                12
+              ]
+            }
+          ],
+          "target": "Two creatures or objects",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 damage",
+              "tier2": "6 damage",
+              "tier3": "8 damage"
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a bow."
+      },
+      {
+        "id": "kit-retiarius",
+        "name": "Retiarius",
+        "description": "The retiarius is often depicted as a lightly armored warrior with a net in one hand and a trident in the other, and this kit gives you the equipment and fighting technique to make that happen. Tie up your foe with a net and then poke them to death!",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Polearm",
+          "Ensnaring Weapon"
+        ],
+        "stamina": 3,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 1,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-retiarius-signature",
+          "name": "Net and Stab",
+          "description": "The well-thrown net that follows your main attack leaves your foes right where you want them.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                2
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 + M or A damage; A < [weak], slowed (EoT)",
+              "tier2": "6 + M or A damage; A < [average], slowed (EoT)",
+              "tier3": "8 + M or A damage; A < [strong], restrained (EoT)"
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield several ensnaring weapons and a polearm."
+      },
+      {
+        "id": "kit-shining-armor",
+        "name": "Shining Armor",
+        "description": "The Shining Armor kit provides the most protection a kit can afford, providing you with the sword, shield, and armor necessary to play the prototypical knight.",
+        "armor": [
+          "Heavy Armor",
+          "Shield"
+        ],
+        "weapon": [
+          "Medium Weapon"
+        ],
+        "stamina": 12,
+        "speed": 0,
+        "stability": 1,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-shining-armor-signature",
+          "name": "Protective Attack",
+          "description": "The strength of your assault makes it impossible for your foe to ignore you.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "5 + M or A damage",
+              "tier2": "8 + M or A damage",
+              "tier3": "11 + M or A damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "The target is taunted until the end of their next turn."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear heavy armor and wield a shield and a medium weapon."
+      },
+      {
+        "id": "kit-sniper",
+        "name": "Sniper",
+        "description": "The Sniper kit gives you the tools and techniques to take down enemies from afar. This kit can help you become the archer who lurks behind trees or down tunnels, picking off enemies with a bow or crossbow as they approach.",
+        "armor": [],
+        "weapon": [
+          "Bow"
+        ],
+        "stamina": 0,
+        "speed": 1,
+        "stability": 0,
+        "meleeDamage": null,
+        "rangedDamage": [
+          0,
+          0,
+          4
+        ],
+        "meleeDistance": 0,
+        "rangedDistance": 10,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-sniper-signature",
+          "name": "Patient Shot",
+          "description": "Breathe … aim … wait … then strike!",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Ranged",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Ranged",
+              "args": [
+                15
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "3 + M or A damage",
+              "tier2": "6 + M or A damage",
+              "tier3": "13 + M or A damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "If you don’t take a move action this turn, this strike deals extra damage equal to your Might or Agility score (your choice)."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield a bow."
+      },
+      {
+        "id": "kit-spellsword",
+        "name": "Spellsword",
+        "description": "The Spellsword kit combines melee strikes and a little bit of magic, letting you create a warrior who doesn't have to choose between the incantation and the blade.",
+        "armor": [
+          "Light Armor",
+          "Shield"
+        ],
+        "weapon": [
+          "Medium Weapon"
+        ],
+        "stamina": 6,
+        "speed": 1,
+        "stability": 1,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-spellsword-signature",
+          "name": "Leaping Lightning",
+          "description": "Lightning jumps from your weapon as you strike to harm a nearby foe.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Magic",
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature or object",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Reason",
+                "Intuition",
+                "Presence"
+              ],
+              "tier1": "5 + M, R, I, or P lightning damage",
+              "tier2": "8 + M, R, I, or P lightning damage",
+              "tier3": "11 + M, R, I, or P lightning damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "A creature or object of your choice within 2 squares of the target takes lightning damage equal to the characteristic score used for this ability’s power roll."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a shield and a medium weapon."
+      },
+      {
+        "id": "kit-stick-and-robe",
+        "name": "Stick and Robe",
+        "description": "Armed with a simple reach weapon, often a quarterstaff, a character using the Stick and Robe kit is highly mobile thanks to their light armor. This allows your hero to make maximum use of their weapon's length.",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Polearm"
+        ],
+        "stamina": 3,
+        "speed": 2,
+        "stability": 0,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 1,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-stick-and-robe-signature",
+          "name": "Where I Want You",
+          "description": "When your stick speaks, your enemy moves.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                2
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 + M or A damage",
+              "tier2": "7 + M or A damage; slide 1",
+              "tier3": "10 + M or A damage; slide 3"
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a polearm."
+      },
+      {
+        "id": "kit-swashbuckler",
+        "name": "Swashbuckler",
+        "description": "If you want to be mobile and deal a lot of damage with melee strikes, then you should reach for the Swashbuckler kit. This is a great kit for heroes who want to be master duelists.",
+        "armor": [
+          "Light Armor"
+        ],
+        "weapon": [
+          "Medium Weapon"
+        ],
+        "stamina": 3,
+        "speed": 3,
+        "stability": 0,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-swashbuckler-signature",
+          "name": "Fancy Footwork",
+          "description": "All combat is a dance—and you’ll be the one leading.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "5 + M or A damage",
+              "tier2": "7 + M or A damage; push 1",
+              "tier3": "10 + M or A damage; push 2"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "You can shift into any square the target leaves after you push them."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear light armor and wield a medium weapon."
+      },
+      {
+        "id": "kit-sword-and-board",
+        "name": "Sword and Board",
+        "description": "The Sword and Board kit doesn't just give you a shield—it makes the shield part of your offensive arsenal. With a medium weapon in one hand and a block of steel or solid oak in the other, you protect yourself while you control the battlefield.",
+        "armor": [
+          "Medium Armor",
+          "Shield"
+        ],
+        "weapon": [
+          "Medium Weapon"
+        ],
+        "stamina": 9,
+        "speed": 0,
+        "stability": 1,
+        "meleeDamage": [
+          2,
+          2,
+          2
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-sword-and-board-signature",
+          "name": "Shield Bash",
+          "description": "In your hands, a shield isn’t just for protection.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 + M or A damage; push 1",
+              "tier2": "7 + M or A damage; push 2",
+              "tier3": "9 + M or A damage; push 3; M < [strong], prone"
+            }
+          ]
+        },
+        "equipment": "You wear medium armor and wield a shield and a medium weapon."
+      },
+      {
+        "id": "kit-warrior-priest",
+        "name": "Warrior Priest",
+        "description": "The Warrior Priest kit imbues the power of the gods into your weapon, making it a smiting instrument. You wade into the fray without fear, thanks to the power of the divine … and the heavy armor you wear.",
+        "armor": [
+          "Heavy Armor"
+        ],
+        "weapon": [
+          "Light Weapon"
+        ],
+        "stamina": 9,
+        "speed": 1,
+        "stability": 1,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 0,
+        "rangedDistance": 0,
+        "disengage": 0,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-warrior-priest-signature",
+          "name": "Weakening Brand",
+          "description": "The impact of your weapon brands your target for destruction.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Magic",
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                1
+              ]
+            }
+          ],
+          "target": "One creature or object",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Reason",
+                "Intuition",
+                "Presence"
+              ],
+              "tier1": "3 + M, R, I, or P holy damage",
+              "tier2": "5 + M, R, I, or P holy damage",
+              "tier3": "8 + M, R, I, or P holy damage"
+            },
+            {
+              "kind": "AbilitySectionText",
+              "args": [
+                "Until the end of the target’s next turn, they have damage weakness equal to the characteristic score used for this ability’s power roll."
+              ]
+            }
+          ]
+        },
+        "equipment": "You wear heavy armor and wield a light weapon."
+      },
+      {
+        "id": "kit-whirlwind",
+        "name": "Whirlwind",
+        "description": "The Whirlwind kit makes effective use of whips, granting you mobility, damage, and reach. If you want to be a fast-moving warrior who lashes foes with a chain or whip, then this is the kit for you.",
+        "armor": [],
+        "weapon": [
+          "Whip"
+        ],
+        "stamina": 0,
+        "speed": 3,
+        "stability": 0,
+        "meleeDamage": [
+          1,
+          1,
+          1
+        ],
+        "rangedDamage": null,
+        "meleeDistance": 1,
+        "rangedDistance": 0,
+        "disengage": 1,
+        "ability": {
+          "kind": "Ability",
+          "id": "kit-whirlwind-signature",
+          "name": "Extension of My Arm",
+          "description": "When you draw your whip back after an attack, your enemy is drawn ever closer.",
+          "type": {
+            "kind": "Main"
+          },
+          "keywords": [
+            "Melee",
+            "Strike",
+            "Weapon"
+          ],
+          "distance": [
+            {
+              "kind": "Melee",
+              "args": [
+                3
+              ]
+            }
+          ],
+          "target": "One creature",
+          "cost": "signature",
+          "sections": [
+            {
+              "kind": "PowerRoll",
+              "characteristic": [
+                "Might",
+                "Agility"
+              ],
+              "tier1": "4 + M or A damage; vertical pull 1",
+              "tier2": "7 + M or A damage; vertical pull 2",
+              "tier3": "10 + M or A damage; vertical pull 3"
+            }
+          ]
+        },
+        "equipment": "You wear no armor and wield a whip."
+      }
+    ]
   }
 }

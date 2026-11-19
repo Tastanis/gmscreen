@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { newDraft, evaluate, setPick } from '../../../../../character_sheet/builder/rules.mjs';
 import { buildSheet } from '../../../../../character_sheet/builder/build-sheet.mjs';
+import { effectiveKit, mergeWithDefaults } from '../../../../../character_sheet/parts/sheet-model.js';
 
 const db = JSON.parse(
   readFileSync(new URL('../../../../../character_sheet/builder/rules.json', import.meta.url)),
@@ -15,6 +16,7 @@ function build({
   level = 1,
   career = 'Agent',
   complication,
+  preferences = {},
 } = {}) {
   const draft = { ...newDraft(), name: 'Test hero', classId, level };
   if (complication) delete draft.picks.complication;
@@ -25,6 +27,7 @@ function build({
     complication,
     'elementalist-1-7': 'Enchantment of Celerity',
     'null-1-7': augmentation,
+    ...preferences,
   };
   for (let i = 0; i < 160; i++) {
     const model = evaluate(db, draft);
@@ -335,4 +338,256 @@ test('Null augmentations, resource rules and action costs are present in the por
   }
   const force = build({ classId: 'null', augmentation: 'Force Augmentation' }).sheet;
   assert.equal(force.actions.mains.find((a) => a.name === 'Dance of Blows').tests[0].tiers.low.damage, '4');
+});
+
+const sharedCensor = [
+  [
+    1,
+    'signature',
+    ['Back Blasphemer!', 'Every Step … Death!', 'Halt Miscreant!', 'Your Allies Cannot Save You!'],
+  ],
+  [1, 3, ['Behold a Shield of Faith!', 'Driving Assault', 'The Gods Punish and Defend', 'Repent!']],
+  [1, 5, ['Arrest', 'Behold the Face of Justice!', 'Censored', 'Purifying Fire']],
+  [
+    3,
+    7,
+    [
+      'Edict of Disruptive Isolation',
+      'Edict of Perfect Order',
+      'Edict of Purifying Pacifism',
+      'Edict of Stillness',
+    ],
+  ],
+  [5, 9, ['Gods Grant Thee Strength', 'Orison of Victory', 'Righteous Judgment', 'Shield of the Righteous']],
+  [8, 11, ['Excommunication', 'Hand of the Gods', 'Pillar of Holy Fire', 'Your Allies Turn on You!']],
+];
+const orders = {
+  Exorcist: [
+    'Read Person',
+    ['It Is Justice You Fear', 'Revelator'],
+    ['Begone!', 'Pain of Your Own Making'],
+    ['Banish', 'Terror Manifest'],
+  ],
+  Oracle: [
+    'Magic',
+    ['Prescient Grace', 'With My Blessing'],
+    ['Burden of Evil', 'Edict of Peace'],
+    ['Blessing and a Curse', 'Fulfill Your Destiny'],
+  ],
+  Paragon: [
+    'Lead',
+    ['Blessing of the Faithful', 'Sentenced'],
+    ['Congregation', 'Intercede'],
+    ['Apostate', 'Edict of Unyielding Resolve'],
+  ],
+};
+const censor = (level = 1, preferences = {}, specialization = 'Paragon') =>
+  build({
+    classId: 'censor',
+    specialization,
+    level,
+    preferences: {
+      'censor-1-2': 'Cavall',
+      'censor-domain': 'War',
+      'censor-1-5': 'Warrior Priest',
+      ...preferences,
+    },
+  });
+test('Censor enforces the printed common and order choices and Wrath progression at every level', () => {
+  for (const [order, [skill, ...pairs]] of Object.entries(orders))
+    for (let level = 1; level <= 10; level++) {
+      const { model, sheet, draft } = censor(level, {}, order);
+      const expected = sharedCensor.filter(([at]) => at <= level);
+      const shared = model.slots.filter(
+        (s) => s.title === 'Signature abilities' || s.title.endsWith('-wrath ability'),
+      );
+      assert.equal(shared.length, expected.length);
+      const actionIds = ids(sheet);
+      for (const [i, [at, cost, names]] of expected.entries()) {
+        const slot = shared[i];
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+        assert.equal(slot.count, 1);
+        assert.equal(slot.source, 'Censor · Level ' + at);
+        assert.equal(model.actions.find((a) => a.id === slot.selected[0]).cost, cost);
+      }
+      const restricted = model.slots.filter((s) => s.title.endsWith(order + ' Ability'));
+      assert.equal(restricted.length, [2, 6, 9].filter((l) => l <= level).length);
+      assert.deepEqual(
+        actionIds.filter((id) => id.startsWith('censor-sub-')).sort(),
+        restricted.flatMap((s) => s.selected).sort(),
+      );
+      for (const [i, slot] of restricted.entries()) {
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), pairs[i].toSorted());
+        assert.equal(slot.count, 1);
+        assert.equal(slot.source, order + ' · Level ' + [2, 6, 9][i]);
+        for (const choice of slot.choices) {
+          const alternate = structuredClone(draft);
+          alternate.picks[slot.key] = [choice.id];
+          const a = Object.values(buildSheet(db, alternate).actions)
+            .flat()
+            .find((a) => a.id === choice.id);
+          assert.equal(a.cost, [5, 9, 11][i] + ' Wrath');
+        }
+      }
+      assert.equal(model.warnings.length, 0);
+      assert.ok(sheet.sidebar.skills[skill]);
+      assert.equal(sheet.hero.stats.might, sheet.hero.stats.presence);
+      assert.equal(sheet.hero.stats.might, 2 + [4, 7, 10].filter((at) => level >= at).length);
+      assert.equal(sheet.hero.vitals.staminaMax, 21 + (level - 1) * 9 + 9 * Math.ceil(level / 3));
+      assert.equal(sheet.hero.vitals.recoveriesMax, 12);
+      const rules = sheet.hero.resource.automation.rules;
+      assert.equal(
+        rules.find((r) => r.event === 'turnStart').effect.amount.amount,
+        level >= 10 ? 4 : level >= 7 ? 3 : 2,
+      );
+      const dealt = rules.find((r) => r.event === 'damageDealt'),
+        taken = rules.find((r) => r.event === 'damage');
+      assert.equal(dealt.effect.amount.amount, level >= 4 ? 2 : 1);
+      assert.equal(taken.effect.amount.amount, 1);
+      assert.equal(dealt.filter.targetWhose, 'judgedTarget');
+      assert.equal(taken.filter.sourceWhose, 'judgedTarget');
+      assert.equal(dealt.limit.scope, 'round');
+      assert.notEqual(taken.limit.key, dealt.limit.key);
+      const judge = sheet.actions.maneuvers.find((a) => a.name === 'Judgment');
+      assert.ok(
+        judge.description.includes(
+          { Oracle: 'deal holy damage equal', Paragon: 'vertical pull', Exorcist: 'closer to the judged' }[
+            order
+          ],
+        ),
+      );
+      assert.equal(judge.automation.cards[1].effects[0].kind, 'applyMark');
+    }
+});
+const domainFeatures = {
+  Creation: ['Hands of the Maker', 'Improved Hands of the Maker', 'Divine Quartermaster'],
+  Death: ['Grave Speech', 'Seance', 'Word of Death Deferred'],
+  Fate: ['Oracular Visions', 'Oracular Warning', 'Word of Fate Denied'],
+  Knowledge: ['Blessing of Comprehension', 'Saint’s Epiphany', 'Gods’ Library'],
+  Life: ['Revitalizing Ritual', 'Blessing of Life', 'Font of Grace'],
+  Love: ['Blessing of Compassion', 'Invocation of the Heart', 'Covenant of the Heart'],
+  Nature: ['Faithful Friend', 'Wode Road', 'Nature’s Bounty'],
+  Protection: ['Protective Circle', 'Impervious Touch', 'Blessing of Iron'],
+  Storm: ['Blessing of Fortunate Weather', 'Windwalk', 'Ride the Lightning'],
+  Sun: ['Inner Light', 'Light of Revelation', 'Light of the Burning Sun'],
+  Trickery: ['Inspired Deception', 'Blessing of Secrets', 'Trinity of Trickery'],
+  War: ['Sanctified Weapon', 'Improved Sanctified Weapon', 'Your Triumphs Are Remembered'],
+};
+test('only the chosen deity’s domain grants features at levels 1, 4 and 7; Templar and Virtue unlock at 10', () => {
+  assert.equal(db.censor.deities.length, 38);
+  for (const [domain, titles] of Object.entries(domainFeatures)) {
+    const deity = db.censor.deities.find((d) => d.domains.includes(domain));
+    for (const level of [1, 4, 7, 10]) {
+      const { model, sheet } = censor(level, { 'censor-1-2': deity.name, 'censor-domain': domain });
+      const exported = [
+        ...sheet.features.map((f) => f.title),
+        ...Object.values(sheet.actions)
+          .flat()
+          .map((a) => a.name),
+      ];
+      assert.deepEqual(
+        model.slots
+          .find((s) => s.key === 'censor-domain')
+          .choices.map((o) => o.name)
+          .sort(),
+        deity.domains.toSorted(),
+      );
+      for (const [other, list] of Object.entries(domainFeatures))
+        for (const [i, title] of list.entries())
+          assert.equal(exported.includes(title), other === domain && level >= [1, 4, 7][i], title);
+      assert.equal(exported.includes(domain + ' domain effect'), level === 10);
+      if (domain === 'Sun' && level >= 7) assert.ok(sheet.sidebar.lists.immunity.includes('Fire ' + level));
+      if (domain === 'Knowledge' && level >= 7) {
+        const lore = db.skills.filter((s) => s.list === 'Lore');
+        assert.ok(lore.every((s) => sheet.sidebar.skills[s.name]));
+        const oldLore = lore.filter((s) => model.skills.get(s.name) !== 'Gods’ Library');
+        assert.equal(model.slots.find((s) => s.key === 'censor-library-skills').count, oldLore.length);
+      }
+      if (domain === 'Trickery' && level >= 7)
+        assert.equal(sheet.actions.maneuvers.find((a) => a.name === 'Trinity of Trickery').cost, '9 Wrath');
+    }
+  }
+});
+test('Censor exports all 21 kit signatures with published bonuses once; dual modes and area distance use the correct kit', () => {
+  assert.equal(db.censor.kits.length, 21);
+  for (const kit of db.censor.kits) {
+    const { sheet } = censor(1, { 'censor-1-5': kit.name });
+    assert.equal(sheet.hero.kit.name, kit.name);
+    assert.deepEqual(
+      ids(sheet).filter((id) => id.startsWith('kit-')),
+      [kit.ability.id],
+    );
+    const record = Object.values(sheet.actions)
+      .flat()
+      .find((a) => a.id === kit.ability.id);
+    for (const t of Object.values(record.tests[0].tiers)) assert.ok(t.damage || t.notes);
+  }
+  const { sheet } = censor(1, { 'censor-1-10': 'Purifying Fire' });
+  const brand = sheet.actions.mains.find((a) => a.name === 'Weakening Brand');
+  assert.deepEqual(
+    Object.values(brand.tests[0].tiers).map((t) => t.damage),
+    ['5', '7', '10'],
+  );
+  const fire = sheet.actions.mains.find((a) => a.name === 'Purifying Fire');
+  assert.deepEqual(
+    fire.tests.map((t) => t.tiers.low.damage),
+    ['8', '7'],
+  );
+  assert.deepEqual(
+    sheet.actions.freeStrikes.map((a) => a.tests[0].tiers.low.damage),
+    ['5', '4'],
+  );
+  const reach = censor(1, { 'censor-1-5': 'Guisarmier' }).sheet;
+  assert.equal(reach.actions.mains.find((a) => a.name === 'Back Blasphemer!').range, '2 Cube within 2');
+  assert.equal(reach.actions.mains.find((a) => a.name === 'Forward Thrust, Backward Smash').range, 'Melee 2');
+  assert.equal(reach.actions.maneuvers.find((a) => a.name === 'Judgment').range, 'Ranged 10');
+});
+test('stale, forged and cross-class selections cannot grant Censor abilities or domains', () => {
+  const { draft, model } = censor(10);
+  const order = model.slots.find((s) => s.title === '9th-Level Paragon Ability');
+  for (const id of ['null-ability-1', 'elementalist-ability-1', 'censor-sub-1-9-1a', order.selected[0]]) {
+    const slot = model.slots.find((s) => s.title === 'Signature abilities');
+    draft.picks[slot.key] = [id];
+    draft.exceptions[slot.key] = [id];
+    assert.throws(() => buildSheet(db, draft));
+    assert.deepEqual(evaluate(db, draft).slots.find((s) => s.key === slot.key).selected, []);
+  }
+  draft.level = 1;
+  draft.picks['censor-1-2'] = ['Cyrvis'];
+  assert.equal(evaluate(db, draft).domain, undefined);
+  draft.picks['censor-1-2'] = ['custom'];
+  draft.deityName = 'The Watcher';
+  draft.picks['censor-portfolio'] = ['War', 'Life', 'Fate'];
+  assert.equal(evaluate(db, draft).domain, undefined);
+  draft.picks['censor-portfolio'].push('Sun');
+  const custom = evaluate(db, draft);
+  assert.equal(custom.deity.name, 'The Watcher');
+  assert.equal(custom.domain.name, 'War');
+  assert.ok(!custom.actions.some((a) => a.id === order.selected[0]));
+  draft.classId = 'null';
+  const changed = evaluate(db, draft);
+  assert.equal(changed.kit, undefined);
+  assert.equal(changed.deity, undefined);
+  assert.ok(!changed.actions.some((a) => /^(censor|kit|domain)-/.test(a.id)));
+});
+test('all core ancestries finish a Censor and the native sheet reader preserves its kit, order and mark', () => {
+  for (const ancestry of db.ancestries) {
+    const { sheet } = build({ classId: 'censor', specialization: 'Oracle', ancestry: ancestry.name });
+    const imported = mergeWithDefaults(JSON.parse(JSON.stringify(sheet)));
+    assert.equal(effectiveKit(imported).values.name, sheet.hero.kit.name);
+    assert.equal(imported.hero.classTrack, 'Oracle');
+    assert.deepEqual(imported.hero.resource.automation, sheet.hero.resource.automation);
+    assert.equal(
+      imported.actions.maneuvers.find((a) => a.name === 'Judgment').automation.cards[1].effects[0].markType,
+      'judgment',
+    );
+  }
+  const { model } = censor(8, {
+    'censor-1-2': 'Ord',
+    'censor-domain': 'Knowledge',
+    'censor-8-1': 'Eidetic Memory',
+  });
+  assert.ok(model.grants.some((f) => f.name === 'Eidetic Memory'));
+  assert.equal(model.warnings.length, 0);
+  assert.ok(!model.slots.some((s) => s.key === 'perk-eidetic-memory-skill'));
 });
