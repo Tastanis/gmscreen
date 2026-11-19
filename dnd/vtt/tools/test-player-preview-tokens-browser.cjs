@@ -9,7 +9,7 @@ const origin='http://127.0.0.1:8129';
     const errors=[],pages=[];
     for(const user of ['GM','sharon']) {
       const page=await browser.newPage({viewport:{width:1280,height:720}});
-      page.on('pageerror',error=>errors.push(error.message));
+      page.on('pageerror',error=>errors.push(error.stack || error.message));
       await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
       await page.goto(origin+'/test-login.php?user='+user);
       await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));

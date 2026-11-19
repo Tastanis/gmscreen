@@ -1,3 +1,5 @@
+import { shownOnThisPage } from './drawing-tool.js';
+import { pickView, floorDrawn } from './pointer-pick.mjs';
 import { coverFor } from './cover-check.mjs';
 import { normalizeCombatTeam } from '../combat/combat-state.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
@@ -16,7 +18,7 @@ window.startPlayerPreview = async (preview, state, levelId) => {
     levels = config.mapLevels?.levels ?? [];
   const environment = config.environment ?? {},
     field = environment.terrain?.value,
-    walls = environment.walls?.value ?? {};
+    walls = { nodes: [], segments: [], roofs: [], ramps: [], ...environment.walls?.value };
   const grid = normalizeGridState(config.grid),
     image = document.getElementById('vtt-map-image');
   image.src = raw.routing.mapUrl;
@@ -99,13 +101,20 @@ window.startPlayerPreview = async (preview, state, levelId) => {
   window.gmVision = {
     playerStanding: nodes.has(primaryId) ? { id: primaryId, height: heightFor(primaryId) } : null,
   };
+  window.terrainPrototype.heightShown = z => {
+    if (!field) return null;
+    const token = placements.find(p => p.id === primaryId);
+    const ground = token ? heightFor(token.id) : floorHeight(levelId);
+    const viewer = pickView({token: token ?? {column:0,row:0,width:1,height:1}, ground});
+    return z <= 0 || floorDrawn(z, viewer);
+  };
   window.terrainZones = {
     zones: sceneZones(state.boardState.sceneState, sceneId),
     visible: true,
     hiddenFromPlayers: zonesHiddenFromPlayers(environment.zones),
   };
   const drawings = Object.values(raw.drawings?.[sceneId] ?? {}).filter(
-    (d) => Array.isArray(d.points) && d.points.length > 1
+    (d) => Array.isArray(d.points) && d.points.length > 1 && shownOnThisPage({levelId}, d)
   );
   const subscribers = new Set();
   function applySight() {

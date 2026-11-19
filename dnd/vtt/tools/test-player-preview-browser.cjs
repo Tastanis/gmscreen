@@ -33,7 +33,7 @@ const origin='http://127.0.0.1:8129';
     // GM credentials still authorize another GM-only read after previewing players.
     assert.equal((await gm.request.get(endpoint+'?user=cal')).status(),200);
     const page=await gm.newPage();const errors=[];
-    page.on('pageerror',error=>errors.push(error.message));
+    page.on('pageerror',error=>errors.push(error.stack || error.message));
     await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
     await page.goto(origin+'/dnd/vtt/');
     await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));

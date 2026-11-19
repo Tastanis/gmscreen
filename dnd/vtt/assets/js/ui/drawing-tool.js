@@ -621,7 +621,7 @@ function shownByHeight(drawing) {
   return typeof shown === 'boolean' ? shown : null;
 }
 
-function shownOnThisPage(state, drawing) {
+export function shownOnThisPage(state, drawing) {
   return shownByHeight(drawing) ?? ((drawing.levelId || 'level-0') === state.levelId);
 }
 
