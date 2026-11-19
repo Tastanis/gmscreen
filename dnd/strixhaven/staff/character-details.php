@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
 // Include character integration
-require_once '../gm/includes/character-integration.php';
+require_once '../shared/includes/character-integration.php';
 
 // Get character details from URL parameters
 $characterId = isset($_GET['id']) ? $_GET['id'] : '';

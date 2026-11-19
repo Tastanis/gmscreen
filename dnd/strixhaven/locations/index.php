@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
 // Include character integration for character details functionality
-require_once '../gm/includes/character-integration.php';
+require_once '../shared/includes/character-integration.php';
 
 // Storing a picture, and deleting one: only a picture in this page's own folders (includes/picture-store.php).
 require_once __DIR__ . '/../../includes/picture-store.php';
@@ -469,7 +469,7 @@ $locationData = loadLocationData();
     <title>Strixhaven Locations - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/locations.css">
-    <link rel="stylesheet" href="../gm/css/character-refs.css">
+    <link rel="stylesheet" href="../shared/css/character-refs.css">
     <?php echo players_script(); ?>
 </head>
 <body>
@@ -646,8 +646,8 @@ $locationData = loadLocationData();
         </div>
     </div>
 
-    <script src="../gm/js/rich-text-editor.js"></script>
-    <script src="../gm/js/character-lookup.js"></script>
+    <script src="../shared/js/rich-text-editor.js"></script>
+    <script src="../shared/js/character-lookup.js"></script>
     <script src="js/locations.js"></script>
 </body>
 </html>

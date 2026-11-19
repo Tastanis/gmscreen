@@ -223,7 +223,7 @@
   const PAGES = {
     'Students': ['/dnd/strixhaven/students/', 'people', [760, 580]], 'Staff': ['/dnd/strixhaven/staff/', 'people', [760, 580]], 'Other NPCs': ['/dnd/strixhaven/othernpcs/', 'people', [760, 580]],
     'Campus map': ['/dnd/strixhaven/map3d/index.php', 'campus', [820, 600]], 'Locations': ['/dnd/strixhaven/locations/', 'campus', [700, 560]], 'Schedule': ['/dnd/schedule/', 'campus', [820, 600]],
-    'GM notes': ['/dnd/strixhaven/gm/', 'notes', [860, 620]], 'Monster Creator': ['/dnd/strixhaven/monster-creator/', 'workshop', [960, 660]], 'Templates': ['/dnd/strixhaven/templates/', 'workshop', [800, 600]],
+    'Character builder': ['/dnd/character_sheet/builder/', 'heroes', [1020, 720]], 'Monster Creator': ['/dnd/strixhaven/monster-creator/', 'workshop', [960, 660]], 'Templates': ['/dnd/strixhaven/templates/', 'workshop', [800, 600]],
     'Arcane Construction': ['/dnd/strixhaven/arcaneconstruction/', 'workshop', [800, 600]], 'Players': ['/dnd/players.php', 'heroes', [640, 540]],
     'Projects': ['/dnd/campaign/index.php?view=projects&character=all', 'projects', [980, 680]], 'Relationships': ['/dnd/campaign/index.php?view=relationships&character=all', 'relations', [980, 680]],
     'Conditions': ['/dnd/rules/conditions/index.html'], 'Tests & Studying': ['/dnd/rules/tests-studying/index.html'], 'Project rules': ['/dnd/rules/projects/index.html'], 'Skills': ['/dnd/rules/skills/index.html'],
@@ -261,6 +261,7 @@
   }
   apps.page = (title) => {
     if (title === 'Campaign record') title = 'Projects';
+    if (!Object.hasOwn(PAGES, title)) return null;
     const known = PAGES[title], url = SERVED && known?.[0];
     return T.openWindow({ id: 'page-' + title, app: 'page', arg: title, title, icon: I[known?.[1] || 'rules'], size: known?.[2] || [600, 560],
       heavy: HEAVY_PAGES.has(title), onWork: HEAVY_PAGES.has(title) ? pageWork : undefined,
@@ -607,7 +608,6 @@
     { k: 'relations', t: 'Relationships', d: 'Who each hero is close to or at odds with.', open: () => apps.page('Relationships') },
     { k: 'people', t: 'People', d: 'Students, staff and other NPCs.', open: flyPeople },
     { k: 'campus', t: 'Campus', d: 'The campus map and the schedule.', open: flyCampus },
-    { k: 'notes', t: 'GM notes', gm: true, d: 'Your GM screen notes.', open: () => apps.page('GM notes') },
     { k: 'rules', t: 'Rules', d: 'Rules pages, each in its own window.', open: flyRules },
     { k: 'arcane', t: 'Arcane Construction', only: 'zepha', d: 'Your arcane construction.', open: () => apps.page('Arcane Construction') },
     { label: 'Prep', gm: true },
@@ -817,6 +817,7 @@
   function flyTable(btn) {
     const tb = () => $('#table').getBoundingClientRect();
     menuFly(btn, 'The table', [
+      { t: 'Character builder', icon: 'heroes', go: () => apps.page('Character builder') },
       { html: '<div class="menu-label">Arrange</div>' },
       { t: 'Prep', gm: true, icon: 'workshop', note: 'creatures beside the map', go: () => { const b = tb(); place(apps.creatures(), 0, 0, b.width * .36, b.height); place(apps.map(), b.width * .36, 0, b.width * .64, b.height); } },
       { t: 'Clear the table', icon: 'layouts', go: () => T.clearLayout() },

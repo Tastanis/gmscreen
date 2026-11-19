@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -50,7 +50,7 @@ function findPhp() {
 /** The code of dnd/ as it stands in the working folder, in a folder of its own: tracked files, and new code files. */
 function copyOfTheSite() {
   const list = (args) => spawnSync('git', ['-C', repo, 'ls-files', '-z', ...args, 'dnd'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout.split('\0').filter(Boolean);
-  const files = [...list([]), ...list(['--others', '--exclude-standard']).filter((file) => /\.(?:php|m?js|cjs|css|html)$/i.test(file))];
+  const files = [...list([]), ...list(['--others', '--exclude-standard']).filter((file) => /\.(?:php|m?js|cjs|css|html)$/i.test(file) || file==='dnd/character_sheet/builder/rules.json')];
   assert.ok(files.length > 100, 'the list of the site\'s files could not be read from git');
   const copy = mkdtempSync(path.join(tmpdir(), 'vtt-pages-start-'));
   for (const file of files) {
@@ -77,6 +77,54 @@ async function answers(origin, tries = 60) {
 
 const SCRIPT_DELAY_MS = 250;
 
+// Open through the same S menu as a player or Director. Only the Table's own map may contact a sheet.
+async function openBuilder(page) {
+  await page.getByRole('button',{name:'Table menu'}).click();
+  await page.getByText('Character builder',{exact:true}).click();
+  const frame=page.frameLocator('iframe[src*="character_sheet/builder/"]');
+  await frame.locator('[name="hero-name"]').waitFor();
+}
+
+async function finishIndependentHero(page) {
+  page.setDefaultTimeout(5000);
+  const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
+  const before=await unrelatedStorage();
+  await page.locator('[name="hero-name"]').fill('Ember Polder');
+  await page.locator('nav [data-step="Ancestry"]').click();
+  await page.locator('[data-slot="ancestry"]').getByRole('button',{name:'Polder',exact:true}).click();
+  await page.reload();
+  await page.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
+  for(const step of ['Ancestry','Background','Class','Training']){
+    await page.locator('nav [data-step="'+step+'"]').click();
+    for(let i=0;i<70;i++){
+      const key=await page.locator('fieldset[data-slot]').evaluateAll(groups=>{
+        return groups.find(group=>{const [used,max]=group.querySelector('legend small').textContent.split('/').map(parseFloat);return used!==max;})?.dataset.slot;
+      });
+      if(!key)break;
+      const slot=page.locator('fieldset[data-slot="'+key+'"]');
+      if(key==='subclass'){await slot.getByRole('button',{name:'Fire',exact:true}).click();continue;}
+      if(key==='elementalist-1-7'){await slot.getByRole('button',{name:'Enchantment of Celerity',exact:true}).click();continue;}
+      if(step==='Training' && key==='env-nomadic'){
+        await slot.locator('.soft button').first().click();
+        await page.getByRole('button',{name:'Keep choosing'}).click();
+        await slot.locator('.soft button').first().click();
+        await page.getByRole('button',{name:'Use this choice'}).click();
+        await slot.locator('.soft button[aria-pressed="true"]').waitFor();
+      }else await slot.locator('.choice:not(.soft) button[aria-pressed="false"]:enabled').first().click();
+    }
+  }
+  await page.locator('nav [data-step="Review"]').click();
+  assert.ok(await page.getByRole('heading',{name:'Accepted house rules'}).count());
+  const download=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download hero JSON'}).click();
+  const saved=await download;
+  const sheet=JSON.parse(readFileSync(await saved.path(),'utf8'));
+  assert.equal(sheet.hero.name,'Ember Polder'); assert.equal(sheet.hero.classTrack,'Fire');assert.equal(sheet.hero.vitals.size,'1S');
+  assert.ok(sheet.features.some(f=>f.title==='House rules'));
+  assert.ok(sheet.actions.mains.some(a=>a.name==='Hurl Element'));
+  assert.deepEqual(await unrelatedStorage(),before);
+}
+
 // Each page: who opens it, where, and how it shows that it has started.
 const PAGES = [
   { name: 'the map, as the Director', as: 'GM', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
@@ -85,27 +133,13 @@ const PAGES = [
   // once it has started. The classic sheet (classic.php) was retired when the new one was approved.
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
-  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'GM notes in the Table', as: 'GM', path: '/dnd/strixhaven/gm/',
-    started: () => document.querySelectorAll('a[href^="note-editor.php?"]').length === 80,
-    check: async page => {
-      const note = page.locator('a[href^="note-editor.php?"]').first();
-      await note.click();
-      await page.locator('#note-save:enabled').waitFor();
-      await page.locator('#note-title').fill('Round-trip note');
-      await Promise.all([
-        page.waitForResponse(async response => response.url().endsWith('/gm/index.php')
-          && response.request().method() === 'POST' && (await response.json()).success === true),
-        page.getByRole('button', {name:'Save', exact:true}).click(),
-      ]);
-      await page.getByRole('button', {name:'All notes'}).click();
-      await page.getByRole('link', {name:'Round-trip note',exact:true}).waitFor();
-    },
-  },
+  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:openBuilder, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:openBuilder, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishIndependentHero,
+    started: () => !!document.querySelector('[data-step="Identity"]') && !!document.querySelector('[name="hero-name"]') },
 ];
 
-test('every page starts: the map as Director and as a player, the character sheet, the main page', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
+test('every page starts: the map as Director and as a player, the character sheet, the Table and standalone character builder', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
   const php = findPhp();
   assert.ok(php, 'PHP was not found (set PHP_BIN): the pages cannot be started, so this check cannot pass');
   let chromium;
@@ -120,7 +154,7 @@ test('every page starts: the map as Director and as a player, the character shee
   const failures = [];
   try {
     try { browser = await chromium.launch({ channel: 'chrome', headless: true }); }
-    catch (error) { assert.fail('Chrome could not be started through Playwright: ' + error.message.split('\n')[0]); }
+    catch (error) { assert.fail('Chrome could not be started through Playwright: ' + error.message); }
     for (const one of PAGES) {
       const port = await freePort(), origin = `http://127.0.0.1:${port}`;
       const server = spawn(php, [...extensions, '-S', `127.0.0.1:${port}`, '-t', site, router], { env: { ...process.env, PAGE_START_CHECK: '1' }, stdio: 'ignore' });
@@ -129,6 +163,10 @@ test('every page starts: the map as Director and as a player, the character shee
       try {
         assert.ok(await answers(origin), 'PHP\'s own server did not come up');
         const page = await context.newPage();
+        if(one.check===finishIndependentHero)page.on('request',request=>{
+          const url=new URL(request.url());
+          if(request.method()!=='GET' || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
+        });
         page.on('pageerror', (error) => errors.push(error.message));
         // A script or stylesheet of ours that will not load is a start-up fault too.
         page.on('response', (response) => { const url = response.url(); if (url.startsWith(origin) && response.status() >= 400 && /\.(?:m?js|css)(?:\?|$)/.test(url)) errors.push(`${response.status()} ${url.slice(origin.length)}`); });
@@ -147,7 +185,7 @@ test('every page starts: the map as Director and as a player, the character shee
         await page.waitForTimeout(1500);                               // anything thrown just after start-up
         if (errors.length) failures.push(`${one.name}: ${errors.slice(0, 3).join(' | ')}`);
       } catch (error) {
-        failures.push(`${one.name}: DID NOT START. ${error.message.split('\n')[0]}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);
+        failures.push(`${one.name}: DID NOT START. ${error.message}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);
       } finally {
         await context.close().catch(() => {});
         server.kill();                                                 // this server, by its own handle; never by name

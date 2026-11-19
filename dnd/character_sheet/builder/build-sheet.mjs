@@ -1,0 +1,250 @@
+// Build a fresh, portable sheet in memory. No profile ID, storage API, or sheet endpoint is involved.
+import { defaultSheet, defaultTestTier, ACTION_LABELS } from '../parts/sheet-model.js';
+import { evaluate, featureText, distanceText, abilityLines } from './rules.mjs';
+
+const html = (text) =>
+  String(text || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replace(/\n/g, '<br>');
+const points = (f, r) =>
+  (f.value || 0) +
+  (f.valuePerLevel || 0) * (r.level - 1) +
+  (f.valuePerEchelon || 0) * Math.ceil(r.level / 3) +
+  (f.valueCharacteristics?.length ? Math.max(...f.valueCharacteristics.map((c) => r.stats[c])) : 0);
+function total(r, field, base = 0) {
+  return r.grants
+    .filter((f) => f.kind === 'Bonus' && f.field === field)
+    .reduce((v, f) => v + points(f, r), base);
+}
+export function vitals(r) {
+  const size = r.grants.find((f) => f.kind === 'Size') || r.former?.features.find((f) => f.kind === 'Size');
+  const stamina = total(r, 'Stamina'),
+    recoveries = total(r, 'Recoveries');
+  return {
+    size: size ? String(size.sizeValue) + (size.sizeMod || '') : '1M',
+    speed: total(r, 'Speed', r.grants.find((f) => f.kind === 'Speed')?.speed || 5),
+    stability: total(r, 'Stability'),
+    disengage: total(r, 'Disengage', 1),
+    save: Math.min(6, ...r.grants.filter((f) => f.kind === 'SaveThreshold').map((f) => f.value)),
+    staminaMax: stamina,
+    currentStamina: stamina,
+    recoveriesMax: recoveries,
+    currentRecoveries: recoveries,
+    recoveryValue: total(r, 'Recovery Value', Math.floor(stamina / 3)),
+  };
+}
+const types = { Main: 'mains', Maneuver: 'maneuvers', Trigger: 'triggers' };
+const characteristics = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' };
+function tier(text, stats, bonus) {
+  const t = defaultTestTier(),
+    match = /^(\d+)(?:\s*\+\s*([MARIP](?: or [MARIP])*))?\s+(?:(\w+)\s+)?damage\b[;,.:]?\s*(.*)$/is.exec(
+      text || '',
+    );
+  if (!match) {
+    t.notes = text || '';
+    return t;
+  }
+  const modifier = match[2] ? Math.max(...match[2].split(' or ').map((c) => stats[characteristics[c]])) : 0;
+  t.damage = String(Number(match[1]) + modifier + bonus);
+  t.damageType = match[3] || '';
+  t.notes = match[4];
+  return t;
+}
+function matches(f, a) {
+  return (f.keywords || []).every((k) => a.keywords?.includes(k));
+}
+function action(a, r, group) {
+  const bonus = r.grants
+    .filter((f) => f.kind === 'AbilityDamage' && matches(f, a))
+    .reduce((sum, f) => sum + f.value, 0);
+  const rangeBonus = r.grants
+    .filter((f) => f.kind === 'AbilityDistance' && matches(f, a))
+    .reduce((sum, f) => sum + f.value, 0);
+  const distance = (a.distance || []).map((p) =>
+    p.kind === 'Ranged'
+      ? { ...p, args: [(p.args?.[0] || 5) + rangeBonus] }
+      : p.within && rangeBonus
+        ? { ...p, within: p.within + rangeBonus }
+        : p,
+  );
+  const sections = a.sections || [];
+  const tests = sections
+    .filter((s) => s.kind === 'PowerRoll')
+    .map((s, i) => ({
+      id: a.id + '-roll-' + i,
+      label: 'Power Roll · ' + (s.characteristic || []).join(' or '),
+      rollMod: s.characteristic?.length ? String(Math.max(...s.characteristic.map((c) => r.stats[c]))) : '',
+      tiers: Object.fromEntries(
+        ['low', 'mid', 'high'].map((key, i) => [key, tier(s['tier' + (i + 1)], r.stats, bonus)]),
+      ),
+    }));
+  const description = [
+    a.description,
+    ...abilityLines({ ...a, sections: sections.filter((s) => s.kind !== 'PowerRoll') }),
+  ];
+  if (a.name === 'Hurl Element')
+    description.push(
+      'Can be used as a ranged free strike. Apply fire-specific damage bonuses when choosing fire damage.',
+    );
+  return {
+    id: a.id,
+    name: a.name,
+    actionLabel: ACTION_LABELS[group],
+    tags: a.keywords || [],
+    range: distanceText(distance),
+    target: a.target || '',
+    cost: typeof a.cost === 'number' ? a.cost + ' Essence' : '',
+    description: html(description.filter(Boolean).join('\n')),
+    trigger: a.type?.args?.[0] || '',
+    useWhen: '',
+    tests,
+  };
+}
+function weaponStrike(r, melee) {
+  const name = melee ? 'Melee' : 'Ranged';
+  const values = melee ? [2, 5, 7] : [2, 4, 6];
+  return action(
+    {
+      id: 'basic-strike-' + name.toLowerCase(),
+      name: name + ' Weapon Free Strike',
+      keywords: melee ? ['Charge', 'Melee', 'Strike', 'Weapon'] : ['Ranged', 'Strike', 'Weapon'],
+      distance: [{ kind: name, args: [melee ? 1 : 5] }],
+      target: 'One creature or object',
+      sections: [
+        {
+          kind: 'PowerRoll',
+          characteristic: ['Might', 'Agility'],
+          ...Object.fromEntries(values.map((v, i) => ['tier' + (i + 1), v + ' + M or A damage'])),
+        },
+      ],
+    },
+    r,
+    'freeStrikes',
+  );
+}
+function essence(level) {
+  const fixed = (amount) => ({ amount });
+  const rule = (id, event, filter, kind, amount, autoApply = false, limit = null) => ({
+    id,
+    event,
+    filter,
+    effect: { kind, amount },
+    limit,
+    autoApply,
+    enabled: true,
+  });
+  const id = 'elementalist-first-damage';
+  return {
+    schema: 'heroic-resource/v1',
+    rules: [
+      rule('elementalist-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+      rule(
+        'elementalist-turn',
+        'turnStart',
+        { whose: 'self' },
+        'gain',
+        fixed(level >= 10 ? 4 : level >= 7 ? 3 : 2),
+      ),
+      rule(
+        id,
+        'damage',
+        { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
+        'gain',
+        fixed(level >= 4 ? 2 : 1),
+        false,
+        { scope: 'round', key: id, target: 'self', markOn: 'offered' },
+      ),
+      rule('elementalist-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+    ],
+  };
+}
+export function buildSheet(db, draft) {
+  const r = evaluate(db, draft);
+  if (!r.complete) throw Error('Complete the required choices before downloading.');
+  const sheet = defaultSheet(),
+    hero = sheet.hero;
+  Object.assign(hero, {
+    name: draft.name.trim(),
+    level: r.level,
+    class: 'Elementalist',
+    classTrack: r.subclass.name,
+    ancestry: r.ancestry.name + (r.former ? ' (' + r.former.name + ')' : ''),
+    complication: r.complication?.name || '',
+    culture: { culture: draft.cultureName || '', ...r.culture },
+    career: {
+      career: r.career.name,
+      incitingIncident:
+        r.incident.id === 'original'
+          ? draft.incident
+          : [r.incident.name, r.incident.description].filter(Boolean).join(' — '),
+    },
+    wealth: total(r, 'Wealth', 1),
+    renown: total(r, 'Renown'),
+    stats: Object.fromEntries(Object.entries(r.stats).map(([k, v]) => [k.toLowerCase(), v])),
+  });
+  Object.assign(hero.vitals, vitals(r));
+  Object.assign(hero.resource, { title: 'Essence', automation: essence(r.level) });
+  if (r.grants.some((f) => f.id === 'elementalist-1-7a'))
+    Object.assign(hero.kit, {
+      armor: draft.picks['battle-armor']?.[0] === 'yes' ? 'Light armor' : '',
+      weapon: draft.picks['battle-weapon']?.[0] === 'yes' ? 'Light weapon' : '',
+    });
+  sheet.sidebar.resource = {
+    title: 'Essence',
+    text:
+      'Start combat with Essence equal to Victories. ' +
+      (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
+      ' at the start of each turn. Gain ' +
+      (r.level >= 4 ? 2 : 1) +
+      ' the first time each round you or a creature within 10 takes damage other than untyped or holy. Lose remaining Essence at the end of combat.',
+  };
+  sheet.sidebar.lists.languages = [...r.languages];
+  sheet.sidebar.skills = Object.fromEntries(
+    [...r.skills.keys()].map((k) => [k, { level: 'Trained', bonus: '' }]),
+  );
+  for (const [type, field] of [
+    ['Immunity', 'immunity'],
+    ['Weakness', 'vulnerability'],
+  ]) {
+    const values = new Map();
+    for (const m of r.grants.flatMap((f) => f.modifiers || []).filter((m) => m.modifierType === type)) {
+      const n =
+        m.kind === 'DamagePerLevel'
+          ? m.value * r.level
+          : m.kind === 'DamageValuePlusPerLevel'
+            ? m.value + m.perLevel * r.level
+            : m.kind === 'DamageCharacteristic'
+              ? Math.max(...m.characteristics.map((c) => r.stats[c])) * (m.multiplier || 1)
+              : m.value;
+      values.set(m.damageType, Math.max(n, values.get(m.damageType) || 0));
+    }
+    sheet.sidebar.lists[field] = [...values].map(([k, v]) => k + ' ' + v);
+  }
+  const feature = (id, title, text, tags = []) => ({ id, title, text: html(text), tags, useWhen: '' });
+  sheet.features = r.grants
+    .filter((f) => f.kind !== 'Multiple' || f.description)
+    .map((f) => feature('builder-' + f.id, f.name, f.description || featureText(f), [f.source]));
+  sheet.features.push(
+    feature(
+      'builder-potency',
+      'Elementalist potency',
+      'Weak ' + (r.stats.Reason - 2) + ' · Average ' + (r.stats.Reason - 1) + ' · Strong ' + r.stats.Reason,
+    ),
+  );
+  if (r.complication)
+    sheet.features.push(
+      feature('builder-complication', r.complication.name, r.complication.description, ['Complication']),
+    );
+  if (r.warnings.length)
+    sheet.features.push(
+      feature('builder-exceptions', 'House rules', r.warnings.map((w) => w.message).join('\n')),
+    );
+  for (const a of r.actions) {
+    const group = types[a.type?.kind] || 'mains';
+    sheet.actions[group].push(action(a, r, group));
+  }
+  sheet.actions.freeStrikes.push(weaponStrike(r, true), weaponStrike(r, false));
+  return sheet;
+}

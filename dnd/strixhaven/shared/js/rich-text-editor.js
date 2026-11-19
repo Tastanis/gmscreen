@@ -1,5 +1,5 @@
 // =============================================================================
-// Rich Text Editor for GM Screen - FIXED VERSION
+// Shared Strixhaven rich text editor
 // =============================================================================
 
 class RichTextEditor {

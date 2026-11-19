@@ -611,8 +611,8 @@ function expandStudentToNewTab() {
 
             <script src="../../js/ui-kit.js"></script>
             <script>window.dndPlayers = ${JSON.stringify(window.dndPlayers || null).replace(/</g, '\\u003c')};</script>
-            <script src="../gm/js/character-lookup.js"></script>
-            <script src="../gm/js/rich-text-editor.js"></script>
+            <script src="../shared/js/character-lookup.js"></script>
+            <script src="../shared/js/rich-text-editor.js"></script>
             <script>
                 // Copy necessary variables and functions to the popout
                 const isGM = ${isGM};

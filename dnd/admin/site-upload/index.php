@@ -37,7 +37,7 @@ try {
     require_once __DIR__ . '/../../vtt/api/scenes.php'; // bootstrap, the store, the scene list, the lock
     require_once __DIR__ . '/../../vtt/lib/MapImageStore.php';
     require_once __DIR__ . '/../../strixhaven/monster-creator/includes/monster-store.php';
-    require_once __DIR__ . '/../../strixhaven/gm/includes/file-lock-manager.php';
+    require_once __DIR__ . '/../../strixhaven/shared/includes/file-lock-manager.php';
     $monsterDir = __DIR__ . '/../../strixhaven/monster-creator/data/';
     $monsterFile = $monsterDir . 'gm-monsters.json';
 

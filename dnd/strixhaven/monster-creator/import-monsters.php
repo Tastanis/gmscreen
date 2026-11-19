@@ -29,7 +29,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') monsterImportAnswer(405, ['su
 require_once __DIR__ . '/includes/monster-import.php';
 require_once __DIR__ . '/includes/monster-store.php';
 require_once __DIR__ . '/includes/monster-backup-helper.php';
-require_once __DIR__ . '/../gm/includes/file-lock-manager.php';
+require_once __DIR__ . '/../shared/includes/file-lock-manager.php';
 if (!defined('MONSTER_IMAGE_INCLUDE_ONLY')) define('MONSTER_IMAGE_INCLUDE_ONLY', true);
 require_once __DIR__ . '/upload-image.php'; // monsterImageName, monsterImageNameIsOurs, resizeImageIfNeeded
 

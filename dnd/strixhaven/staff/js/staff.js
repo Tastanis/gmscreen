@@ -351,8 +351,8 @@ function expandStaffToNewTab() {
             </div>
 
             <script src="../../js/ui-kit.js"></script>
-            <script src="../gm/js/character-lookup.js"></script>
-            <script src="../gm/js/rich-text-editor.js"></script>
+            <script src="../shared/js/character-lookup.js"></script>
+            <script src="../shared/js/rich-text-editor.js"></script>
             <script>
                 // Copy necessary variables and functions to the popout
                 const isGM = ${isGM};

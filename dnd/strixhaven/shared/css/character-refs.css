@@ -506,16 +506,6 @@
     position: relative;
 }
 
-.tab-editor {
-    position: relative;
-    z-index: 1;
-}
-
-/* Highlight character references in the text editor */
-.tab-editor.highlight-refs {
-    background: linear-gradient(transparent, transparent);
-}
-
 /* Custom scrollbar for autocomplete */
 .character-autocomplete::-webkit-scrollbar {
     width: 6px;

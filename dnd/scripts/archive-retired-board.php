@@ -8,11 +8,27 @@ if (PHP_SAPI !== 'cli') {
 }
 $root = realpath($argv[1] ?? '');
 if (!$root || basename($root) !== 'public_html' || !is_file($root . '/dnd/table/index.php')
-    || !is_file($root . '/dnd/vtt/board3d/integration.mjs') || !is_file($root . '/dnd/strixhaven/gm/css/notes-list.css')) {
+    || !is_file($root . '/dnd/vtt/board3d/integration.mjs') || !is_file($root . '/dnd/character_sheet/builder/index.php')) {
     fwrite(STDERR, "Expected the deployed Table and 3D board in public_html.\n");
     exit(1);
 }
 $files = [
+    'dnd/strixhaven/gm/includes/character-integration.php',
+    'dnd/strixhaven/gm/includes/file-lock-manager.php',
+    'dnd/strixhaven/gm/js/character-lookup.js',
+    'dnd/strixhaven/gm/js/rich-text-editor.js',
+    'dnd/strixhaven/gm/css/character-refs.css',
+    'dnd/strixhaven/gm/index.php',
+    'dnd/strixhaven/gm/note-editor.php',
+    'dnd/strixhaven/gm/character-details.php',
+    'dnd/strixhaven/gm/image-upload.php',
+    'dnd/strixhaven/gm/data-recovery.php',
+    'dnd/strixhaven/gm/css/note-editor.css',
+    'dnd/strixhaven/gm/css/notes-list.css',
+    'dnd/strixhaven/gm/images/background.jpg',
+    'dnd/strixhaven/gm/includes/backup-system.php',
+    'dnd/strixhaven/gm/includes/backup-system.php.bak',
+    'dnd/strixhaven/gm/includes/gm-backup-helper.php',
     'dnd/includes/strix-nav.php',
     'dnd/js/character-sheet.js',
     'dnd/js/relationship-autocomplete.js',

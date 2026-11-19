@@ -1,5 +1,5 @@
 <?php
-// Character Integration for GM Screen - FIXED VERSION WITH BETTER PATH HANDLING
+// Shared Strixhaven character lookup
 
 // Function to search characters across both staff and students
 function searchCharactersByName($searchTerm) {
@@ -146,11 +146,11 @@ function loadStaffDataDirect() {
     
     // Try multiple possible paths relative to the current file
     $possiblePaths = array(
-        // If we're in gm/ folder, go up to strixhaven level, then to staff
+        // If we're in shared/ folder, go up to strixhaven level, then to staff
         $currentDir . '/../staff/staff.json',
         // If we're in a deeper folder
         $currentDir . '/../../staff/staff.json',
-        // If we're in includes/ subfolder of gm/
+        // If we're in includes/ subfolder of shared/
         $currentDir . '/../../../staff/staff.json',
         // Direct relative path from web root
         $_SERVER['DOCUMENT_ROOT'] . '/dnd/strixhaven/staff/staff.json',
@@ -187,11 +187,11 @@ function loadStudentsDataDirect() {
     
     // Try multiple possible paths relative to the current file
     $possiblePaths = array(
-        // If we're in gm/ folder, go up to strixhaven level, then to students
+        // If we're in shared/ folder, go up to strixhaven level, then to students
         $currentDir . '/../students/students.json',
         // If we're in a deeper folder
         $currentDir . '/../../students/students.json',
-        // If we're in includes/ subfolder of gm/
+        // If we're in includes/ subfolder of shared/
         $currentDir . '/../../../students/students.json',
         // Direct relative path from web root
         $_SERVER['DOCUMENT_ROOT'] . '/dnd/strixhaven/students/students.json',
@@ -228,9 +228,9 @@ function loadLocationsDataDirect() {
     
     // Try multiple possible paths relative to the current file
     $possiblePaths = array(
-        // If we're in gm/includes/ folder, go up to strixhaven level, then to locations
+        // If we're in shared/includes/ folder, go up to strixhaven level, then to locations
         $currentDir . '/../../locations/locations.json',
-        // If we're in gm/ folder
+        // If we're in shared/ folder
         $currentDir . '/../locations/locations.json',
         // If we're in a deeper folder
         $currentDir . '/../../../locations/locations.json',

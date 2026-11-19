@@ -16,7 +16,7 @@ define('VERSION_SYSTEM_INTERNAL', true);
 require_once '../../version.php';
 
 // Include character integration for character details functionality
-require_once '../gm/includes/character-integration.php';
+require_once '../shared/includes/character-integration.php';
 require_once __DIR__ . '/data-utils.php';
 
 // Storing a picture, and deleting one: only a picture in this page's own folders (includes/picture-store.php).
@@ -860,8 +860,8 @@ $studentData = loadStudentData();
     </div>
 
     <script src="../../js/ui-kit.js"></script>
-    <script src="../gm/js/rich-text-editor.js"></script>
-    <script src="../gm/js/character-lookup.js"></script>
+    <script src="../shared/js/rich-text-editor.js"></script>
+    <script src="../shared/js/character-lookup.js"></script>
     <script src="../includes/image-adjuster.js"></script>
     <script src="../templates/js/character-sheet-base.js"></script>
     <script src="js/students.js"></script>

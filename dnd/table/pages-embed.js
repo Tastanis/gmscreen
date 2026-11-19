@@ -14,7 +14,7 @@
   var path = location.pathname.toLowerCase();
   var PAGES = [
     [/\/strixhaven\/students\//, 'students people roster'], [/\/strixhaven\/staff\//, 'staff people roster'], [/\/strixhaven\/othernpcs\//, 'npcs people roster'],
-    [/\/schedule\//, 'schedule'], [/\/strixhaven\/gm\//, 'gm'], [/\/rules\//, 'rules'],
+    [/\/schedule\//, 'schedule'], [/\/rules\//, 'rules'],
     [/\/strixhaven\/locations\//, 'locations roster'], [/\/strixhaven\/templates\//, 'templates'], [/\/players\.php/, 'players']
   ];
   var page = '';

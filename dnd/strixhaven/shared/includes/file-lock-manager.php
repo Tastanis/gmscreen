@@ -114,7 +114,7 @@ class FileLockManager {
         if ($requestId !== null) {
             $lockData = $this->readLockFile($lockFile);
             if ($lockData && isset($lockData['request_id']) && $lockData['request_id'] !== $requestId) {
-                error_log('GM Screen: Attempted to release lock owned by another request');
+                error_log('File lock: Attempted to release lock owned by another request');
                 return false;
             }
         }
@@ -225,7 +225,7 @@ class FileLockManager {
                 }
             }
         } catch (Exception $e) {
-            error_log('GM Screen: Error cleaning up stale locks: ' . $e->getMessage());
+            error_log('File lock: Error cleaning up stale locks: ' . $e->getMessage());
         }
     }
     
@@ -252,7 +252,7 @@ class FileLockManager {
                 }
             }
         } catch (Exception $e) {
-            error_log('GM Screen: Error getting active locks: ' . $e->getMessage());
+            error_log('File lock: Error getting active locks: ' . $e->getMessage());
         }
         
         return $locks;
@@ -282,7 +282,7 @@ class FileLockManager {
                 }
             }
         } catch (Exception $e) {
-            error_log('GM Screen: Error force releasing locks: ' . $e->getMessage());
+            error_log('File lock: Error force releasing locks: ' . $e->getMessage());
         }
         
         return $count;
