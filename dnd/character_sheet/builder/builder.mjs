@@ -32,6 +32,8 @@ const classInstructions = {
   fury: 'Choose your primordial aspect and kit. At levels 2, 6, and 9, choose one ability from your aspect.',
   null: 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.',
   shadow: 'Choose a college and a kit. At levels 2, 6, and 9, choose one of your college’s two abilities.',
+  tactician:
+    'Choose a tactical doctrine and two kits. Both kits grant their signatures. Choose which bonus to use when the kits overlap.',
 };
 function store() {
   try {
@@ -87,7 +89,12 @@ function card(o, slot) {
       !on &&
       (slot.total + (slot.points ? o.cost : 1) > slot.count ||
         (o.family && slot.choices.some((v) => v.family === o.family && slot.selected.includes(v.id))));
-  const meta = [slot.points ? o.cost + ' pt' : '', o.warning ? 'House rule' : '', on ? 'Selected' : '']
+  const meta = [
+    o.summary,
+    slot.points ? o.cost + ' pt' : '',
+    o.warning ? 'House rule' : '',
+    on ? 'Selected' : '',
+  ]
     .filter(Boolean)
     .join(' · ');
   const query = (filters.get(slot.key) || '').trim().toLowerCase();
@@ -142,10 +149,15 @@ function review() {
           .join(' · ') +
         '</p></section>',
     );
-  if (model.classId === 'fury' || model.classId === 'shadow')
+  const kitHeading = {
+    fury: 'Aspect and kit',
+    shadow: 'College and kit',
+    tactician: 'Doctrine and Field Arsenal',
+  }[model.classId];
+  if (kitHeading)
     boxes.push(
       '<section class="review-box"><h3>' +
-        (model.classId === 'shadow' ? 'College and kit' : 'Aspect and kit') +
+        kitHeading +
         '</h3><p>' +
         [model.classTrack, model.kit?.name].filter(Boolean).map(esc).join(' · ') +
         '</p></section>',

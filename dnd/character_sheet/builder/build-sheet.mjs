@@ -74,7 +74,8 @@ function action(a, r, group) {
     .filter((f) => f.kind === 'AbilityDistance' && matches(f, a))
     .reduce((sum, f) => sum + f.value, 0);
   // The published kit signature card already includes that kit's bonuses.
-  const kit = a.id !== r.kit?.ability.id && a.keywords?.includes('Weapon') ? r.kit : null;
+  const isKitSignature = a.id === r.kit?.ability?.id || r.kit?.signatureIds?.includes(a.id);
+  const kit = !isKitSignature && a.keywords?.includes('Weapon') ? r.kit : null;
   const reachModes = ['Melee', 'Ranged'].filter((mode) => a.keywords?.includes(mode));
   const kitDistance = (mode) => kit?.[mode?.toLowerCase() + 'Distance'] || 0;
   const distance = (a.distance || []).map((p) => {
@@ -111,6 +112,10 @@ function action(a, r, group) {
     a.description,
     ...abilityLines({ ...a, sections: sections.filter((s) => s.kind !== 'PowerRoll') }),
   ];
+  if (group === 'freeStrikes' && r.classId === 'tactician')
+    description.push(
+      ...r.grants.filter((f) => f.tag === 'tactician-arsenal').map((f) => f.name + ' · ' + f.description),
+    );
   if (tests.some((test) => Object.values(test.tiers).some((tier) => tier.damage))) {
     if (r.grants.some((f) => f.id === 'domain-sun-7'))
       description.push(
@@ -266,24 +271,26 @@ function resourceAutomation(r) {
     };
   }
   const damageRules =
-    classId === 'censor'
-      ? [
-          firstDamage(
-            'censor-damage-dealt',
-            'damageDealt',
-            { whose: 'self', targetWhose: 'judgedTarget' },
-            level >= 4 ? 2 : 1,
-          ),
-          firstDamage('censor-damage-taken', 'damage', { whose: 'self', sourceWhose: 'judgedTarget' }, 1),
-        ]
-      : [
-          firstDamage(
-            'elementalist-first-damage',
-            'damage',
-            { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
-            level >= 4 ? 2 : 1,
-          ),
-        ];
+    classId === 'tactician'
+      ? []
+      : classId === 'censor'
+        ? [
+            firstDamage(
+              'censor-damage-dealt',
+              'damageDealt',
+              { whose: 'self', targetWhose: 'judgedTarget' },
+              level >= 4 ? 2 : 1,
+            ),
+            firstDamage('censor-damage-taken', 'damage', { whose: 'self', sourceWhose: 'judgedTarget' }, 1),
+          ]
+        : [
+            firstDamage(
+              'elementalist-first-damage',
+              'damage',
+              { withinSquares: 10, damageTypeNot: ['untyped', 'holy'] },
+              level >= 4 ? 2 : 1,
+            ),
+          ];
   return {
     schema: 'heroic-resource/v1',
     rules: [
@@ -305,6 +312,14 @@ function firstDamageGain(level) {
 }
 function resourceSummary(r) {
   const resource = r.heroClass.resource;
+  if (r.classId === 'tactician')
+    return (
+      'Start combat with Focus equal to Victories. Gain ' +
+      (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
+      ' at the start of each turn. Once each round, add ' +
+      (r.level >= 4 ? 2 : 1) +
+      ' Focus the first time you or an ally damages a creature you marked. Separately, add 1 Focus the first time each round an ally within 10 squares uses a heroic ability. Lose remaining Focus when combat ends.'
+    );
   if (r.classId === 'shadow' || r.classId === 'fury') {
     const turnGain = r.level >= 7 ? '1d3 + 1' : '1d3';
     const start =

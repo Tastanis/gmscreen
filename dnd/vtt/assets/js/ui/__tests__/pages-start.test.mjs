@@ -107,13 +107,15 @@ async function finishDirectorBuilds(page) {
   const frame = await finishTableHeroes(page, 'censor');
   await frame.locator('nav [data-step="Identity"]').click();
   await finishIndependentHero(page, frame, 'fury');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'tactician');
 }
 
 async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
   const isNull = classId === 'null';
   const isCensor = classId === 'censor';
-  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy' }[classId];
-  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder' }[classId];
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder' }[classId];
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
@@ -122,10 +124,11 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
   if (classId !== 'elementalist') await builder.locator('[name="hero-level"]').selectOption('2');
   await builder.locator('nav [data-step="Ancestry"]').click();
   const ancestry = builder.locator('[data-slot="ancestry"]');
-  if (!await ancestry.locator('[data-option="ancestry-polder"][aria-pressed="true"]').count())
+  if (!await ancestry.locator('[data-option="ancestry-polder"][aria-pressed="true"]').count()) {
     await ancestry.getByRole('button',{name:'Polder',exact:true}).click();
-  await builder.goto(builder.url());
-  await builder.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
+    await builder.goto(builder.url());
+    await builder.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
+  }
   for(const step of ['Ancestry','Background','Class','Training']){
     await builder.locator('nav [data-step="'+step+'"]').click();
     for(let i=0;i<70;i++){
@@ -135,6 +138,17 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
       if(!key)break;
       const slot=builder.locator('fieldset[data-slot="'+key+'"]');
       if(key==='subclass'){await slot.getByRole('button',{name:specialization,exact:true}).click();continue;}
+      if (key === 'tactician-kits') {
+        await slot.getByRole('button',{name:'Martial Artist',exact:true}).click();
+        await slot.getByRole('button',{name:'Mountain',exact:true}).click();
+        continue;
+      }
+      if (key === 'tactician-kits-meleeDamage') {
+        const mountain = slot.locator('button[data-option="kit-mountain"]');
+        assert.match(await mountain.innerText(), /\+0\/\+0\/\+4/);
+        await mountain.click();
+        continue;
+      }
       if(key==='conduit-domain'){
         await slot.getByRole('button',{name:'Life',exact:true}).click();
         await slot.getByRole('button',{name:'Protection',exact:true}).click();
@@ -145,6 +159,7 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
         'conduit-deity': 'Adûn', 'conduit-feature-1': 'Protection', 'conduit-domain-ability-2': 'Wellspring of Grace',
         'fury-stormwight-kit': 'Vuken', 'fury-stormwight-ability-2': 'Visceral Roar', 'fury-perk-2': 'Expert Artisan',
         'shadow-kit': 'Cloak and Dagger', 'shadow-caustic-alchemy-ability-2': 'Sticky Bomb',
+        'tactician-vanguard-ability-2': 'Squad! On Me!',
       }[key];
       if (preferred) {
         await slot.getByRole('button', { name: preferred, exact: true }).click();
@@ -187,6 +202,15 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
     assert.equal(roar.cost,'5 Ferocity');
     assert.equal(roar.tests[0].tiers.low.damageType,'lightning');
     assert.ok(!Object.values(sheet.actions).flat().some(a=>a.name==='Judgment' || a.name==='Weakening Brand'));
+  } else if (classId === 'tactician') {
+    assert.equal(sheet.hero.resource.title, 'Focus');
+    assert.equal(sheet.hero.kit.name, 'Martial Artist and Mountain');
+    assert.ok(sheet.actions.maneuvers.some(a => a.name === 'Squad! On Me!' && a.cost === '5 Focus'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Parry'));
+    const grace = sheet.actions.mains.find(a => a.name === 'Battle Grace');
+    assert.equal(grace.tests[0].tiers.high.damage, String(13 + Math.max(sheet.hero.stats.might, sheet.hero.stats.agility)));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Pain for Pain'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Visceral Roar' || a.name === 'Overwatch'));
   } else if (classId === 'shadow') {
     assert.equal(sheet.hero.resource.title, 'Insight');
     assert.equal(sheet.hero.resource.discountOnPowerRollEdge, true);

@@ -60,6 +60,14 @@ export const CLASSES = {
     arrays: ARRAYS,
     resource: 'Insight',
   },
+  tactician: {
+    name: 'Tactician',
+    subclassLabel: 'Tactical doctrine',
+    primary: ['Might', 'Reason'],
+    potency: 'Reason',
+    arrays: martialArrays,
+    resource: 'Focus',
+  },
 };
 export const newDraft = () => ({
   version: 1,
@@ -225,6 +233,70 @@ function kitText(kit, level) {
     .filter(Boolean)
     .join('\n');
 }
+// Each printed signature already includes its original kit. Replace just those bonuses.
+function arsenalSignature(kit, arsenal) {
+  const ability = kit.ability;
+  const modes = ability.distance.map((d) => d.kind);
+  const damageChange = (mode) => {
+    const field = mode.toLowerCase() + 'Damage';
+    return [0, 1, 2].map((i) => (arsenal[field]?.[i] || 0) - (kit[field]?.[i] || 0));
+  };
+  const split = modes.length === 2 && damageChange(modes[0]).some((n, i) => n !== damageChange(modes[1])[i]);
+  return {
+    ...ability,
+    enhancementTag: 'tactician-arsenal',
+    distance: ability.distance.map((d) => {
+      const field = d.kind.toLowerCase() + 'Distance';
+      return { ...d, args: [d.args[0] + arsenal[field] - kit[field]] };
+    }),
+    sections: ability.sections.flatMap((s) => {
+      if (s.kind !== 'PowerRoll') return [s];
+      return (split ? modes : modes.slice(0, 1)).map((mode) => {
+        const delta = damageChange(mode);
+        const roll = { ...s };
+        if (split) roll.name = [s.name, mode].filter(Boolean).join(' · ');
+        ['tier1', 'tier2', 'tier3'].forEach((key, i) => {
+          roll[key] = s[key].replace(/^\d+/, (n) => String(Number(n) + delta[i]));
+        });
+        return roll;
+      });
+    }),
+  };
+}
+
+function fieldArsenal(kits, chooseBonus) {
+  const arsenal = {
+    name: kits.map((k) => k.name).join(' and '),
+    armor: distinct(kits.flatMap((k) => k.armor)),
+    weapon: distinct(kits.flatMap((k) => k.weapon)),
+    signatureIds: kits.map((k) => k.ability.id),
+  };
+  for (const field of [
+    'stamina',
+    'speed',
+    'stability',
+    'disengage',
+    'meleeDistance',
+    'rangedDistance',
+    'meleeDamage',
+    'rangedDamage',
+  ]) {
+    const sources = kits.filter((k) => k[field]);
+    if (sources.length === 2 && String(sources[0][field]) !== String(sources[1][field])) {
+      const choices = sources.map((k) =>
+        option(k.id, k.name, '', {
+          summary: [k[field]].flat().map(plus).join('/') + (field === 'stamina' ? ' per echelon' : ''),
+        }),
+      );
+      const [id] = chooseBonus(field, choices);
+      arsenal[field] = sources.find((k) => k.id === id)?.[field];
+    } else {
+      arsenal[field] = sources[0]?.[field] || 0;
+    }
+  }
+  return Object.values(arsenal).includes(undefined) ? undefined : arsenal;
+}
+
 function stormAbility(a, kit) {
   if (!a.usesStormDamage || !kit?.stormDamage) return a;
   const damage = kit.stormDamage.toLowerCase();
@@ -510,6 +582,30 @@ export function evaluate(db, draft) {
         config,
       );
       if (id) actions.push(pool.find((a) => a.id === id));
+      return;
+    }
+    if (f.kind === 'FieldArsenal') {
+      const ids = choose(
+        step,
+        key,
+        'Field Arsenal kits',
+        db.kits.map((k) => option(k.id, k.name, kitText(k, level))),
+        { ...config, count: 2 },
+      );
+      if (ids.length !== 2) return;
+      const kits = ids.map((id) => db.kits.find((k) => k.id === id));
+      kit = fieldArsenal(kits, (field, choices) =>
+        choose(
+          step,
+          key + '-' + field,
+          'Choose your ' + labelWords(field).toLowerCase() + ' bonus',
+          choices,
+          { source: title, description: 'Keep one kit’s full bonus until your next respite.' },
+        ),
+      );
+      if (!kit) return;
+      actions.push(...kits.map((k) => arsenalSignature(k, kit)));
+      grants.push({ ...f, source, description: kit.name + '\n' + f.description });
       return;
     }
     if (f.kind === 'KitChoice') {

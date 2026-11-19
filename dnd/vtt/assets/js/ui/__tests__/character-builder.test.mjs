@@ -1369,3 +1369,360 @@ test('Shadow advancement caps and kit bonuses hold across the starting arrays an
     assert.equal(sheet.hero.kit.name, kit.name);
   }
 });
+
+const tacticianPools = [
+  [1, 3, ['Battle Cry', 'Concussive Strike', 'Inspiring Strike', 'Squad! Forward!']],
+  [1, 5, ['Hammer and Anvil', 'Mind Game', 'Now!', 'This Is What We Planned For']],
+  [3, 7, ['Frontal Assault', 'Hit ’Em Hard!', 'Rout', 'Stay Strong and Focus!']],
+  [
+    5,
+    9,
+    [
+      'Squad! Gear Check!',
+      'Squad! Remember Your Training!',
+      'Win This Day!',
+      'You’ve Still Got Something Left',
+    ],
+  ],
+  [8, 11, ['Go Now and Speed Well', 'Finish Them!', 'Floodgates Open', 'I’ll Open and You’ll Close']],
+];
+const doctrines = {
+  Insurgent: {
+    skill: 'Intrigue',
+    trigger: 'Advanced Tactics',
+    features: [
+      [1, 'Covert Operations'],
+      [2, 'Infiltration Tactics'],
+      [5, 'Distracted'],
+      [5, 'Leave No Trace'],
+      [7, 'Asymmetric Warfare'],
+      [8, 'Bait and Ambush'],
+    ],
+    pairs: [
+      ['Fog of War', 'Try Me Instead'],
+      ['Coordinated Execution', 'Panic in Their Lines'],
+      ['Squad! Hit and Run!', 'Their Lack of Focus Is Their Undoing'],
+    ],
+  },
+  Mastermind: {
+    skill: 'Lore',
+    trigger: 'Overwatch',
+    features: [
+      [1, 'Studied Commander'],
+      [2, 'Goaded'],
+      [5, 'Anticipation'],
+      [5, 'I Predicted That'],
+      [7, 'Grand Strategy'],
+      [8, 'Pincer Movement'],
+    ],
+    pairs: [
+      ['I’ve Got Your Back', 'Targets of Opportunity'],
+      ['Battle Plan', 'Hustle!'],
+      ['Blot Out the Sun!', 'Counterstrategy'],
+    ],
+  },
+  Vanguard: {
+    skill: 'Interpersonal',
+    trigger: 'Parry',
+    features: [
+      [1, 'Commanding Presence'],
+      [2, 'Melee Superiority'],
+      [5, 'Shake It Off'],
+      [5, 'Tactical Offensive'],
+      [7, 'Shock and Awe'],
+      [8, 'See Your Enemies Driven Before You'],
+    ],
+    pairs: [
+      ['No Dying on My Watch', 'Squad! On Me!'],
+      ['Instant Retaliation', 'To Me Squad!'],
+      ['No Escape', 'That One Is Mine!'],
+    ],
+  },
+};
+const tactician = (level, specialization = 'Vanguard', preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'tactician',
+    level,
+    specialization,
+    ancestry,
+    preferences: {
+      'tactician-kits': ['Shining Armor', 'Sniper'],
+      'tactician-perk-2': 'Brawny',
+      'tactician-perk-4': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+
+test('Tactician grants two kit signatures and exactly the earned shared and doctrine abilities at every level', () => {
+  for (const [doctrine, info] of Object.entries(doctrines)) {
+    const { draft } = tactician(10, doctrine);
+    for (let level = 1; level <= 10; level++) {
+      draft.level = level;
+      const model = evaluate(db, draft),
+        sheet = buildSheet(db, draft);
+      assert.ok(model.complete && !model.warnings.length);
+      assert.equal(sheet.hero.classTrack, doctrine);
+      assert.ok(sheet.sidebar.skills.Lead);
+      assert.ok(!model.slots.some((s) => s.key === 'tactician-ability-signature'));
+      assert.deepEqual(
+        ids(sheet)
+          .filter((id) => id.startsWith('kit-'))
+          .sort(),
+        ['kit-shining-armor-signature', 'kit-sniper-signature'].sort(),
+      );
+      const mark = sheet.actions.maneuvers.find((a) => a.name === 'Mark');
+      assert.equal(
+        mark.target,
+        doctrine === 'Mastermind' && level >= 5 ? 'Up to two creatures' : 'One creature',
+      );
+      assert.ok(
+        sheet.actions.mains.some((a) => a.name === 'Strike Now!' && a.description.includes('Spend 5 focus')),
+      );
+      for (const [name, other] of Object.entries(doctrines)) {
+        assert.equal(
+          sheet.actions.triggers.some((a) => a.name === other.trigger),
+          name === doctrine,
+        );
+        for (const [at, feature] of other.features)
+          assert.equal(
+            model.grants.some((g) => g.name === feature),
+            name === doctrine && level >= at,
+          );
+      }
+      for (const [at, cost, key, names] of [
+        ...tacticianPools.map(([at, cost, names]) => [at, cost, 'tactician-ability-' + cost, names]),
+        ...info.pairs.map((names, i) => [
+          [2, 6, 9][i],
+          [5, 9, 11][i],
+          'tactician-' + doctrine.toLowerCase() + '-ability-' + [2, 6, 9][i],
+          names,
+        ]),
+      ]) {
+        const slot = model.slots.find((s) => s.key === key);
+        assert.equal(!!slot, level >= at, key);
+        if (!slot) continue;
+        assert.equal(slot.count, 1);
+        assert.equal(slot.flexible, false);
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+        if (level !== at) continue;
+        for (const option of slot.choices) {
+          const copy = structuredClone(draft);
+          copy.picks[key] = [option.id];
+          const spells = Object.values(buildSheet(db, copy).actions)
+            .flat()
+            .filter((a) => names.includes(a.name));
+          assert.deepEqual(
+            spells.map((a) => [a.name, a.cost]),
+            [[option.name, cost + ' Focus']],
+          );
+        }
+      }
+      const stat = 2 + [4, 7, 10].filter((at) => level >= at).length;
+      assert.equal(sheet.hero.stats.might, stat);
+      assert.equal(sheet.hero.stats.reason, stat);
+      assert.equal(sheet.hero.vitals.recoveriesMax, 10);
+      assert.equal(
+        sheet.hero.vitals.staminaMax,
+        21 + 9 * (level - 1) + model.kit.stamina * Math.ceil(level / 3),
+      );
+      const { rules, warnings } = normalizeHeroicResourceAutomation(sheet.hero.resource.automation);
+      assert.deepEqual(warnings, []);
+      assert.equal(sheet.hero.resource.title, 'Focus');
+      assert.equal(
+        rules.find((r) => r.event === 'turnStart').effect.amount.amount,
+        level === 10 ? 4 : level >= 7 ? 3 : 2,
+      );
+      assert.equal(rules.find((r) => r.event === 'combatStart').effect.amount.from, 'victories');
+      assert.equal(rules.find((r) => r.event === 'combatEnd').effect.amount.amount, 0);
+      assert.ok(
+        sheet.sidebar.resource.text.includes(
+          'add ' + (level >= 4 ? 2 : 1) + ' Focus the first time you or an ally',
+        ),
+      );
+      assert.ok(sheet.sidebar.resource.text.includes('ally within 10 squares uses a heroic ability'));
+      assert.equal(ids(sheet).length, new Set(ids(sheet)).size);
+      const check = sheet.actions.mains.find((a) => a.name === 'Patient Shot').description;
+      for (const [at, text] of [
+        [4, 'Improved Field Arsenal'],
+        [6, 'Master of Arms'],
+        [9, 'Grandmaster of Arms'],
+      ]) {
+        assert.equal(check.includes(text), level >= at);
+        assert.equal(sheet.actions.freeStrikes[0].description.includes(text), level >= at);
+      }
+    }
+  }
+});
+
+test('Field Arsenal offers each overlapping benefit independently and recalculates both signatures for all 210 kit pairs', () => {
+  const { draft } = tactician(1);
+  for (const [i, first] of db.kits.entries())
+    for (const second of db.kits.slice(i + 1)) {
+      const pair = [first, second];
+      draft.picks['tactician-kits'] = pair.map((k) => k.id);
+      const initial = evaluate(db, draft);
+      for (const field of [
+        'stamina',
+        'speed',
+        'stability',
+        'disengage',
+        'meleeDistance',
+        'rangedDistance',
+        'meleeDamage',
+        'rangedDamage',
+      ]) {
+        const values = pair.map((k) => k[field]);
+        const slot = initial.slots.find((s) => s.key === 'tactician-kits-' + field);
+        assert.equal(
+          !!slot,
+          values.every(Boolean) && String(values[0]) !== String(values[1]),
+          first.name + ' and ' + second.name + ' ' + field,
+        );
+        if (slot) {
+          assert.deepEqual(
+            slot.choices.map((o) => o.id),
+            pair.map((k) => k.id),
+          );
+          assert.equal(slot.flexible, false);
+          draft.picks[slot.key] = [second.id];
+        }
+      }
+      const sheet = mergeWithDefaults(buildSheet(db, draft));
+      const gear = effectiveKit(sheet).values;
+      assert.equal(gear.name, pair.map((k) => k.name).join(' and '));
+      for (const f of ['speed', 'stamina', 'stability', 'disengage', 'meleeDistance', 'rangedDistance'])
+        assert.equal(Number(gear[f]), second[f] || first[f] || 0);
+      for (const k of pair) {
+        const record = Object.values(sheet.actions)
+          .flat()
+          .find((a) => a.id === k.ability.id);
+        for (const d of k.ability.distance) {
+          const mode = d.kind.toLowerCase(),
+            distance = mode + 'Distance',
+            bon = mode + 'Damage';
+          assert.ok(
+            record.range.includes(
+              d.kind + ' ' + (d.args[0] + (second[distance] || first[distance] || 0) - k[distance]),
+            ),
+          );
+          const roll = k.ability.sections.find((s) => s.kind === 'PowerRoll');
+          const test = record.tests.find((t) => t.label.includes(d.kind)) || record.tests[0];
+          for (const [index, tier] of ['low', 'mid', 'high'].entries()) {
+            const printed = roll['tier' + (index + 1)];
+            const chars = (
+              printed
+                .split(' damage')[0]
+                .split(';')[0]
+                .match(/\b[MARIP]\b/g) || []
+            ).map(
+              (key) =>
+                sheet.hero.stats[
+                  { M: 'might', A: 'agility', R: 'reason', I: 'intuition', P: 'presence' }[key]
+                ],
+            );
+            const flat = Number.parseInt(printed, 10) + (chars.length ? Math.max(...chars) : 0);
+            assert.equal(
+              Number(test.tiers[tier].damage),
+              flat + (second[bon] || first[bon] || [])[index] - (k[bon]?.[index] || 0),
+              k.name + ' ' + d.kind + ' ' + tier,
+            );
+          }
+        }
+      }
+      assert.equal(sheet.actions.mains.filter((a) => a.id.startsWith('kit-')).length, 2);
+    }
+});
+
+test('the printed Field Arsenal examples, illegal picks, skills and perk restrictions survive a draft edit', () => {
+  const { draft, model } = tactician(10, 'Mastermind', { 'tactician-kits-stamina': 'Shining Armor' });
+  const kit = model.kit;
+  assert.deepEqual(
+    [kit.stamina, kit.stability, kit.speed, kit.rangedDistance, kit.disengage],
+    [12, 1, 1, 10, 1],
+  );
+  assert.deepEqual(kit.meleeDamage, [2, 2, 2]);
+  assert.deepEqual(kit.rangedDamage, [0, 0, 4]);
+  const skill = model.slots.find((s) => s.key === 'tactician-skills');
+  assert.equal(skill.count, 2);
+  for (const o of skill.choices) {
+    const record = db.skills.find((s) => s.name === o.name);
+    assert.equal(
+      !o.warning,
+      record.list === 'Exploration' ||
+        [
+          'Alertness',
+          'Architecture',
+          'Blacksmithing',
+          'Brag',
+          'Culture',
+          'Empathize',
+          'Fletching',
+          'Mechanics',
+          'Monsters',
+          'Search',
+          'Strategy',
+        ].includes(o.name),
+    );
+  }
+  for (const [name, info] of Object.entries(doctrines)) {
+    const { model } = tactician(10, name);
+    const trained = model.slots.find((s) => s.key === 'tactician-' + name.toLowerCase() + '-skill');
+    assert.ok(
+      trained.choices.every(
+        (o) => !!o.warning === (db.skills.find((s) => s.name === o.name).list !== info.skill),
+      ),
+    );
+    for (const at of [2, 6, 10]) {
+      const slot = model.slots.find((s) => s.key === 'tactician-perk-' + at);
+      assert.ok(
+        slot.choices.every((o) =>
+          ['Exploration', 'Interpersonal', 'Intrigue'].includes(db.perks.find((p) => p.id === o.id).list),
+        ),
+      );
+    }
+  }
+  const pairs = model.slots.find((s) => s.key === 'tactician-kits');
+  assert.equal(pairs.choices.length, 21);
+  for (const pick of [
+    ['kit-shining-armor', 'kit-shining-armor'],
+    ['kit-shining-armor', 'kit-boren'],
+  ]) {
+    const copy = structuredClone(draft);
+    copy.picks[pairs.key] = pick;
+    copy.exceptions[pairs.key] = pick;
+    assert.throws(() => buildSheet(db, copy));
+  }
+  const slot = model.slots.find((s) => s.key === 'tactician-mastermind-ability-2');
+  for (const id of ['tactician-fog-of-war', 'tactician-now', 'tactician-battle-plan', 'shadow-sticky-bomb']) {
+    assert.equal(setPick(draft, slot, id, true), false);
+    const copy = structuredClone(draft);
+    copy.picks[slot.key] = [id];
+    copy.exceptions[slot.key] = [id];
+    assert.throws(() => buildSheet(db, copy));
+  }
+  const changed = tactician(10, 'Insurgent', {
+    'tactician-kits': ['Martial Artist', 'Mountain'],
+    'tactician-kits-meleeDamage': 'Mountain',
+  }).draft;
+  changed.level = 1;
+  const grace = () =>
+    buildSheet(db, changed).actions.mains.find((a) => a.name === 'Battle Grace').tests[0].tiers;
+  const stat = 2;
+  assert.deepEqual(
+    Object.values(grace()).map((t) => Number(t.damage) - stat),
+    [3, 6, 13],
+  );
+  changed.picks['tactician-kits-meleeDamage'] = ['kit-martial-artist'];
+  assert.deepEqual(
+    Object.values(grace()).map((t) => Number(t.damage) - stat),
+    [5, 8, 11],
+  );
+  changed.picks['tactician-kits-meleeDamage'] = ['kit-sniper'];
+  changed.exceptions['tactician-kits-meleeDamage'] = ['kit-sniper'];
+  assert.throws(() => buildSheet(db, changed));
+  changed.classId = 'shadow';
+  assert.ok(
+    !evaluate(db, changed).actions.some((a) => a.id.startsWith('tactician-') || a.name === 'Battle Grace'),
+  );
+  for (const a of db.ancestries) assert.ok(tactician(1, 'Insurgent', {}, a.name).model.complete);
+});
