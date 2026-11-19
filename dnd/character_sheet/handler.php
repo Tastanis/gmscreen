@@ -203,6 +203,10 @@ function normalize_skills($skills) {
                     'level' => $level,
                     'bonus' => isset($data['bonus']) ? $data['bonus'] : '',
                 );
+                // A custom skill's group (Brandon, November 17, 2026): one of the book's five, else it shows under Other.
+                if (isset($data['group']) && in_array($data['group'], array('Crafting', 'Exploration', 'Interpersonal', 'Intrigue', 'Lore'), true)) {
+                    $normalized[$skill]['group'] = $data['group'];
+                }
             }
         }
     }

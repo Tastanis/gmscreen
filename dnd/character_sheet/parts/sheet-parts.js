@@ -487,7 +487,7 @@ export function skillBonus(bonus) {
 /** Skills by Draw Steel skill group: [[group, [[name, {bonus}]]]] in the book's order, "Other" last. */
 export function groupSkills(skills) {
   const groups = {};
-  Object.entries(normalizeSkillsState(skills)).forEach(([n, v]) => { (groups[getSkillGroup(n)] ||= []).push([n, v]); });
+  Object.entries(normalizeSkillsState(skills)).forEach(([n, v]) => { (groups[getSkillGroup(n, v)] ||= []).push([n, v]); });
   return [...Object.keys(SKILL_GROUPS), 'Other'].filter((g) => groups[g]).map((g) => [g, groups[g].sort(([a], [b]) => a.localeCompare(b))]);
 }
 

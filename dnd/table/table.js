@@ -81,7 +81,9 @@
     const away = popped.get(id);
     if (away && !away.closed) { try { away.focus(); } catch (_) { /* the browser may refuse */ } toast(`${spec.title} is open in its own window`); return null; }
     popped.delete(id);
-    if (windows.has(id)) { const w = windows.get(id); if (w.state.min) restore(w); focusWin(w); spec.onReopen?.(w); return w; }
+    // Already open: brought forward. One pinned in a side drawer slides out (Brandon, November 17, 2026: "if I have
+    // students pinned already to the side bar, it should extend the side bar for me").
+    if (windows.has(id)) { const w = windows.get(id); if (w.state.min) restore(w); if (w.state.dock && !w.state.open) setOpen(w, true); focusWin(w); spec.onReopen?.(w); return w; }
     const node = el('div', 'win' + (spec.app ? ' app-' + spec.app : ''));
     node.innerHTML = `<div class="bar"><svg class="ico" viewBox="0 0 24 24">${spec.icon || ''}</svg><div class="title">${spec.title}<em>${spec.sub || ''}</em></div>
       <span class="badge" hidden></span>

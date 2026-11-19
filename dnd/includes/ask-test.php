@@ -70,15 +70,26 @@ final class AskTest
             $skills[(string) $skill] = is_array($entry) ? self::whole($entry['bonus'] ?? 0) : 0;
         }
         ksort($skills);
-        return ['stats' => $stats, 'skills' => $skills];
+        // The group a custom skill was given, so a test offers it there (else under Other).
+        $skillGroups = [];
+        foreach (is_array($sheet['sidebar']['skills'] ?? null) ? $sheet['sidebar']['skills'] : [] as $skill => $entry) {
+            if (isset($skills[(string) $skill]) && is_array($entry) && isset(self::SKILLS[$entry['group'] ?? ''])) $skillGroups[(string) $skill] = $entry['group'];
+        }
+        return ['stats' => $stats, 'skills' => $skills, 'skillGroups' => $skillGroups];
     }
 
     /** The skill groups a hero picks from: the book's five, and "Other" with the hero's own custom skills when they have any. */
     public static function groups(array $sheet): array
     {
         $known = array_merge(...array_values(self::SKILLS));
-        $other = array_values(array_filter(array_map('strval', array_keys($sheet['skills'] ?? [])), static fn ($skill) => !in_array($skill, $known, true)));
-        return $other ? self::SKILLS + ['Other' => $other] : self::SKILLS;
+        $groups = self::SKILLS;
+        $other = [];
+        foreach (array_map('strval', array_keys($sheet['skills'] ?? [])) as $skill) {
+            if (in_array($skill, $known, true)) continue;
+            $group = $sheet['skillGroups'][$skill] ?? '';
+            if (isset($groups[$group])) $groups[$group][] = $skill; else $other[] = $skill;
+        }
+        return $other ? $groups + ['Other' => $other] : $groups;
     }
 
     /** The characteristics the Director lit, tidied: known ones only, in the sheet's order, each once. */

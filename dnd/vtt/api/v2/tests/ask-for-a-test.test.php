@@ -32,7 +32,7 @@ $row = AskTest::roll(AskTest::create(['indigo'], [], false, 1000), $indigo, ['ch
 testCheck($row['hasSkill'] === true && $row['modifier'] === 2 + 9, 'A custom skill rolls like a book one: 2 and its own bonus');
 $cal = AskTest::sheetOf($sheets, 'cal');
 testCheck($cal['stats'] === ['might' => 2, 'agility' => 0, 'reason' => 0, 'intuition' => -1, 'presence' => 0] && $cal['skills'] === [], 'A blank or missing characteristic is 0; no skills is no skills');
-testCheck(AskTest::sheetOf($sheets, 'zepha') === ['stats' => ['might' => 0, 'agility' => 0, 'reason' => 0, 'intuition' => 0, 'presence' => 0], 'skills' => []], 'A hero with no sheet rolls from zeros');
+testCheck(AskTest::sheetOf($sheets, 'zepha') === ['stats' => ['might' => 0, 'agility' => 0, 'reason' => 0, 'intuition' => 0, 'presence' => 0], 'skills' => [], 'skillGroups' => []], 'A hero with no sheet rolls from zeros');
 testCheck(AskTest::characteristics(['Intuition', 'agility', 'luck', 'agility', 7]) === ['agility', 'intuition'], 'What the Director lit is tidied: known ones, once each, in the sheet\'s order');
 testCheck(AskTest::characteristics('agility') === [] && AskTest::characteristics(null) === [], 'and anything that is not a list is none lit');
 

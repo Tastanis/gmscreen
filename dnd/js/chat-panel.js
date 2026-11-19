@@ -1469,7 +1469,9 @@
             meta.className = 'chat-message__meta';
 
             const userSpan = document.createElement('span');
-            userSpan.textContent = message.user || 'Unknown';
+            // The player's name from the players page, not their login id (Brandon, November 17, 2026: Pippa showed as
+            // "player 6"), as whispers already do.
+            userSpan.textContent = getParticipantLabel(message.user) || 'Unknown';
             meta.appendChild(userSpan);
 
             const timeSpan = document.createElement('span');
