@@ -1434,4 +1434,4 @@ Verify with asl/tests/grading-pins-browser.test.cjs (PW_CHANNEL=chrome works). T
 The Table character builder stores independent drafts in the browser and downloads
 native hero files. Keep its rules and tests separate from player-sheet storage.
 For supported classes and the book chapters used by the Censor’s order, domain,
-and kit choices, see `docs/character-builder.md`.
+and kit choices and the Conduit’s paired domain progression, see `docs/character-builder.md`.

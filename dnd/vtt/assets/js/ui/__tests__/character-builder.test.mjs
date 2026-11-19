@@ -17,8 +17,9 @@ function build({
   career = 'Agent',
   complication,
   preferences = {},
+  deityName = '',
 } = {}) {
-  const draft = { ...newDraft(), name: 'Test hero', classId, level };
+  const draft = { ...newDraft(), name: 'Test hero', classId, level, deityName };
   if (complication) delete draft.picks.complication;
   const known = {
     ancestry,
@@ -41,7 +42,7 @@ function build({
         (!c.family || !slot.choices.some((x) => x.family === c.family && slot.selected.includes(x.id))),
     );
     const candidate =
-      choices.find((c) => c.name === known[slot.key]) ||
+      choices.find((c) => [known[slot.key]].flat().includes(c.name)) ||
       choices.find((c) => !slot.points || c.cost <= slot.count - slot.total);
     assert.ok(candidate, slot.source + ' · ' + slot.title);
     assert.ok(setPick(draft, slot, candidate.id), slot.key + ' ' + candidate.name);
@@ -474,9 +475,9 @@ const domainFeatures = {
   War: ['Sanctified Weapon', 'Improved Sanctified Weapon', 'Your Triumphs Are Remembered'],
 };
 test('only the chosen deity’s domain grants features at levels 1, 4 and 7; Templar and Virtue unlock at 10', () => {
-  assert.equal(db.censor.deities.length, 38);
+  assert.equal(db.deities.length, 38);
   for (const [domain, titles] of Object.entries(domainFeatures)) {
-    const deity = db.censor.deities.find((d) => d.domains.includes(domain));
+    const deity = db.deities.find((d) => d.domains.includes(domain));
     for (const level of [1, 4, 7, 10]) {
       const { model, sheet } = censor(level, { 'censor-1-2': deity.name, 'censor-domain': domain });
       const exported = [
@@ -590,4 +591,197 @@ test('all core ancestries finish a Censor and the native sheet reader preserves 
   assert.ok(model.grants.some((f) => f.name === 'Eidetic Memory'));
   assert.equal(model.warnings.length, 0);
   assert.ok(!model.slots.some((s) => s.key === 'perk-eidetic-memory-skill'));
+});
+
+const conduitPools = [
+  [
+    1,
+    'signature',
+    [
+      'Blessed Light',
+      'Drain',
+      'Holy Lash',
+      'Lightfall',
+      'Sacrificial Offer',
+      'Staggering Curse',
+      'Warrior’s Prayer',
+      'Wither',
+    ],
+  ],
+  [1, 3, ['Call the Thunder Down', 'Font of Wrath', 'Judgment’s Hammer', 'Violence Will Not Aid Thee']],
+  [1, 5, ['Corruption’s Curse', 'Curse of Terror', 'Faith Is Our Armor', 'Sermon of Grace']],
+  [3, 7, ['Fear of the Gods', 'Saint’s Raiment', 'Soul Siphon', 'Words of Wrath and Grace']],
+  [5, 9, ['Beacon of Grace', 'Penance', 'Sanctuary', 'Vessel of Retribution']],
+  [8, 11, ['Arise!', 'Blessing of Steel', 'Blessing of the Blade', 'Drag the Unworthy']],
+];
+// Published Conduit domain ability tables at levels 2, 6 and 9.
+const conduitDomainAbilities = {
+  Creation: ['Statue of Power', 'Gods’ Machine', 'Divine Dragon'],
+  Death: ['Reap', 'Aura of Souls', 'Word of Final Redemption'],
+  Fate: ['Blessing of Fate and Destiny', 'Your Story Ends Here', 'Bend Fate'],
+  Knowledge: ['The Gods Command You Obey', 'Invocation of Undoing', 'Word of Weakening'],
+  Life: ['Wellspring of Grace', 'Revitalizing Grace', 'Radiance of Grace'],
+  Love: ['Our Hearts Your Strength', 'Lauded by God', 'Alacrity of the Heart'],
+  Nature: ['Nature Judges Thee', 'Spirit Stampede', 'Thorn Cage'],
+  Protection: ['Sacred Bond', 'Cuirass of the Gods', 'Blessing of the Fortress'],
+  Storm: ['Saint’s Tempest', 'Lightning Lord', 'Godstorm'],
+  Sun: ['Morning Light', 'Blessing of the Midday Sun', 'Solar Flare'],
+  Trickery: ['Divine Comedy', 'Invocation of Mystery', 'Night Falls'],
+  War: ['Blessing of Insight', 'Blade of the Heavens', 'Righteous Phalanx'],
+};
+const conduit = (level, preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'conduit',
+    level,
+    ancestry,
+    deityName: 'The Witness',
+    preferences: {
+      'conduit-deity': 'Adûn',
+      'conduit-domain': ['Life', 'Protection'],
+      'conduit-perk-2': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+test('Conduit shared ability pools, characteristics, Piety and native export follow every printed level', () => {
+  for (let level = 1; level <= 10; level++) {
+    const { draft, model, sheet } = conduit(level);
+    assert.ok(model.complete && !model.warnings.length);
+    for (const [at, cost, names] of conduitPools) {
+      const slot = model.slots.find((s) => s.key === 'conduit-' + cost);
+      assert.equal(!!slot, at <= level);
+      if (!slot) continue;
+      assert.equal(slot.count, cost === 'signature' ? 2 : 1);
+      assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+      for (const id of slot.selected) assert.equal(model.actions.find((a) => a.id === id).cost, cost);
+      assert.equal(setPick(draft, slot, 'elementalist-ability-1', true), false);
+    }
+    const actual = mergeWithDefaults(JSON.parse(JSON.stringify(sheet)));
+    assert.equal(actual.hero.classTrack, 'Life and Protection');
+    assert.equal(actual.hero.stats.intuition, 2 + [4, 7, 10].filter((at) => at <= level).length);
+    assert.equal(actual.hero.vitals.staminaMax, 18 + (level - 1) * 6);
+    assert.equal(actual.hero.vitals.recoveriesMax, 8);
+    assert.equal(
+      actual.actions.freeStrikes.find((a) => a.name === 'Ray of Wrath').tests[0].tiers.low.damage,
+      String(2 + actual.hero.stats.intuition + 1),
+    ); // Prayer of Destruction
+    const rules = actual.hero.resource.automation.rules;
+    assert.deepEqual(rules.find((r) => r.event === 'turnStart').effect.amount, {
+      dice: '1d3',
+      bonus: level >= 7 ? 1 : 0,
+    });
+    assert.equal(rules.find((r) => r.event === 'combatStart').effect.amount.from, 'victories');
+    assert.equal(actual.sidebar.resource.text.includes('additional Piety whenever you pray'), level === 10);
+    assert.ok(!ids(actual).some((id) => /^(censor|null|elementalist|kit)-/.test(id)));
+  }
+});
+test('every Conduit domain pair grants only its earned features and offers exactly its two domain abilities per tier', () => {
+  const all = Object.keys(conduitDomainAbilities);
+  for (const [i, first] of all.entries())
+    for (const second of all.slice(i + 1)) {
+      const pair = [first, second],
+        portfolio = [...pair, ...all.filter((s) => !pair.includes(s)).slice(0, 2)];
+      const { draft, sheet } = conduit(10, {
+        'conduit-deity': 'Custom deity (Director-approved)',
+        'conduit-portfolio': portfolio,
+        'conduit-domain': pair,
+        'conduit-feature-1': second,
+        'conduit-feature-4': first,
+        'conduit-feature-7': second,
+      });
+      for (const level of [1, 2, 4, 5, 6, 7, 8, 9, 10]) {
+        const model = evaluate(db, { ...draft, level });
+        for (const [j, at] of [2, 6, 9].entries()) {
+          const slot = model.slots.find((s) => s.key === 'conduit-domain-ability-' + at);
+          assert.equal(!!slot, level >= at);
+          if (!slot) continue;
+          assert.deepEqual(
+            slot.choices.map((o) => o.name).sort(),
+            pair.map((d) => conduitDomainAbilities[d][j]).sort(),
+          );
+          assert.equal(slot.count, 1);
+          assert.equal(slot.flexible, false);
+          assert.equal(model.actions.find((a) => a.id === slot.selected[0]).cost, [5, 9, 11][j]);
+        }
+        const named = new Set([...model.grants.map((f) => f.name), ...model.actions.map((a) => a.name)]);
+        for (const [d, titles] of Object.entries(domainFeatures))
+          for (const [j, title] of titles.entries()) {
+            const at = [1, 4, 7][j],
+              takeFirst = j === 1 ? first : second;
+            const expected = pair.includes(d) && level >= at + (d === takeFirst ? 0 : 1);
+            assert.equal(
+              named.has(title === 'Ride the Lightning' ? 'Thunderstruck' : title),
+              expected,
+              d + ' ' + title + ' at ' + level,
+            );
+          }
+      }
+      assert.equal(sheet.hero.resource.title, 'Piety');
+      const middle = evaluate(db, draft).slots.find((s) => s.key === 'conduit-domain-ability-6');
+      draft.picks[middle.key] = [middle.choices.find((o) => !middle.selected.includes(o.id)).id];
+      const changed = buildSheet(db, draft);
+      assert.ok(ids(changed).includes(draft.picks[middle.key][0]));
+      assert.ok(!ids(changed).includes(middle.selected[0]));
+    }
+});
+test('Conduit rejects out-of-portfolio, duplicate and stale choices even in an edited browser draft', () => {
+  const { draft, model } = conduit(10);
+  const slot = model.slots.find((s) => s.key === 'conduit-domain');
+  assert.deepEqual(slot.choices.map((o) => o.name).sort(), ['Creation', 'Life', 'Love', 'Protection']);
+  draft.picks[slot.key] = ['domain-sun', 'domain-sun'];
+  draft.exceptions[slot.key] = ['domain-sun'];
+  assert.equal(evaluate(db, draft).domains.length, 0);
+  assert.throws(() => buildSheet(db, draft));
+  draft.picks[slot.key] = ['domain-life', 'domain-life'];
+  assert.equal(evaluate(db, draft).domains.length, 1);
+  draft.picks[slot.key] = ['domain-love', 'domain-creation'];
+  const changed = evaluate(db, draft);
+  assert.ok(!changed.actions.some((a) => a.name === 'Wellspring of Grace'));
+  assert.equal(changed.slots.find((s) => s.key === 'conduit-domain-ability-2').selected.length, 0);
+  draft.picks['conduit-domain-ability-2'] = ['conduit-curse-of-terror']; // Same cost, different pool.
+  assert.throws(() => buildSheet(db, draft));
+  draft.classId = 'censor';
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('conduit-')));
+});
+test('Conduit prayers, ward, immunity and domain Piety bonuses apply once and respect their limits', () => {
+  const { draft, model } = conduit(10, {
+    'conduit-deity': 'Salorna',
+    'conduit-domain': ['Nature', 'Sun'],
+    'conduit-prayer': 'Prayer of Steel',
+    'conduit-saint-immunity': 'Holy immunity',
+  });
+  const prayer = model.slots.find((s) => s.key === 'conduit-prayer');
+  assert.equal(prayer.count, 3);
+  assert.ok(prayer.complete);
+  draft.picks[prayer.key] = [
+    'conduit-prayer-of-steel',
+    'conduit-prayer-of-speed',
+    'conduit-prayer-of-distance',
+    'conduit-prayer-of-destruction',
+  ];
+  const sheet = buildSheet(db, draft);
+  assert.equal(sheet.hero.vitals.staminaMax, 18 + 9 * 6 + 24);
+  assert.equal(sheet.hero.vitals.stability, 1);
+  assert.equal(sheet.hero.vitals.save, 5);
+  assert.ok(sheet.sidebar.lists.immunity.includes('Holy 10'));
+  assert.ok(sheet.sidebar.lists.immunity.includes('Fire 10'));
+  assert.equal(sheet.actions.maneuvers.find((a) => a.name === 'Healing Grace').range, 'Ranged 12');
+  assert.equal(sheet.actions.mains.find((a) => a.name === 'Ray of Wrath').tests[0].tiers.low.damage, '7');
+  const rules = sheet.hero.resource.automation.rules.filter((r) => r.event === 'damage');
+  assert.equal(rules.find((r) => r.id.endsWith('domain-nature')).filter.whose, undefined);
+  assert.equal(rules.find((r) => r.id.endsWith('domain-sun')).filter.whose, 'enemy');
+  assert.ok(rules.every((r) => r.effect.amount.amount === 3 && r.limit.scope === 'encounter'));
+  draft.level = 9;
+  assert.equal(evaluate(db, draft).slots.find((s) => s.key === prayer.key).selected.length, 1);
+  const soldier = conduit(4, { 'conduit-prayer': 'Prayer of Soldier’s Skill' });
+  assert.equal(soldier.sheet.hero.kit.armor, 'Light armor');
+  soldier.draft.picks['conduit-gear-armor'] = ['no'];
+  soldier.draft.picks['conduit-gear-weapon'] = ['no'];
+  const unarmored = buildSheet(db, soldier.draft);
+  assert.equal(soldier.sheet.hero.vitals.staminaMax - unarmored.hero.vitals.staminaMax, 6);
+  assert.equal(
+    Number(soldier.sheet.actions.freeStrikes[0].tests[0].tiers.low.damage) -
+      Number(unarmored.actions.freeStrikes[0].tests[0].tiers.low.damage),
+    1,
+  );
+  for (const ancestry of db.ancestries) assert.ok(conduit(1, {}, ancestry.name).model.complete);
 });

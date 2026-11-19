@@ -23,6 +23,8 @@ const instructions = {
   Review: 'Check the grants and choices before downloading your new hero.',
 };
 const classInstructions = {
+  conduit:
+    'Choose a deity and two of its domains. Choose which domain feature you learn first at each tier, then select your prayer, ward, and abilities.',
   censor:
     'Choose your order, deity, domain, and kit. Your order grants its own ability choices at levels 2, 6, and 9.',
   elementalist:
@@ -127,10 +129,12 @@ function review() {
       `<section class="review-box"><h3>${esc(name)}</h3><p>${esc(items.filter(Boolean).join(' · ') || '—')}</p></section>`,
     );
   }
-  if (model.classId === 'censor')
+  if (model.deity)
     boxes.push(
-      '<section class="review-box"><h3>Order, faith, and kit</h3><p>' +
-        [model.subclass?.name, model.deity?.name, model.domain?.name, model.kit?.name]
+      '<section class="review-box"><h3>' +
+        (model.classId === 'censor' ? 'Order, faith, and kit' : 'Deity and domains') +
+        '</h3><p>' +
+        [model.subclass?.name, model.deity.name, ...model.domains.map((d) => d.name), model.kit?.name]
           .filter(Boolean)
           .map(esc)
           .join(' · ') +
@@ -155,7 +159,7 @@ function review() {
 function summary() {
   const v = vitals(model);
   $('#summary').innerHTML =
-    `<div class="eyebrow">Hero</div><h3>${esc(draft.name || 'Unnamed hero')}</h3><p>${esc([model.ancestry?.name, model.subclass?.name, model.heroClass.name].filter(Boolean).join(' '))} · Level ${esc(draft.level)}</p>
+    `<div class="eyebrow">Hero</div><h3>${esc(draft.name || 'Unnamed hero')}</h3><p>${esc([model.ancestry?.name, model.classTrack, model.heroClass.name].filter(Boolean).join(' '))} · Level ${esc(draft.level)}</p>
   <dl>${[...STATS.map((k) => [k, model.stats[k]]), ['Stamina', v.staminaMax], ['Recoveries', v.recoveriesMax], ['Speed', v.speed]].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="hint">${model.complete ? 'Ready to download' : model.errors.length + ' unfinished choices'}</p>
   <p class="hint">${storageProblem ? 'Browser storage is unavailable. Keep this window open.' : 'Draft saved in this browser.'}</p>`;
 }
@@ -170,7 +174,7 @@ function draw() {
         (s.key.startsWith('incident-') && model.incident?.id === 'original'
           ? `<label>Your inciting incident<textarea name="incident">${esc(draft.incident)}</textarea></label>`
           : '') +
-        (s.key === 'censor-1-2' && model.deity?.id === 'custom'
+        (['censor-1-2', 'conduit-deity'].includes(s.key) && model.deity?.id === 'custom'
           ? `<label>Custom deity name<input name="deity-name" maxlength="100" value="${esc(draft.deityName)}"></label>`
           : ''),
     )

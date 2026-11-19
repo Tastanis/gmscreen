@@ -28,7 +28,9 @@ export function vitals(r) {
     speed: total(r, 'Speed', r.grants.find((f) => f.kind === 'Speed')?.speed || 5) + (kit?.speed || 0),
     stability: total(r, 'Stability') + (kit?.stability || 0),
     disengage: total(r, 'Disengage', 1) + (kit?.disengage || 0),
-    save: Math.min(6, ...r.grants.filter((f) => f.kind === 'SaveThreshold').map((f) => f.value)),
+    save:
+      Math.min(6, ...r.grants.filter((f) => f.kind === 'SaveThreshold').map((f) => f.value)) -
+      total(r, 'Saving throws'),
     staminaMax: stamina,
     currentStamina: stamina,
     recoveriesMax: recoveries,
@@ -86,7 +88,11 @@ function action(a, r, group) {
     .flatMap((s, i) =>
       modes.map((mode) => ({
         id: a.id + '-roll-' + i + (splitRoll ? '-' + mode.toLowerCase() : ''),
-        label: (splitRoll ? mode + ' · ' : '') + 'Power Roll · ' + (s.characteristic || []).join(' or '),
+        label:
+          (s.name ? s.name + ' · ' : '') +
+          (splitRoll ? mode + ' · ' : '') +
+          'Power Roll · ' +
+          (s.characteristic || []).join(' or '),
         rollMod: s.characteristic?.length ? String(Math.max(...s.characteristic.map((c) => r.stats[c]))) : '',
         tiers: Object.fromEntries(
           ['low', 'mid', 'high'].map((key, i) => [
@@ -176,6 +182,44 @@ function resourceAutomation(r) {
       target: 'self',
       markOn: 'offered',
     });
+  if (classId === 'conduit') {
+    const domainEvents = {
+      Creation: ['actionUsed', { withinSquares: 10, distanceTo: 'actor', keywordsAny: ['area'] }],
+      Knowledge: ['maliceSpent', {}],
+      Nature: [
+        'damage',
+        { withinSquares: 10, damageTypeAny: ['acid', 'cold', 'fire', 'lightning', 'poison', 'sonic'] },
+      ],
+      Storm: ['forcedMovement', { whose: 'enemy', withinSquares: 10 }],
+      Sun: ['damage', { whose: 'enemy', withinSquares: 10, damageTypeAny: ['fire', 'holy'] }],
+    };
+    const domainRules = r.domains
+      .filter((d) => domainEvents[d.name])
+      .map((d) => {
+        const [event, filter] = domainEvents[d.name];
+        const id = 'conduit-piety-' + d.id;
+        return rule(id, event, filter, 'gain', fixed(level >= 4 ? 3 : 2), false, {
+          scope: 'encounter',
+          key: id,
+        });
+      });
+    return {
+      schema: 'heroic-resource/v1',
+      rules: [
+        rule('conduit-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+        {
+          ...rule('conduit-turn', 'turnStart', { whose: 'self' }, 'gain', {
+            dice: '1d3',
+            bonus: level >= 7 ? 1 : 0,
+          }),
+          prompt:
+            'Decide whether to pray before rolling. Gain {amount} Piety and apply any prayer outcome from your Piety feature.',
+        },
+        ...domainRules,
+        rule('conduit-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+      ],
+    };
+  }
   const damageRules =
     classId === 'censor'
       ? [
@@ -220,7 +264,7 @@ export function buildSheet(db, draft) {
     name: draft.name.trim(),
     level: r.level,
     class: r.heroClass.name,
-    classTrack: r.subclass.name,
+    classTrack: r.classTrack,
     ancestry: r.ancestry.name + (r.former ? ' (' + r.former.name + ')' : ''),
     complication: r.complication?.name || '',
     culture: { culture: draft.cultureName || '', ...r.culture },
@@ -242,11 +286,13 @@ export function buildSheet(db, draft) {
     title: resource,
     automation: resourceAutomation(r),
   });
-  if (r.grants.some((f) => f.id === 'elementalist-1-7a'))
+  if (r.grants.some((f) => f.id === 'elementalist-1-7a' || f.id === 'conduit-prayer-of-soldiers-skill')) {
+    const key = r.classId === 'conduit' ? 'conduit-gear-' : 'battle-';
     Object.assign(hero.kit, {
-      armor: draft.picks['battle-armor']?.[0] === 'yes' ? 'Light armor' : '',
-      weapon: draft.picks['battle-weapon']?.[0] === 'yes' ? 'Light weapon' : '',
+      armor: draft.picks[key + 'armor']?.[0] === 'yes' ? 'Light armor' : '',
+      weapon: draft.picks[key + 'weapon']?.[0] === 'yes' ? 'Light weapon' : '',
     });
+  }
   if (r.kit) {
     const k = r.kit;
     Object.assign(hero.kit, {
@@ -265,20 +311,28 @@ export function buildSheet(db, draft) {
   sheet.sidebar.resource = {
     title: resource,
     text:
-      'Start combat with ' +
-      resource +
-      ' equal to Victories. ' +
-      (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
-      ' at the start of each turn. Gain ' +
-      (r.level >= 4 ? 2 : 1) +
-      (isNull
-        ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
-        : r.classId === 'censor'
-          ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
-          : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
-      ' Lose remaining ' +
-      resource +
-      ' at the end of combat.',
+      r.classId === 'conduit'
+        ? 'Start combat with Piety equal to Victories. Gain ' +
+          (r.level >= 7 ? '1d3 + 1' : '1d3') +
+          ' at the start of each turn. Decide whether to pray before rolling. On a natural 1 or 2, gain 1 extra Piety. On a 1, also take 1d6 + level irreducible psychic damage. On a 3, gain 2 extra Piety and you may activate one domain effect.' +
+          (r.level >= 10 ? ' Gain 1 additional Piety whenever you pray.' : '') +
+          ' Each chosen domain can grant ' +
+          (r.level >= 4 ? 3 : 2) +
+          ' Piety once per encounter. Lose remaining Piety when combat ends.'
+        : 'Start combat with ' +
+          resource +
+          ' equal to Victories. ' +
+          (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
+          ' at the start of each turn. Gain ' +
+          (r.level >= 4 ? 2 : 1) +
+          (isNull
+            ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
+            : r.classId === 'censor'
+              ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
+              : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
+          ' Lose remaining ' +
+          resource +
+          ' at the end of combat.',
   };
   sheet.sidebar.lists.languages = [...r.languages];
   sheet.sidebar.skills = Object.fromEntries(
@@ -329,5 +383,7 @@ export function buildSheet(db, draft) {
     sheet.actions[group].push(action(a, r, group));
   }
   sheet.actions.freeStrikes.push(weaponStrike(r, true), weaponStrike(r, false));
+  const ray = r.actions.find((a) => a.id === 'conduit-ray-of-wrath');
+  if (ray) sheet.actions.freeStrikes.push(action({ ...ray, id: ray.id + '-free-strike' }, r, 'freeStrikes'));
   return sheet;
 }

@@ -85,26 +85,32 @@ async function openBuilder(page) {
   await frame.locator('[name="hero-name"]').waitFor();
 }
 
-async function finishTableHero(page, classId) {
+async function finishTableHeroes(page, ...classes) {
   await openBuilder(page);
   const frame = page.frames().find(f => f.url().includes('/character_sheet/builder/'));
   assert.ok(frame);
-  await finishIndependentHero(page, frame, classId);
+  for (const [index, classId] of classes.entries()) {
+    if (index) {
+      page.once('dialog', dialog => dialog.accept());
+      await frame.getByRole('button',{name:'Start another hero'}).click();
+    }
+    await finishIndependentHero(page, frame, classId);
+  }
 }
-const finishTableNull = (page) => finishTableHero(page, 'null');
-const finishTableCensor = (page) => finishTableHero(page, 'censor');
+const finishPlayerBuilds = (page) => finishTableHeroes(page, 'null', 'conduit');
+const finishTableCensor = (page) => finishTableHeroes(page, 'censor');
 
 async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
   const isNull = classId === 'null';
   const isCensor = classId === 'censor';
-  const specialization = { censor: 'Paragon', null: 'Cryokinetic', elementalist: 'Fire' }[classId];
-  const heroName = { censor: 'Cavall Polder', null: 'Frost Polder', elementalist: 'Ember Polder' }[classId];
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', null: 'Cryokinetic', elementalist: 'Fire' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', null: 'Frost Polder', elementalist: 'Ember Polder' }[classId];
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
   await builder.locator('[name="hero-name"]').fill(heroName);
   await builder.locator('[name="hero-class"]').selectOption(classId);
-  if (isNull || isCensor) await builder.locator('[name="hero-level"]').selectOption('2');
+  if (classId !== 'elementalist') await builder.locator('[name="hero-level"]').selectOption('2');
   await builder.locator('nav [data-step="Ancestry"]').click();
   await builder.locator('[data-slot="ancestry"]').getByRole('button',{name:'Polder',exact:true}).click();
   await builder.goto(builder.url());
@@ -118,7 +124,13 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
       if(!key)break;
       const slot=builder.locator('fieldset[data-slot="'+key+'"]');
       if(key==='subclass'){await slot.getByRole('button',{name:specialization,exact:true}).click();continue;}
-      const preferred = { 'censor-1-2': 'Cavall', 'censor-domain': 'War', 'censor-1-5': 'Warrior Priest' }[key];
+      if(key==='conduit-domain'){
+        await slot.getByRole('button',{name:'Life',exact:true}).click();
+        await slot.getByRole('button',{name:'Protection',exact:true}).click();
+        continue;
+      }
+      const preferred = { 'censor-1-2': 'Cavall', 'censor-domain': 'War', 'censor-1-5': 'Warrior Priest',
+        'conduit-deity': 'Adûn', 'conduit-feature-1': 'Protection', 'conduit-domain-ability-2': 'Wellspring of Grace' }[key];
       if(preferred){await slot.getByRole('button',{name:preferred,exact:true}).click();continue;}
       if(key==='elementalist-1-7'){await slot.getByRole('button',{name:'Enchantment of Celerity',exact:true}).click();continue;}
       if(step==='Training' && key==='env-nomadic'){
@@ -149,6 +161,12 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
     assert.ok(sheet.features.some(f => f.title === 'Sanctified Weapon'));
     assert.ok(sheet.actions.maneuvers.some(a => a.name === 'Blessing of the Faithful' && a.cost === '5 Wrath'));
     assert.ok(sheet.actions.mains.some(a => a.name === 'Weakening Brand'));
+  } else if (classId === 'conduit') {
+    assert.equal(sheet.hero.resource.title,'Piety');
+    assert.ok(sheet.actions.mains.some(a=>a.name==='Wellspring of Grace' && a.cost==='5 Piety'));
+    assert.ok(sheet.features.some(f=>f.title==='Revitalizing Ritual'));
+    assert.ok(sheet.features.some(f=>f.title==='Protective Circle'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a=>a.name==='Sacred Bond'));
   } else assert.ok(sheet.actions.mains.some(a=>a.name==='Hurl Element'));
   if (builder === page.mainFrame()) assert.deepEqual(await unrelatedStorage(),before);
 }
@@ -162,7 +180,7 @@ const PAGES = [
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
   { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:finishTableCensor, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishTableNull, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishPlayerBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
   { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishIndependentHero,
     started: () => !!document.querySelector('[data-step="Identity"]') && !!document.querySelector('[name="hero-name"]') },
 ];
@@ -191,7 +209,7 @@ test('every page starts: the map as Director and as a player, the character shee
       try {
         assert.ok(await answers(origin), 'PHP\'s own server did not come up');
         const page = await context.newPage();
-        if([finishIndependentHero,finishTableNull,finishTableCensor].includes(one.check))page.on('request',request=>{
+        if([finishIndependentHero,finishPlayerBuilds,finishTableCensor].includes(one.check))page.on('request',request=>{
           if (one.check !== finishIndependentHero && !request.frame().url().includes('/character_sheet/builder/')) return;
           const url=new URL(request.url());
           if(request.method()!=='GET' || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
