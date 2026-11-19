@@ -31,6 +31,7 @@ const classInstructions = {
     'Choose your specialization and the features earned at each level. Shared spells are available to every Elementalist.',
   fury: 'Choose your primordial aspect and kit. At levels 2, 6, and 9, choose one ability from your aspect.',
   null: 'Choose your tradition, augmentation, and abilities. At levels 2, 6, and 9, choose one ability from your tradition.',
+  shadow: 'Choose a college and a kit. At levels 2, 6, and 9, choose one of your college’s two abilities.',
 };
 function store() {
   try {
@@ -141,9 +142,11 @@ function review() {
           .join(' · ') +
         '</p></section>',
     );
-  if (model.classId === 'fury')
+  if (model.classId === 'fury' || model.classId === 'shadow')
     boxes.push(
-      '<section class="review-box"><h3>Aspect and kit</h3><p>' +
+      '<section class="review-box"><h3>' +
+        (model.classId === 'shadow' ? 'College and kit' : 'Aspect and kit') +
+        '</h3><p>' +
         [model.classTrack, model.kit?.name].filter(Boolean).map(esc).join(' · ') +
         '</p></section>',
     );

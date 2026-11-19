@@ -41,21 +41,26 @@ export function vitals(r) {
 const types = { Main: 'mains', Maneuver: 'maneuvers', Trigger: 'triggers', Move: 'maneuvers' };
 const characteristics = { M: 'Might', A: 'Agility', R: 'Reason', I: 'Intuition', P: 'Presence' };
 function tier(text, stats, bonus) {
-  const t = defaultTestTier(),
-    match =
-      /^(\d+)(?:\s*\+\s*([MARIP](?:(?:,\s*(?:or\s+)?|\s+or\s+)[MARIP])*))?\s+(?:(\w+)\s+)?damage\b[;,.:]?\s*(.*)$/is.exec(
-        text || '',
-      );
+  const t = defaultTestTier();
+  // Conditional damage stays in notes so an ally target isn't assigned the enemy's damage.
+  if (/^An enemy takes \d+ damage;/i.test(text)) {
+    t.notes = text.replace(/\d+/, (n) => String(Number(n) + bonus));
+    return t;
+  }
+  const match =
+    /^(?:(?<dice>\d+d\d+)\s*\+\s*)?(?<base>\d+)(?:\s*\+\s*(?<chars>[MARIP](?:(?:,\s*(?:or\s+)?|\s+or\s+)[MARIP])*))?\s+(?:(?<type>\w+)\s+)?damage\b[;,.:]?\s*(?<notes>.*)$/is.exec(
+      text || '',
+    );
   if (!match) {
     t.notes = text || '';
     return t;
   }
-  const modifier = match[2]
-    ? Math.max(...match[2].match(/[MARIP]/g).map((c) => stats[characteristics[c]]))
-    : 0;
-  t.damage = String(Number(match[1]) + modifier + bonus);
-  t.damageType = match[3] || '';
-  t.notes = match[4];
+  const { dice, base, chars, type, notes } = match.groups;
+  const modifier = chars ? Math.max(...chars.match(/[MARIP]/g).map((c) => stats[characteristics[c]])) : 0;
+  const flat = Number(base) + modifier + bonus;
+  t.damage = dice ? dice + ' + ' + flat : String(flat);
+  t.damageType = type || '';
+  t.notes = notes;
   return t;
 }
 function matches(f, a) {
@@ -182,23 +187,43 @@ function resourceAutomation(r) {
       target: 'self',
       markOn: 'offered',
     });
-  if (classId === 'fury') {
-    const firstWindedOrDying = {
-      scope: 'encounter',
-      key: 'fury-first-winded-or-dying',
-      target: 'self',
-      markOn: 'offered',
-    };
+  if (classId === 'fury' || classId === 'shadow') {
+    const damageGain = firstDamageGain(level);
+    const damageRules = [];
+    if (classId === 'shadow') {
+      damageRules.push(
+        firstDamage(
+          'shadow-surge-damage',
+          'damageDealt',
+          { whose: 'self', includesSurge: true, minAmount: 1 },
+          damageGain,
+        ),
+      );
+    } else {
+      damageRules.push(
+        firstDamage('fury-first-damage', 'damage', { whose: 'self', minAmount: 1 }, damageGain),
+      );
+      const limit = {
+        scope: 'encounter',
+        key: 'fury-first-winded-or-dying',
+        target: 'self',
+        markOn: 'offered',
+      };
+      for (const event of ['winded', 'dying'])
+        damageRules.push(
+          rule('fury-' + event, event, { whose: 'self' }, 'gain', { dice: '1d3' }, false, limit),
+        );
+    }
     return {
       schema: 'heroic-resource/v1',
       rules: [
-        rule('fury-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
-        rule('fury-turn', 'turnStart', { whose: 'self' }, 'gain', { dice: '1d3', bonus: level >= 7 ? 1 : 0 }),
-        firstDamage('fury-first-damage', 'damage', { whose: 'self', minAmount: 1 }, furyDamageGain(level)),
-        ...['winded', 'dying'].map((event) =>
-          rule('fury-' + event, event, { whose: 'self' }, 'gain', { dice: '1d3' }, false, firstWindedOrDying),
-        ),
-        rule('fury-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
+        rule(classId + '-combat-start', 'combatStart', {}, 'set', { from: 'victories' }, true),
+        rule(classId + '-turn', 'turnStart', { whose: 'self' }, 'gain', {
+          dice: '1d3',
+          bonus: level >= 7 ? 1 : 0,
+        }),
+        ...damageRules,
+        rule(classId + '-combat-end', 'combatEnd', {}, 'set', fixed(0), true),
       ],
     };
   }
@@ -275,8 +300,53 @@ function resourceAutomation(r) {
     ],
   };
 }
-function furyDamageGain(level) {
+function firstDamageGain(level) {
   return level >= 10 ? 3 : level >= 4 ? 2 : 1;
+}
+function resourceSummary(r) {
+  const resource = r.heroClass.resource;
+  if (r.classId === 'shadow' || r.classId === 'fury') {
+    const turnGain = r.level >= 7 ? '1d3 + 1' : '1d3';
+    const start =
+      'Start combat with ' +
+      resource +
+      ' equal to Victories. Gain ' +
+      turnGain +
+      ' at the start of each turn, and ' +
+      firstDamageGain(r.level);
+    if (r.classId === 'fury')
+      return (
+        start +
+        ' the first time you take damage each round. Gain 1d3 the first time you become winded or are dying in an encounter. Lose remaining Ferocity when combat ends.'
+      );
+    return (
+      start +
+      ' the first time each round you deal damage using one or more surges. A heroic ability with a power roll costs 1 less Insight if you have an edge or double edge against any target. Lose remaining Insight when combat ends.' +
+      (r.level >= 9 ? ' You can forgo the turn-start gain to use Gloom Squad.' : '')
+    );
+  }
+  return r.classId === 'conduit'
+    ? 'Start combat with Piety equal to Victories. Gain ' +
+        (r.level >= 7 ? '1d3 + 1' : '1d3') +
+        ' at the start of each turn. Decide whether to pray before rolling. On a natural 1 or 2, gain 1 extra Piety. On a 1, also take 1d6 + level irreducible psychic damage. On a 3, gain 2 extra Piety and you may activate one domain effect.' +
+        (r.level >= 10 ? ' Gain 1 additional Piety whenever you pray.' : '') +
+        ' Each chosen domain can grant ' +
+        (r.level >= 4 ? 3 : 2) +
+        ' Piety once per encounter. Lose remaining Piety when combat ends.'
+    : 'Start combat with ' +
+        resource +
+        ' equal to Victories. ' +
+        (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
+        ' at the start of each turn. Gain ' +
+        (r.level >= 4 ? 2 : 1) +
+        (r.classId === 'null'
+          ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
+          : r.classId === 'censor'
+            ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
+            : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
+        ' Lose remaining ' +
+        resource +
+        ' at the end of combat.';
 }
 export function buildSheet(db, draft) {
   const r = evaluate(db, draft);
@@ -303,11 +373,11 @@ export function buildSheet(db, draft) {
     stats: Object.fromEntries(Object.entries(r.stats).map(([k, v]) => [k.toLowerCase(), v])),
   });
   Object.assign(hero.vitals, vitals(r));
-  const isNull = r.classId === 'null';
   const resource = r.heroClass.resource;
   Object.assign(hero.resource, {
     title: resource,
     automation: resourceAutomation(r),
+    ...(r.classId === 'shadow' ? { discountOnPowerRollEdge: true } : {}),
   });
   if (r.grants.some((f) => f.id === 'elementalist-1-7a' || f.id === 'conduit-prayer-of-soldiers-skill')) {
     const key = r.classId === 'conduit' ? 'conduit-gear-' : 'battle-';
@@ -331,38 +401,7 @@ export function buildSheet(db, draft) {
         hero.kit[mode + 'Damage' + t] = String(k[mode + 'Damage']?.[i] || 0);
       });
   }
-  sheet.sidebar.resource = {
-    title: resource,
-    text:
-      r.classId === 'fury'
-        ? 'Start combat with Ferocity equal to Victories. Gain ' +
-          (r.level >= 7 ? '1d3 + 1' : '1d3') +
-          ' at the start of each turn, and ' +
-          furyDamageGain(r.level) +
-          ' the first time you take damage each round. Gain 1d3 the first time you become winded or are dying in an encounter. Lose remaining Ferocity when combat ends.'
-        : r.classId === 'conduit'
-          ? 'Start combat with Piety equal to Victories. Gain ' +
-            (r.level >= 7 ? '1d3 + 1' : '1d3') +
-            ' at the start of each turn. Decide whether to pray before rolling. On a natural 1 or 2, gain 1 extra Piety. On a 1, also take 1d6 + level irreducible psychic damage. On a 3, gain 2 extra Piety and you may activate one domain effect.' +
-            (r.level >= 10 ? ' Gain 1 additional Piety whenever you pray.' : '') +
-            ' Each chosen domain can grant ' +
-            (r.level >= 4 ? 3 : 2) +
-            ' Piety once per encounter. Lose remaining Piety when combat ends.'
-          : 'Start combat with ' +
-            resource +
-            ' equal to Victories. ' +
-            (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
-            ' at the start of each turn. Gain ' +
-            (r.level >= 4 ? 2 : 1) +
-            (isNull
-              ? ' the first time each round an enemy in your Null Field uses a main action. Also gain 1 the first time each round the Director spends Malice on an ability.'
-              : r.classId === 'censor'
-                ? ' the first time each round you damage a creature judged by you. Gain 1 the first time each round a creature judged by you damages you.'
-                : ' the first time each round you or a creature within 10 takes damage other than untyped or holy.') +
-            ' Lose remaining ' +
-            resource +
-            ' at the end of combat.',
-  };
+  sheet.sidebar.resource = { title: resource, text: resourceSummary(r) };
   sheet.sidebar.lists.languages = [...r.languages];
   sheet.sidebar.skills = Object.fromEntries(
     [...r.skills.keys()].map((k) => [k, { level: 'Trained', bonus: '' }]),

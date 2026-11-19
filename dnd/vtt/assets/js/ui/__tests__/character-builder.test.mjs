@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 import { newDraft, evaluate, setPick } from '../../../../../character_sheet/builder/rules.mjs';
 import { buildSheet } from '../../../../../character_sheet/builder/build-sheet.mjs';
 import { effectiveKit, mergeWithDefaults } from '../../../../../character_sheet/parts/sheet-model.js';
+import {
+  normalizeHeroicResourceAutomation,
+  ruleMatchesHeroicResourceEvent,
+} from '../heroic-resource-automation.js';
 
 const db = JSON.parse(
   readFileSync(new URL('../../../../../character_sheet/builder/rules.json', import.meta.url)),
@@ -1055,4 +1059,313 @@ test('Fury drafts reject foreign and stale picks even with exceptions, and every
   assert.throws(() => buildSheet(db, draft));
   draft.classId = 'elementalist';
   assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('fury-')));
+});
+
+const shadowPools = [
+  [
+    1,
+    'signature',
+    ['Gasping in Pain', 'I Work Better Alone', 'Teamwork Has Its Place', 'You Were Watching the Wrong One'],
+  ],
+  [1, 3, ['Disorienting Strike', 'Eviscerate', 'Get In Get Out', 'Two Throats at Once']],
+  [1, 5, ['Coup de Grace', 'One Hundred Throats', 'Setup', 'Shadowstrike']],
+  [3, 7, ['Dancer', 'Misdirecting Strike', 'Pinning Shot', 'Staggering Blow']],
+  [5, 9, ['Blackout', 'Into the Shadows', 'Shadowfall', 'You Talk Too Much']],
+  [8, 11, ['Assassinate', 'Shadowgrasp', 'Speed of Shadows', 'They Always Line Up']],
+];
+const shadowColleges = {
+  'College of Black Ash': {
+    id: 'black-ash',
+    skill: 'Magic',
+    maneuver: 'Black Ash Teleport',
+    reaction: 'In All This Confusion',
+    features: [
+      [2, 'Burning Ash'],
+      [5, 'Trail of Cinders'],
+      [8, 'Cinder Step'],
+    ],
+    pairs: [
+      ['In a Puff of Ash', 'Too Slow'],
+      ['Black Ash Eruption', 'Cinderstorm'],
+      ['Cacophony of Cinders', 'Demon Door'],
+    ],
+  },
+  'College of Caustic Alchemy': {
+    id: 'caustic-alchemy',
+    skill: 'Alchemy',
+    maneuver: 'Coat the Blade',
+    reaction: 'Defensive Roll',
+    features: [
+      [1, 'Smoke Bomb'],
+      [2, 'Trained Assassin'],
+      [5, 'Volatile Reagents'],
+      [8, 'Time Bomb'],
+    ],
+    pairs: [
+      ['Sticky Bomb', 'Stink Bomb'],
+      ['One Vial Makes You Better', 'One Vial Makes You Faster'],
+      ['Chain Reaction', 'To the Stars'],
+    ],
+  },
+  'College of the Harlequin Mask': {
+    id: 'harlequin-mask',
+    skill: 'Lie',
+    maneuver: 'I’m No Threat',
+    reaction: 'Clever Trick',
+    features: [
+      [2, 'Friend!'],
+      [5, 'Harlequin Gambit'],
+      [8, 'Parkour'],
+    ],
+    pairs: [
+      ['Machinations of Sound', 'So Gullible'],
+      ['Look!', 'Puppet Strings'],
+      ['I Am You', 'It Was Me All Along'],
+    ],
+  },
+};
+const shadow = (specialization, level, preferences = {}, ancestry = 'Polder') =>
+  build({
+    classId: 'shadow',
+    specialization,
+    level,
+    ancestry,
+    preferences: {
+      'shadow-kit': 'Cloak and Dagger',
+      'shadow-perk-2': 'Brawny',
+      'shadow-perk-4': 'Expert Artisan',
+      ...preferences,
+    },
+  });
+test('every Shadow level offers the exact shared and college pools, and all legal abilities export at their printed costs', () => {
+  for (const [college, c] of Object.entries(shadowColleges)) {
+    const { draft } = shadow(college, 10);
+    for (let level = 1; level <= 10; level++) {
+      draft.level = level;
+      const model = evaluate(db, draft),
+        sheet = buildSheet(db, draft);
+      assert.ok(model.complete && !model.warnings.length);
+      assert.equal(sheet.hero.classTrack, college);
+      for (const name of ['Hide', 'Sneak', c.skill]) assert.ok(sheet.sidebar.skills[name]);
+      assert.equal(
+        sheet.hero.vitals.staminaMax,
+        18 + (level - 1) * 6 + model.kit.stamina * Math.ceil(level / 3),
+      );
+      assert.equal(sheet.hero.vitals.recoveriesMax, 8);
+      assert.equal(sheet.hero.stats.agility, 2 + [4, 7, 10].filter((l) => l <= level).length);
+      const allNames = new Set([...model.actions.map((a) => a.name), ...model.grants.map((f) => f.name)]);
+      assert.equal(ids(sheet).length, new Set(ids(sheet)).size);
+      for (const [name, other] of Object.entries(shadowColleges)) {
+        for (const ability of [other.maneuver, other.reaction])
+          assert.equal(allNames.has(ability), name === college);
+        for (const [at, feat] of other.features)
+          assert.equal(allNames.has(feat), name === college && level >= at);
+      }
+      assert.ok(
+        sheet.actions.triggers.some(
+          (a) =>
+            a.name === 'Hesitation Is Weakness' &&
+            a.cost === '1 Insight' &&
+            a.actionLabel === 'Free triggered action',
+        ),
+      );
+      const observation = sheet.actions.maneuvers.find((a) => a.name === 'Careful Observation');
+      assert.equal(
+        observation?.target,
+        level >= 10
+          ? 'Up to three creatures'
+          : level >= 7
+            ? 'Up to two creatures'
+            : level >= 3
+              ? 'One creature'
+              : undefined,
+      );
+      for (const [at, cost, key, names] of [
+        ...shadowPools.map(([at, cost, names]) => [at, cost, 'shadow-ability-' + cost, names]),
+        ...c.pairs.map((names, i) => [
+          [2, 6, 9][i],
+          [5, 9, 11][i],
+          'shadow-' + c.id + '-ability-' + [2, 6, 9][i],
+          names,
+        ]),
+      ]) {
+        const slot = model.slots.find((s) => s.key === key);
+        assert.equal(!!slot, at <= level, key);
+        if (!slot) continue;
+        assert.equal(slot.count, 1);
+        assert.equal(slot.flexible, false);
+        assert.deepEqual(slot.choices.map((o) => o.name).sort(), names.toSorted());
+        if (level !== at) continue;
+        for (const option of slot.choices) {
+          const copy = structuredClone(draft);
+          copy.picks[key] = [option.id];
+          const cards = Object.values(buildSheet(db, copy).actions)
+            .flat()
+            .filter((a) => names.includes(a.name));
+          assert.deepEqual(
+            cards.map((a) => [a.name, a.cost]),
+            [[option.name, cost === 'signature' ? '' : cost + ' Insight']],
+          );
+        }
+      }
+    }
+  }
+});
+test('Shadow training, standard kits, conditional effects and Insight survive a native export', () => {
+  const { draft, model } = shadow('College of Caustic Alchemy', 10, {
+    'shadow-kit': 'Arcane Archer',
+    'shadow-ability-5': 'Coup de Grace',
+  });
+  const gear = model.slots.find((s) => s.key === 'shadow-kit');
+  assert.equal(gear.choices.length, 21);
+  assert.ok(!gear.choices.some((k) => k.id === 'kit-vuken'));
+  const training = model.slots.find((s) => s.key === 'shadow-skills');
+  assert.equal(training.count, 5);
+  assert.equal(training.flexible, true);
+  for (const skill of training.choices) {
+    const group = db.skills.find((s) => s.name === skill.name).list;
+    assert.equal(
+      !skill.warning,
+      skill.name === 'Criminal Underworld' || ['Exploration', 'Interpersonal', 'Intrigue'].includes(group),
+      skill.name,
+    );
+  }
+  const restricted = model.slots.find((s) => s.key === 'shadow-perk-2');
+  assert.ok(
+    restricted.choices.every((o) =>
+      ['Exploration', 'Interpersonal', 'Intrigue'].includes(db.perks.find((p) => p.id === o.id).list),
+    ),
+  );
+  assert.equal(restricted.flexible, false);
+  for (const level of [1, 4, 7, 9, 10]) {
+    const sheet = mergeWithDefaults(JSON.parse(JSON.stringify(buildSheet(db, { ...draft, level }))));
+    assert.equal(effectiveKit(sheet).values.name, 'Arcane Archer');
+    const resource = sheet.hero.resource;
+    assert.equal(resource.title, 'Insight');
+    assert.equal(resource.discountOnPowerRollEdge, true);
+    const { rules, warnings } = normalizeHeroicResourceAutomation(resource.automation);
+    assert.deepEqual(warnings, []);
+    assert.equal(rules.find((r) => r.event === 'combatStart').effect.amount.from, 'victories');
+    assert.equal(rules.find((r) => r.event === 'combatEnd').effect.amount.amount, 0);
+    const turn = rules.find((r) => r.event === 'turnStart');
+    assert.equal(turn.effect.amount.dice, '1d3');
+    assert.equal(turn.effect.amount.bonus, level >= 7 ? 1 : 0);
+    assert.equal(turn.autoApply, false);
+    const surge = rules.find((r) => r.event === 'damageDealt');
+    assert.equal(surge.limit.scope, 'round');
+    assert.equal(surge.effect.amount.amount, level === 10 ? 3 : level >= 4 ? 2 : 1);
+    const hit = { sourceId: 'hero', targetId: 'foe', amount: 3, surgeSpent: 1 };
+    const matches = (patch) =>
+      ruleMatchesHeroicResourceEvent(surge, 'damageDealt', { ...hit, ...patch }, { casterId: 'hero' });
+    assert.equal(matches({}), true);
+    for (const miss of [{ sourceId: 'ally' }, { surgeSpent: 0 }, { amount: 0 }])
+      assert.equal(matches(miss), false);
+    assert.equal(sheet.sidebar.resource.text.includes('Gloom Squad'), level >= 9);
+    const bomb = sheet.actions.maneuvers.find((a) => a.name === 'Time Bomb');
+    assert.equal(!!bomb, level >= 8);
+    if (bomb) {
+      assert.equal(bomb.actionLabel, 'Free maneuver');
+      assert.match(bomb.description, /once per round on your turn/);
+      assert.match(bomb.description, /Spend 2 insight/);
+    }
+    assert.equal(
+      sheet.actions.triggers.find((a) => a.name === 'Defensive Roll').description.includes('shift up to 5'),
+      level >= 5,
+    );
+    const coup = sheet.actions.mains.find((a) => a.name === 'Coup de Grace');
+    assert.equal(coup.tests.length, 2);
+    assert.deepEqual(
+      coup.tests.map((t) => t.tiers.low.damage),
+      [model.kit.meleeDamage, model.kit.rangedDamage].map(
+        (bonus) => '2d6 + ' + (7 + sheet.hero.stats.agility + (bonus?.[0] || 0)),
+      ),
+    );
+    assert.ok(!sheet.sidebar.lists.immunity.some((s) => s.startsWith('Area ')));
+  }
+});
+test('Shadow rejects stale, foreign, over-level and same-cost picks even with a house-rule flag', () => {
+  const { draft, model } = shadow('College of Black Ash', 10);
+  const slot = model.slots.find((s) => s.key === 'shadow-black-ash-ability-2');
+  for (const id of [
+    'fury-visceral-roar',
+    'shadow-coup-de-grace',
+    'shadow-sticky-bomb',
+    'shadow-demon-door',
+    'kit-boren',
+  ]) {
+    const copy = structuredClone(draft);
+    assert.equal(setPick(copy, slot, id, true), false);
+    copy.picks[slot.key] = [id];
+    copy.exceptions[slot.key] = [id];
+    assert.deepEqual(evaluate(db, copy).slots.find((s) => s.key === slot.key).selected, []);
+    assert.throws(() => buildSheet(db, copy));
+  }
+  draft.picks.subclass = ['shadow-harlequin-mask'];
+  const changed = evaluate(db, draft);
+  assert.equal(changed.slots.find((s) => s.key === 'shadow-harlequin-mask-ability-2').selected.length, 0);
+  assert.ok(!changed.actions.some((a) => a.name === 'Black Ash Teleport' || a.name === 'In a Puff of Ash'));
+  draft.level = 1;
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.name === 'Careful Observation' || a.cost >= 7));
+  draft.classId = 'fury';
+  assert.ok(!evaluate(db, draft).actions.some((a) => a.id.startsWith('shadow-')));
+  for (const ancestry of db.ancestries)
+    assert.ok(shadow('College of the Harlequin Mask', 1, {}, ancestry.name).model.complete);
+});
+
+test('Shadow advancement caps and kit bonuses hold across the starting arrays and every standard kit', () => {
+  const { draft } = shadow('College of Black Ash', 10, {
+    'shadow-black-ash-ability-9': 'Cacophony of Cinders',
+    'shadow-ability-5': 'Coup de Grace',
+    'shadow-increase-4': 'Might',
+    'shadow-increase-10': 'Might',
+  });
+  const slots = evaluate(db, draft).slots;
+  for (const key of ['shadow-increase-4', 'shadow-increase-10']) {
+    assert.deepEqual(
+      slots
+        .find((s) => s.key === key)
+        .choices.map((c) => c.name)
+        .sort(),
+      ['Intuition', 'Might', 'Presence', 'Reason'],
+    );
+  }
+  assert.equal(slots.find((s) => s.key === 'shadow-array').choices.length, 4);
+  for (const [index, array] of [
+    [2, 2, -1, -1],
+    [2, 1, 1, -1],
+    [2, 1, 0, 0],
+    [1, 1, 1, 0],
+  ].entries()) {
+    draft.picks['shadow-array'] = [String(index)];
+    draft.picks['shadow-assign-' + index] = [array.join(',')];
+    for (const level of [1, 4, 7, 10]) {
+      const sheet = buildSheet(db, { ...draft, level });
+      const { might, reason, intuition, presence } = sheet.hero.stats;
+      assert.deepEqual(
+        [might, reason, intuition, presence],
+        array.map(
+          (n, i) => n + Number(level >= 7) + (i === 0 ? Number(level >= 4) + Number(level >= 10) : 0),
+        ),
+      );
+    }
+  }
+  for (const kit of db.kits) {
+    draft.picks['shadow-kit'] = [kit.id];
+    const sheet = buildSheet(db, draft);
+    assert.deepEqual(
+      ids(sheet).filter((id) => id.startsWith('kit-')),
+      [kit.ability.id],
+    );
+    const conditional = sheet.actions.mains.find((a) => a.name === 'Cacophony of Cinders').tests[0].tiers
+      .high;
+    assert.equal(conditional.damage, '');
+    assert.ok(
+      conditional.notes.startsWith(
+        'An enemy takes ' +
+          (14 + (kit.meleeDamage?.[2] || 0)) +
+          ' damage; an ally can teleport up to 7 squares.',
+      ),
+    );
+    assert.equal(sheet.hero.kit.name, kit.name);
+  }
 });

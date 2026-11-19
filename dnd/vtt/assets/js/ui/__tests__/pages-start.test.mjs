@@ -98,7 +98,11 @@ async function finishTableHeroes(page, ...classes) {
   }
   return frame;
 }
-const finishPlayerBuilds = (page) => finishTableHeroes(page, 'null', 'conduit');
+async function finishPlayerBuilds(page) {
+  const frame = await finishTableHeroes(page, 'null', 'conduit');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'shadow');
+}
 async function finishDirectorBuilds(page) {
   const frame = await finishTableHeroes(page, 'censor');
   await frame.locator('nav [data-step="Identity"]').click();
@@ -108,8 +112,8 @@ async function finishDirectorBuilds(page) {
 async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
   const isNull = classId === 'null';
   const isCensor = classId === 'censor';
-  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire' }[classId];
-  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder' }[classId];
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder' }[classId];
   page.setDefaultTimeout(5000);
   const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
   const before=await unrelatedStorage();
@@ -140,6 +144,7 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
         'censor-1-2': 'Cavall', 'censor-domain': 'War', 'censor-1-5': 'Warrior Priest',
         'conduit-deity': 'Adûn', 'conduit-feature-1': 'Protection', 'conduit-domain-ability-2': 'Wellspring of Grace',
         'fury-stormwight-kit': 'Vuken', 'fury-stormwight-ability-2': 'Visceral Roar', 'fury-perk-2': 'Expert Artisan',
+        'shadow-kit': 'Cloak and Dagger', 'shadow-caustic-alchemy-ability-2': 'Sticky Bomb',
       }[key];
       if (preferred) {
         await slot.getByRole('button', { name: preferred, exact: true }).click();
@@ -182,6 +187,13 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
     assert.equal(roar.cost,'5 Ferocity');
     assert.equal(roar.tests[0].tiers.low.damageType,'lightning');
     assert.ok(!Object.values(sheet.actions).flat().some(a=>a.name==='Judgment' || a.name==='Weakening Brand'));
+  } else if (classId === 'shadow') {
+    assert.equal(sheet.hero.resource.title, 'Insight');
+    assert.equal(sheet.hero.resource.discountOnPowerRollEdge, true);
+    assert.equal(sheet.hero.kit.name, 'Cloak and Dagger');
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Sticky Bomb' && a.cost === '5 Insight'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Defensive Roll'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Black Ash Teleport' || a.name === 'Healing Grace'));
   } else if (classId === 'conduit') {
     assert.equal(sheet.hero.resource.title,'Piety');
     assert.ok(sheet.actions.mains.some(a=>a.name==='Wellspring of Grace' && a.cost==='5 Piety'));
@@ -249,8 +261,8 @@ test('every page starts: the map as Director and as a player, the character shee
         await page.goto(`${origin}${one.path}?__start_as=${one.as}`, { waitUntil: 'load', timeout: 30000 });
         assert.ok(new URL(page.url()).pathname.startsWith(one.path.replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
         await page.waitForFunction(one.started, null, { timeout: 20000 });
-        if (one.check) await one.check(page);
-        await page.waitForTimeout(1500);                               // anything thrown just after start-up
+        // Listen for late start-up errors while the longer interactive checks run.
+        await Promise.all([page.waitForTimeout(1500), one.check?.(page)]);
         if (errors.length) failures.push(`${one.name}: ${errors.slice(0, 3).join(' | ')}`);
       } catch (error) {
         failures.push(`${one.name}: DID NOT START. ${error.message}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);

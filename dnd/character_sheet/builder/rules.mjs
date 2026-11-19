@@ -52,6 +52,14 @@ export const CLASSES = {
     arrays: martialArrays,
     resource: 'Discipline',
   },
+  shadow: {
+    name: 'Shadow',
+    subclassLabel: 'Shadow college',
+    primary: ['Agility'],
+    potency: 'Agility',
+    arrays: ARRAYS,
+    resource: 'Insight',
+  },
 };
 export const newDraft = () => ({
   version: 1,
@@ -920,22 +928,18 @@ export function evaluate(db, draft) {
     culture,
     skills,
     languages,
-    actions: actions.map((a) =>
-      a.enhancementTag
-        ? {
-            ...a,
-            sections: [
-              ...a.sections,
-              ...grants
-                .filter((f) => f.tag === a.enhancementTag)
-                .map((f) => ({
-                  kind: 'AbilitySectionText',
-                  args: [f.name + ' · ' + f.description],
-                })),
-            ],
-          }
-        : a,
-    ),
+    actions: actions.map((a) => {
+      if (!a.enhancementTag) return a;
+      const upgrades = grants.filter((f) => f.tag === a.enhancementTag);
+      return {
+        ...a,
+        target: upgrades.findLast((f) => f.abilityTarget)?.abilityTarget || a.target,
+        sections: [
+          ...a.sections,
+          ...upgrades.map((f) => ({ kind: 'AbilitySectionText', args: [f.name + ' · ' + f.description] })),
+        ],
+      };
+    }),
     heroClass,
     classId,
     grants,
