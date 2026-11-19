@@ -90,6 +90,8 @@ test('the ruler shows the app\'s corners and sends them; his own corners keep th
   assert.match(terrain, /function stairCorners\(placement,column,row,kind=getCurrentMovementKind\(\),resumeTraversal=false\)\{[^}]*if\(kind!=='walk'&&kind!=='shift'\)return null;/);
   assert.match(terrain, /if\(!Number\.isFinite\(byStair\.height\)\|\|\(Number\.isFinite\(plain\.height\)&&Math\.abs\(byStair\.height-plain\.height\)<\.05&&plain\.how===byStair\.how\)\)continue;/);
   assert.match(terrain, /if\(window\.wallPrototype\?\.blockedMove\?\.\(placement,\{column,row,path:corners\}\)\)continue;/);
-  // The ghost and the pointer's pick follow the same route as the ruler.
-  assert.match(terrain, /const corners=own\.length\?own:getCurrentMovementKind\(\)==='forced'\?\[\]:\(stairCorners\(placement,column,row\)\|\|\[\]\);/);
+  assert.match(terrain, /let corners=stairCorners\(placement,column,row,kind,Boolean\(explicitActor\)\);/);
+  const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  assert.match(board, /waypoints:points\.slice\(1,-1\)/);
+
 });

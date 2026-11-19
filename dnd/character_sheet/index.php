@@ -44,7 +44,6 @@ require_once __DIR__ . '/../includes/chat_pusher.php';
 $chatPusherConfig = getChatPusherClientConfig();
 
 // Include navigation bar
-require_once '../includes/strix-nav.php';
 $v = (int) $assetVersion;
 ?>
 <!DOCTYPE html>
@@ -89,7 +88,6 @@ $v = (int) $assetVersion;
 <?php endif; ?>
 </head>
 <body class="character-sheet-page sheet-v2" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>" data-user="<?php echo htmlspecialchars($sessionUser, ENT_QUOTES, 'UTF-8'); ?>" data-is-gm="<?php echo $isGm ? '1' : '0'; ?>">
-  <?php renderStrixNav('charactersheet'); ?>
   <main id="sheet-app" class="sp" data-sheet-theme="diablo" aria-label="Character sheet">
     <div class="sp-layout">
       <div data-host="status"><p class="sp-none" style="padding:20px">Loading the sheet…</p></div>

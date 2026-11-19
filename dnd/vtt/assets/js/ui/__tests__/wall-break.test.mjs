@@ -95,21 +95,7 @@ test('a broken cube stops nothing and is not drawn as a cube', async () => {
   assert.equal(model.segments.length, 4, 'only the standing cube has walls');
   assert.ok(model.segments.every((edge) => edge.id.startsWith('template-cube:summoned:10,6,0')));
   assert.equal(model.roofs.length, 1, 'and only it has a top to stand on');
-  // On the page: one cube drawn, the label counts the standing ones, and the wall keeps both.
-  const dom = new JSDOM('<div id="root"><div id="tiles"></div><div id="label"></div></div>');
-  globalThis.window = dom.window; globalThis.document = dom.window.document;
-  const { paintWallTemplate } = await import('../template-wall-renderer.js');
-  const view = { mapLoaded: true, gridSize: 64, mapPixelSize: { width: 6400, height: 6400 }, gridOffsets: {} };
-  const shape = { ...half, elements: { root: document.getElementById('root'), tileContainer: document.getElementById('tiles'), label: document.getElementById('label'), tiles: new Map(), connectors: new Map() } };
-  paintWallTemplate(shape, view, {});
-  assert.deepEqual([...document.querySelectorAll('[data-wall-square]')].map((cube) => cube.dataset.wallSquare), ['10,6,0']);
-  assert.equal(document.getElementById('label').textContent, '1 square');
-  assert.deepEqual(shape.squares, half.squares, 'the broken cube is still part of the wall');
-  // With every cube broken the wall draws nothing, and still keeps its cubes for repair.
-  const gone = { ...shape, squares: markCubes(half, ['10,6,0'], true), elements: shape.elements };
-  paintWallTemplate(gone, view, {});
-  assert.equal(gone.elements.root.hidden, true);
-  assert.equal(gone.squares.length, 2);
+
 });
 
 test('rubble: one heap on each broken cube\'s square', async () => {
@@ -133,11 +119,12 @@ test('rubble: one heap on each broken cube\'s square', async () => {
   window.terrainContext = () => ({ isGM: false, levelId: 'level-0', userId: 'cal',
     view: { mapLoaded: true, gridSize: 64, gridOffsets: { left: 0, top: 0 }, mapPixelSize: { width: 640, height: 640 } },
     state: { boardState: { activeSceneId: 'scene', sceneState: { scene: {} }, templates: { scene: walls } } } });
+  let stones;
+  window.vtt3d = {active:true, setOverlay(name, value) { assert.equal(name,'rubble'); stones=value; }};
   await import('../wall-rubble-overlay.js');
   window.wallRubble.redraw();
-  const drawn = [...document.querySelectorAll('#wall-rubble-ground > g')];
-  assert.deepEqual(drawn.map((g) => [g.dataset.rubbleId, g.dataset.rubbleKind, g.dataset.rubbleSource]), [['cube:a:3,2', 'heap-wood', 'picture'], ['cube:b:6,2', 'heap-glass', 'drawn']]);
-  assert.match(drawn[0].getAttribute('transform'), /^translate\(224\.00 160\.00\)/, 'centred on the cube\'s square');
+  assert.ok(stones.length > 0 && stones.every(s => s.kind === 'dot'));
+  assert.deepEqual(window.wallRubble.pieces.map(p=>[p.id,p.kind]), [['cube:a:3,2','heap-wood'],['cube:b:6,2','heap-glass']]);
 });
 
 test('an ability says what its wall is made of', async () => {

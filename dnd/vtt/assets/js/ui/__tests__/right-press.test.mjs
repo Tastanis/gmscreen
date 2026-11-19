@@ -51,11 +51,8 @@ test('Shift drops no node while a token is held; the Measure tool\'s own ruler k
 });
 
 test('the board asks these rules before it pulls the map or drops a node', () => {
-  const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
-  // The node is dropped only by a click, and only while a token is being dragged.
-  assert.match(board, /const clicked = rightPressClicked\(movementRightPress, event\.clientX, event\.clientY, performance\.now\(\)\);\s*movementRightPress = null;\s*if \(clicked && viewState\.dragState\) addExternalMeasurementNode\(\);/);
-  // The map is not pulled until the press has moved past the slack.
-  assert.match(board, /if \(!rightPressPulls\(movementRightPress, event\.clientX, event\.clientY\)\) return;\s*movementRightPress = null;\s*\}\s*startMovementPan\(event\);/);
-  // The browser's own menu stays off the board.
-  assert.match(board, /mapSurface\.addEventListener\('contextmenu', \(event\) => \{\s*event\.preventDefault\(\);/);
+  const integration = readFileSync(new URL('../../../../board3d/integration.mjs', import.meta.url), 'utf8');
+  assert.match(integration, /onRightClick:[\s\S]{0,200}addExternalMeasurementNode\(/);
+  const camera = readFileSync(new URL('../../../../board3d/camera-controls.mjs', import.meta.url), 'utf8');
+  assert.match(camera, /onRightClick/);
 });

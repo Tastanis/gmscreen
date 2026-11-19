@@ -99,11 +99,11 @@ test('the squares the ruler draws are the squares the move itself stops on', () 
 
 test('the ruler, the terrain and the board read a forced drag through these rules', () => {
   const ruler = readFileSync(new URL('../drag-ruler.js', import.meta.url), 'utf8');
-  assert.match(ruler, /terrain\.routePath\(rawPoints, forced\)/);
+  assert.match(ruler, /movementPresentation\?\.\(rawPoints,forced,state\.measurementActor\)/);
   assert.match(ruler, /forced \? forcedLabel\(rawPoints\) : state\.movementLabel/);
   const terrain = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
   assert.match(terrain, /function forcedLegs\(points\)/);
-  assert.match(terrain, /if\(getCurrentMovementKind\(\)==='forced'\)return forcedHeight\(forcedFrom\(placement\),column,row\);/);
+  assert.match(terrain, /legs\.push\(straightLine\(start,end\)\.map/);
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   // A slide is made leg by leg, and each leg is sent as a plain forced move with no route of its own.
   assert.match(board, /movementKind === 'forced' && source === 'drag' && hasMatchingOrigin && ruler\.length > 2 && moves\.length === 1/);

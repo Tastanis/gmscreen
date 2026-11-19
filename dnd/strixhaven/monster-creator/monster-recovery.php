@@ -13,7 +13,7 @@ $is_gm = ($user === 'GM');
 
 // Check if user is GM - restrict access
 if (!$is_gm) {
-    header('Location: ../../dashboard.php');
+    header('Location: /dnd/table/');
     exit;
 }
 

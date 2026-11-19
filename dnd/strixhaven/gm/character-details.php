@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
 if (!$is_gm) {
-    header('Location: ../../dashboard.php');
+    header('Location: /dnd/table/');
     exit;
 }
 

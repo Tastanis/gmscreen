@@ -3,22 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isPersistentZoneControlTarget } from '../board-interactions.js';
 
-const boardCss = readFileSync(new URL('../../../css/board.css', import.meta.url), 'utf8');
+const overlay = readFileSync(new URL('../../../../board3d/area-volume.mjs', import.meta.url), 'utf8');
 
-test('persistent zones pass board clicks through except on their badge and popup', () => {
-  assert.match(
-    boardCss,
-    /\.vtt-persistent-zone\s*\{[^}]*pointer-events:\s*none;/s
-  );
-  assert.match(
-    boardCss,
-    /\.vtt-persistent-zone__badge\s*\{[^}]*pointer-events:\s*auto;/s
-  );
-  assert.match(
-    boardCss,
-    /\.vtt-persistent-zone__badge:hover\s*\+\s*\.vtt-persistent-zone__body/
-  );
-  assert.doesNotMatch(boardCss, /\.vtt-persistent-zone:hover\s+\.vtt-persistent-zone__body/);
+test('only the projected zone control receives pointer input', () => {
+  assert.match(overlay, /\.vtt3d-zone-tag\{[^}]*pointer-events:auto/);
+  assert.match(overlay, /\.vtt3d-zone-tag:hover \.vtt3d-zone-tag__body/);
+  assert.match(overlay, /\.vtt3d-zone-tag__body\{display:none/);
 });
 
 test('board capture handlers recognize persistent-zone controls before map interactions', () => {
@@ -26,7 +16,7 @@ test('board capture handlers recognize persistent-zone controls before map inter
   const control = {
     closest(selector) {
       closestCalls.push(selector);
-      return selector.includes('.vtt-persistent-zone__body') ? this : null;
+      return selector.includes('.vtt3d-zone-tag') ? this : null;
     },
   };
 

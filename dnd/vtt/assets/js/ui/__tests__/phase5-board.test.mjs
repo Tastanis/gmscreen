@@ -77,7 +77,7 @@ test("a zone's time is up: askBeforeEnd false goes at once, the rest are marked 
   const end = new Function('deps', `with (deps) { ${section('  async function endPersistentZonesByTime(', '  const promptedZoneEnds')}; return endPersistentZonesByTime; }`)({
     removePersistentZones: async (ids, { reason }) => removed.push([ids, reason]),
     updatePlacementById: (id, fn) => { fn(store[id]); marked.set(id, store[id].persistentZones); },
-    renderPersistentZoneOverlays() {}, maybePromptZoneEnds: () => { asked += 1; }, Date,
+    scheduleZoneEndPrompts() {}, maybePromptZoneEnds: () => { asked += 1; }, Date,
   });
   await end([{ id: 'z1', casterId: 'gob', askBeforeEnd: false }, { id: 'z2', casterId: 'gob' }, { id: 'z3', casterId: 'gob', endDue: { at: 1 } }], 'end of the round');
   assert.deepEqual(removed, [[['z1'], 'end of the round']]);

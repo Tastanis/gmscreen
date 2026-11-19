@@ -85,8 +85,24 @@ const PAGES = [
   // once it has started. The classic sheet (classic.php) was retired when the new one was approved.
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
-  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
-  { name: 'the main page, as a player', as: 'cal', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
+  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'GM notes in the Table', as: 'GM', path: '/dnd/strixhaven/gm/',
+    started: () => document.querySelectorAll('a[href^="note-editor.php?"]').length === 80,
+    check: async page => {
+      const note = page.locator('a[href^="note-editor.php?"]').first();
+      await note.click();
+      await page.locator('#note-save:enabled').waitFor();
+      await page.locator('#note-title').fill('Round-trip note');
+      await Promise.all([
+        page.waitForResponse(async response => response.url().endsWith('/gm/index.php')
+          && response.request().method() === 'POST' && (await response.json()).success === true),
+        page.getByRole('button', {name:'Save', exact:true}).click(),
+      ]);
+      await page.getByRole('button', {name:'All notes'}).click();
+      await page.getByRole('link', {name:'Round-trip note',exact:true}).waitFor();
+    },
+  },
 ];
 
 test('every page starts: the map as Director and as a player, the character sheet, the main page', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
@@ -127,6 +143,7 @@ test('every page starts: the map as Director and as a player, the character shee
         await page.goto(`${origin}${one.path}?__start_as=${one.as}`, { waitUntil: 'load', timeout: 30000 });
         assert.ok(new URL(page.url()).pathname.startsWith(one.path.replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
         await page.waitForFunction(one.started, null, { timeout: 20000 });
+        if (one.check) await one.check(page);
         await page.waitForTimeout(1500);                               // anything thrown just after start-up
         if (errors.length) failures.push(`${one.name}: ${errors.slice(0, 3).join(' | ')}`);
       } catch (error) {

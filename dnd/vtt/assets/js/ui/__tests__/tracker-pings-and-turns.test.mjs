@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 // in the window in use and close in all. The 3D board needs a real canvas, so these read the wiring
 // (turn-undo.test.mjs, ping-beam.test.mjs and ping-height.test.php hold the rest).
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const board = read('../board-interactions.js');
 const pings = read('../map-pings.js');
 const board3d = read('../../../../board3d/integration.mjs');
@@ -23,7 +23,7 @@ test('the tracker hover rings a mini too', () => {
 
 test('on the 3D board a press on a token is the manual damage/heal target, not a grab', () => {
   assert.match(board, /board\.addEventListener\('pointerdown', \(event\) => \{\s*if \(!window\.vtt3d\?\.active \|\| event\.button !== 0 \|\| !pendingDamageHeal\) return;[\s\S]{0,300}event\.stopImmediatePropagation\(\);\s*event\.vtt3dPick = \{ placement \};\s*handleDamageHealClick\(event\);\s*\}, true\);/);
-  has(board, 'if (pendingDamageHeal && event.button === 0) {\n      await handleDamageHealClick(event);', 'the 2D map surface uses the same click');
+  has(board, 'if (pendingDamageHeal && event.button === 0) {\n      await handleDamageHealClick(event);', 'both board input paths use the same command');
   has(board, "board.addEventListener('pointerdown', handlePointerDown, true);", "a condition's turn pick listens on the board, which holds the 3D tokens");
 });
 
@@ -48,7 +48,11 @@ test('where the turn began, a ghost of the token stays once it moves', () => {
 
 test('right-click a tracker entry pings its token, or says it is not on this map', () => {
   has(board, "combatTrackerRoot.addEventListener('contextmenu', handleCombatTrackerContextMenu);");
-  assert.match(board, /function findFromTracker\(representativeId, bringView\) \{[\s\S]{0,300}\.filter\(id => isGmUser\(\) \|\| !getPlacementFromStore\(id\)\?\.hidden\);\s*const found = bringView \? \(ids\.length \? centerOnBoardTokens\(ids\) : 0\) : pingBoardTokens\(ids\);\s*if \(!found\) \{\s*window\.UIKit\?\.toast\?\.\('That token is not on this map\.', 'info'\);/);
+  const findFromTracker = board.slice(board.indexOf('  function findFromTracker('), board.indexOf('  function findTokenWords('));
+  has(findFromTracker, '.filter(id => isGmUser() || !getPlacementFromStore(id)?.hidden)');
+  has(findFromTracker, 'bringView ? (ids.length ? centerOnBoardTokens(ids) : 0) : pingBoardTokens(ids)');
+  has(findFromTracker, "That token is not on this map.");
+
   // Build 545: let go within 0.75 s, a ping; held longer, the ping and the view comes to it.
   has(board, 'const TRACKER_HOLD_MS = 750;');
   has(board, "combatTrackerRoot.addEventListener('pointerdown', handleCombatTrackerRightPress);\n    window.addEventListener('pointerup', handleCombatTrackerRightRelease);");

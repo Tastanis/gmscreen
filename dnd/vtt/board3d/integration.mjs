@@ -1,3 +1,4 @@
+import {portalAnchorVisible} from '../assets/js/ui/portal-visibility.mjs';
 import {createSceneView} from './scene-view.mjs';
 import {bindCameraInput} from './camera-controls.mjs';
 import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode} from '../assets/js/ui/drag-ruler.js';
@@ -17,10 +18,8 @@ import {hasArtPiece} from './breakable-art.mjs';
 import {tokenLookSettings,tokenScreenMetrics} from './token-looks.mjs';
 
 // The 3D board. It draws the scene and the tokens; every rule, command and
-// panel stays the VTT's own. The 2D map layer stays in place, transparent, on
-// top of the 3D picture, so the existing tools keep receiving the pointer; the
-// VTT asks `window.vtt3d.clientToMap` where a pointer lands on the 3D surfaces.
-const style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./integration.css'+new URL(import.meta.url).search,import.meta.url);document.head.append(style);
+// panel stays the VTT's own. The input surface routes each tool's pointer to
+// the same 3D ray cast and canonical map coordinates.
 const waitFor=async predicate=>{for(let i=0;i<240;i++){const result=predicate();if(result)return result;await new Promise(r=>setTimeout(r,100));}throw Error('The VTT controller did not become ready.');};
 const loadJson=file=>fetch(new URL(file,import.meta.url),{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null);
 
@@ -155,7 +154,7 @@ async function mount(){
    const own=!context.isGM&&(context.placements?.find(p=>p.visionOwners?.includes(String(context.user?.name||'').toLowerCase()))||context.placements?.find(p=>p.canMove));
    if(kept)restoreCamera(view,kept);else if(own)focus(own.id);else view.home();
    document.dispatchEvent(new CustomEvent('vtt3d:scene-built',{detail:{sceneId:context.sceneId,art:useArt}}));
-  }catch(error){console.error('[VTT 3D] scene build failed',error);}
+  }catch(error){reportBoardError(error);}
   finally{building=null;if(sceneKey()!==builtKey)buildScene();}
  }
  function keptCamera(v){return {position:v.camera.position.clone(),target:v.controls.target.clone(),fov:v.camera.fov};}
@@ -472,11 +471,11 @@ async function mount(){
  document.querySelector('#vtt-map-image')?.addEventListener('load',()=>setTimeout(()=>{context=bridge.getContext();buildScene();},0));
  // Ability pickers' Skip buttons and range words are screen controls; on the 3D board they
  // are shown above the view, and pressing Skip runs the VTT's own skip.
- const relocated=new Map(),relocate=['.vtt-automation-area__controls','.vtt-automation-move__controls'];
- const tidyControls=()=>{for(const selector of relocate)for(const el of mapTransform.querySelectorAll(selector)){const home=el.parentElement;overlayHost.append(el);el.classList.add('vtt3d-board-controls');relocated.set(el,home);}
-  for(const [el,home] of relocated)if(!home.isConnected){el.remove();relocated.delete(el);}};
- new MutationObserver(tidyControls).observe(mapTransform,{childList:true,subtree:true});
- overlayHost.addEventListener('pointerdown',e=>{if(!e.target.closest?.('[data-skip-automation-area],[data-skip-automation-move],[data-rotate-automation-area]'))return;e.preventDefault();e.stopPropagation();bridge.skipAbility?.(e);tidyControls();});
+ overlayHost.addEventListener('click', event => {
+  if (!event.target.closest?.('[data-skip-automation-area],[data-skip-automation-move],[data-rotate-automation-area]')) return;
+  event.stopPropagation();
+  bridge.skipAbility?.(event);
+ });
  const resizeObserver=new ResizeObserver(()=>view?.resize());resizeObserver.observe(host);
 
  // Keyboard camera (Brandon, October 2026): W A S D move the view, Q and E take it straight up and down (whatever the
@@ -612,7 +611,7 @@ async function mount(){
    if(anchorKey!==lastAnchorKey||freshAnchor){lastAnchorKey=anchorKey;
    const rect=canvasRect;
    for(const el of anchored){placedElements.add(el);const [x,y,z]=el.dataset.vtt3dAnchor.split(',').map(Number);if(![x,y,z].every(Number.isFinite)){el.style.visibility='hidden';continue;}
-    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(tokenLevel===null||tokenLevel<0||level<=tokenLevel)&&!(sightHides&&window.vttSightSees(x,y)===false);
+    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(tokenLevel===null||tokenLevel<0||level<=tokenLevel)&&(el.hasAttribute('data-portal-id') ? portalAnchorVisible(context.isGM, window.vttSightSees, window.vttSightTest?.on, x, y) : !(sightHides&&window.vttSightSees(x,y)===false));
     el.style.left=`${rect.left-hostRect.left+q.x}px`;el.style.top=`${rect.top-hostRect.top+q.y}px`;el.style.visibility=shown?'':'hidden';}
    }
    // A broken object or wall shows its rubble in place of its piece of the map's art, on every screen at once.
@@ -636,4 +635,13 @@ async function mount(){
  await buildScene();
  document.dispatchEvent(new CustomEvent('vtt3d:ready'));requestAnimationFrame(frame);
 }
-mount().catch(error=>console.error('[VTT 3D]',error));
+function reportBoardError(error) {
+ console.error('[VTT 3D]', error);
+ const message = document.querySelector('#vtt-board-canvas .vtt-board__empty');
+ if (message) {
+  message.hidden = false;
+  message.textContent = 'The 3D board could not open. Reload the map to try again.';
+ }
+ document.dispatchEvent(new CustomEvent('vtt3d:error', { detail: { message: String(error) } }));
+}
+mount().catch(reportBoardError);

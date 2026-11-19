@@ -13,7 +13,6 @@ define('VERSION_SYSTEM_INTERNAL', true);
 require_once '../../version.php';
 
 // Include navigation bar
-require_once '../../includes/strix-nav.php';
 
 // The 3D Strixhaven map. Everything it shows about a hex (image, GM information, players' notes),
 // the pings and the travel path come from the flat map's own endpoints under ../map/, which decide
@@ -71,7 +70,7 @@ require_once '../../includes/strix-nav.php';
   #pathTotal { color: #f0d68a; margin-left: 8px; font-variant-numeric: tabular-nums; } #pathMsg { color: #cfc6b4; text-shadow: 0 1px 3px #000, 0 0 6px #000; min-height: 18px; }
   #pathNote { width: 220px; background: #0d0b08; color: #cfc6b4; border: 1px solid #3c3122; font: inherit; padding: 6px 8px; outline: none; }
   #pathDiff .sep { margin: 0 2px 0 10px; color: #8d8474; } #pathDiff button[data-diff=fast].on { color: #7dffac; } #pathDiff button[data-diff=yellow].on { color: #ffe86a; } #pathDiff button[data-diff=red].on { color: #ff7a6a; }
-  body.touring .strix-mini-nav, body.touring #qBtns, body.touring #pathBar, body.touring #panel, body.touring #tip, body.touring #imgBig { display: none !important; }
+  body.touring #qBtns, body.touring #pathBar, body.touring #panel, body.touring #tip, body.touring #imgBig { display: none !important; }
   #tip { position: fixed; left: 0; top: 0; display: none; pointer-events: none; background: rgba(14,16,20,.9); border: 1px solid #d8c48a; border-radius: 5px; padding: 3px 8px; font-size: 12px; white-space: nowrap; z-index: 5; }
   #labels { display: none; position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; pointer-events: auto; cursor: pointer; white-space: nowrap; transition: opacity .25s; text-shadow: 0 1px 3px #000, 0 0 6px #000; font-size: 12px; font-weight: 600; }
@@ -91,7 +90,6 @@ require_once '../../includes/strix-nav.php';
 </script>
 </head>
 <body>
-<?php renderStrixNav('map'); ?>
 <canvas id="c"></canvas>
 <div id="labels"></div>
 <div id="qBtns" title="Picture quality"><button data-q="auto" title="Adjusts itself to keep the map smooth">Auto</button><button data-q="high" title="Everything on">High</button><button data-q="medium" title="Lighter edge smoothing">Med</button><button data-q="low" title="Lighter edge smoothing, drawn at three-quarters size">Low</button></div>

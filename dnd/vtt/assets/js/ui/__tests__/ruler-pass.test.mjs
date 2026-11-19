@@ -71,7 +71,7 @@ test('one ruler redraw is one pass, and each red stretch is cut from the walked 
     route: () => { throw new Error('the ruler must not walk a leg by itself when zones price it'); },
     routePath: () => 'M 0 0',
     paintRoute: () => {},
-    squarePath: (from, at, next) => { calls.squarePaths.push([from, at, next]); return 'M 0 0 L 1 1'; },
+    squarePresentation: (from, at, next) => { calls.squarePaths.push([from, at, next]); return [{x:at.column+.5,y:at.row+.5,z:at.rawHeight}]; },
   };
   const ruler = await import('../drag-ruler.js');
   ruler.mountDragRuler();

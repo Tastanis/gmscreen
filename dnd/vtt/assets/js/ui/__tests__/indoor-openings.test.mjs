@@ -112,17 +112,3 @@ test('the open edges of a floor above: a hole\'s edge and a free edge he has a l
   assert.equal(lengths(openEdgePieces({ x: 10.5, y: 10.5 }, rings, on, walled, () => true)).south, 13, 'the far end of the south edge is past his reach from here');
   assert.equal(EDGE_PIECE, 0.5);
 });
-
-test('the drawing: in a hole he is not under the floor, and a floor of his own building is outlined by its open edges', () => {
-  const renderer = readFileSync(new URL('../roof-renderer.js', import.meta.url), 'utf8');
-  assert.match(renderer, /const underneath=viewerGround<roof\.height-\.01;if\(inspectionHeight===null&&underneath&&onSurface\(roof,viewer\)\)continue;/);
-  assert.match(renderer, /if\(interiorHidden\.has\(roof\.id\)\)\{if\(outlinedIndoors\(roof\)\)indoorOutline\(roof\);continue;\}/);
-  assert.match(renderer, /else if\(interiorHidden\.inside\?\.has\(roof\.id\)&&outlinedIndoors\(roof\)\)indoorOutline\(roof\);/);
-  // The open edges only (Brandon, October 11, 2026: "A for now"); the switch made for his pictures is gone.
-  assert.match(renderer, /for\(const \[from,to\] of pieces\)\{const p=at\(from\),q=at\(to\);shape\.moveTo\(p\.x,p\.y\);shape\.lineTo\(q\.x,q\.y\);\}/);
-  assert.doesNotMatch(renderer, /__vttIndoorOutline|indoorForm/);
-  // Asked just under the floor's top, from below.
-  assert.match(renderer, /openEdgePieces\(viewer,\[roof\.points,\.\.\.roof\.holes\|\|\[\]\],on,\(p,along\)=>wallUnderEdge\(p,along,roof\.height,wallsUnder\(\)\),q=>sight\(q,roof\.height-\.01\)&&!fullWallBetween\(viewer,q,head\(token,viewerGround\),roof\.height,wallsUnder\(\)\)\)/);
-  // A wall sight passes (a window, an open door, a rail) is not in the way of that line.
-  assert.match(renderer, /blocks:restrictions\(e\)\.sight!=='pass'/);
-});

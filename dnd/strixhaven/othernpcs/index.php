@@ -37,7 +37,7 @@ if (!$is_gm) {
         <div class="box">
             <h1>Access Restricted</h1>
             <p>The Other NPCs section is only available to the GM.</p>
-            <a href="../../dashboard.php">Return to Dashboard</a>
+            <a href="/dnd/table/">Return to Table</a>
         </div>
     </body>
     </html><?php
@@ -426,7 +426,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $npcData = loadNpcData();
 
 // Include navigation bar
-require_once '../../includes/strix-nav.php';
 ?>
 
 <!DOCTYPE html>
@@ -445,7 +444,6 @@ require_once '../../includes/strix-nav.php';
     <script src="../../Diablo/theme.js" defer></script>
 </head>
 <body>
-    <?php renderStrixNav(''); ?>
     <!-- Top Navigation Bar -->
     <div class="top-nav">
         <div class="nav-buttons">

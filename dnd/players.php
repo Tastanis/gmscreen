@@ -139,7 +139,7 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
         <?php endforeach; ?>
         <div class="bar">
             <button type="submit" id="save-players">Save</button>
-            <a class="back" href="dashboard.php">Back to the dashboard</a>
+            <a class="back" href="/dnd/table/">Back to the Table</a>
         </div>
     </form>
     <form method="post" id="remove-player"><input type="hidden" name="action" value="remove"></form>

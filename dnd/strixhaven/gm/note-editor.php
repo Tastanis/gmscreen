@@ -14,7 +14,7 @@ $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
 if (!$is_gm) {
-    header('Location: ../../dashboard.php');
+    header('Location: /dnd/table/');
     exit;
 }
 
@@ -30,126 +30,8 @@ if (!$tabId) {
 }
 
 // Handle AJAX save requests FIRST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    error_log("DEBUG: POST request received, action=" . $_POST['action']);
-    
-    // ALWAYS output JSON
-    header('Content-Type: application/json');
-    
-    if ($_POST['action'] === 'save_tab') {
-        try {
-            error_log("DEBUG: Processing save_tab request");
-            
-            $tabDataJson = $_POST['tab_data'] ?? '';
-            error_log("DEBUG: Received tab_data: " . substr($tabDataJson, 0, 100) . "...");
-            
-            if (empty($tabDataJson)) {
-                throw new Exception('No tab data provided');
-            }
-            
-            $tabData = json_decode($tabDataJson, true);
-            if (!$tabData) {
-                throw new Exception('Invalid JSON: ' . json_last_error_msg());
-            }
-            
-            $tabId = $tabData['id'] ?? '';
-            error_log("DEBUG: Tab ID: " . $tabId);
-            
-            if (empty($tabId)) {
-                throw new Exception('Missing tab ID');
-            }
-            
-            // Load existing data
-            $dataDir = 'data';
-            $tabsFile = $dataDir . '/gm-tabs.json';
-            
-            error_log("DEBUG: Looking for tabs file: " . $tabsFile);
-            
-            if (!file_exists($tabsFile)) {
-                throw new Exception('Tabs file not found: ' . $tabsFile);
-            }
-            
-            $content = file_get_contents($tabsFile);
-            $tabsData = json_decode($content, true);
-            
-            if (!$tabsData) {
-                throw new Exception('Invalid tabs file JSON');
-            }
-            
-            error_log("DEBUG: Loaded tabs data, keys: " . implode(', ', array_keys($tabsData)));
-            
-            // Determine panel
-            $panel = null;
-            if (strpos($tabId, 'left-1-') === 0) $panel = 'left-1';
-            elseif (strpos($tabId, 'left-2-') === 0) $panel = 'left-2';  
-            elseif (strpos($tabId, 'right-1-') === 0) $panel = 'right-1';
-            elseif (strpos($tabId, 'right-2-') === 0) $panel = 'right-2';
-            
-            error_log("DEBUG: Detected panel: " . ($panel ?? 'NULL'));
-            
-            if (!$panel) {
-                throw new Exception('Cannot determine panel for tab: ' . $tabId);
-            }
-            
-            // Initialize panel if needed
-            if (!isset($tabsData[$panel])) {
-                $tabsData[$panel] = [];
-            }
-            
-            // Find and update tab
-            $found = false;
-            foreach ($tabsData[$panel] as &$tab) {
-                if ($tab['id'] === $tabId) {
-                    $tab['name'] = $tabData['name'];
-                    $tab['content'] = $tabData['content'];
-                    $tab['lastModified'] = date('c');
-                    $found = true;
-                    break;
-                }
-            }
-            
-            if (!$found) {
-                // Add new tab
-                $tabData['created'] = date('c');
-                $tabData['lastModified'] = date('c');
-                $tabsData[$panel][] = $tabData;
-            }
-            
-            // Update metadata
-            if (!isset($tabsData['metadata'])) {
-                $tabsData['metadata'] = [];
-            }
-            $tabsData['metadata']['lastUpdated'] = date('c');
-            
-            // Save file
-            $jsonData = json_encode($tabsData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            $result = file_put_contents($tabsFile, $jsonData, LOCK_EX);
-            
-            if ($result === false) {
-                throw new Exception('Failed to write file');
-            }
-            
-            error_log("DEBUG: Successfully saved tab data");
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Tab saved successfully'
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("DEBUG: Save error: " . $e->getMessage());
-            echo json_encode([
-                'success' => false,
-                'error' => $e->getMessage()
-            ]);
-        }
-    } else {
-        echo json_encode([
-            'success' => false,
-            'error' => 'Unknown action'
-        ]);
-    }
-    
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Location: index.php', true, 307);
     exit;
 }
 
@@ -181,7 +63,7 @@ if (!$currentTab) {
     // Create default tab if not found
     $currentTab = [
         'id' => $tabId,
-        'name' => $panelName . ' ' . substr($tabId, -1),
+        'name' => $panelName . ' ' . substr(strrchr($tabId, '-'), 1),
         'content' => '',
         'lastModified' => date('c'),
         'created' => date('c')
@@ -194,7 +76,7 @@ if (!$currentTab) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($currentTab['name']); ?> - Strixhaven GM Notes</title>
-    <link rel="stylesheet" href="css/gm-screen.css">
+    <link rel="stylesheet" href="css/note-editor.css">
     <link rel="stylesheet" href="css/character-refs.css">
     <style>
         body {
@@ -348,8 +230,8 @@ if (!$currentTab) {
             
             <div class="note-controls">
                 <span id="save-status" class="save-status saved">All changes saved</span>
-                <button onclick="saveNote()" class="control-btn save">Save</button>
-                <button onclick="window.close()" class="control-btn">Close</button>
+                <button id="note-save" onclick="saveNote()" class="control-btn save" disabled>Save</button>
+                <button onclick="location.href='index.php'" class="control-btn">All notes</button>
             </div>
         </div>
         
@@ -450,6 +332,7 @@ if (!$currentTab) {
                 
                 // Setup auto-save
                 setupAutoSave();
+                document.getElementById("note-save").disabled = false;
                 
                 // Keyboard shortcuts
                 document.addEventListener('keydown', (e) => {
@@ -508,7 +391,7 @@ if (!$currentTab) {
                 formData.append('action', 'save_tab');
                 formData.append('tab_data', JSON.stringify(updatedTabData));
                 
-                const response = await fetch(window.location.href, {
+                const response = await fetch('index.php', {
                     method: 'POST',
                     body: formData
                 });

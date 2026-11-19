@@ -20,8 +20,9 @@ const ruler = await import('../drag-ruler.js');
 ruler.mountDragRuler();
 const GRID = 64;
 const point = (column, row) => ({ column, row, mapX: (column + 0.5) * GRID, mapY: (row + 0.5) * GRID });
-const red = () => [...document.querySelectorAll('.vtt-difficult-step')].map((path) => path.getAttribute('d'));
-const marks = () => [...document.querySelectorAll('.vtt-difficult-step__label')].map((label) => label.textContent);
+const difficult = () => ruler.getCurrentMeasurementPresentation()?.difficult || [];
+const red = () => difficult().map(({ points }) => points.map((p,i) => `${i ? 'L' : 'M'} ${p.x * GRID} ${p.y * GRID}`).join(' '));
+const marks = () => difficult().map(step => '\u00d7' + step.multiplier);
 
 test('the route summary says which square is walked after each difficult one', () => {
   const summary = summarizeRoute([{ column: 2, row: 3 }, { column: 5, row: 3 }, { column: 7, row: 3 }], walk);
@@ -68,10 +69,8 @@ test('ordinary ground has no red at all', () => {
 });
 
 test('the ruler on flat ground is black, so red only ever means difficult terrain', () => {
-  const stops = [...document.querySelectorAll('.vtt-measure-overlay stop')].map((stop) => stop.getAttribute('stop-color'));
-  assert.equal(stops.length, 2);
-  for (const colour of stops) {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(colour.slice(i, i + 2), 16));
-    assert.ok(r < 32 && g < 32 && b < 32, `${colour} is black`);
-  }
+  ruler.beginExternalMeasurement(point(0, 0), { allowInactive: true });
+  ruler.updateExternalMeasurement(point(3, 0));
+  assert.equal(ruler.getCurrentMeasurementPresentation().pieces[0].color, '#111111');
+  ruler.cancelExternalMeasurement();
 });

@@ -21,7 +21,7 @@ export function createTemplatesLayer({view,scene,guideScene,overlayHost,helpers}
  const areaRoot=new THREE.Group();areaRoot.name='vtt-templates';guideScene.add(areaRoot);
  const cubeRoot=new THREE.Group();cubeRoot.name='vtt-wall-templates';scene.add(cubeRoot);
  const box=new THREE.BoxGeometry(1,1,1),edges=new THREE.EdgesGeometry(box);
- // The 2D cube's faces: the top as the texture is, the west face 35% darker and the south face 18% (template-wall-renderer.js).
+ // Shade the cube's sides while keeping the top texture at full intensity.
  {const shade=[.82,.65,1,.5,.82,.65],c=[];for(let f=0;f<6;f++)for(let v=0;v<4;v++)c.push(shade[f],shade[f],shade[f]);box.setAttribute('color',new THREE.Float32BufferAttribute(c,3));}
  const loader=new THREE.TextureLoader(),textures=new Map();
  const texture=material=>{if(!textures.has(material)){const t=loader.load(`/dnd/vtt/assets/images/wall-${material}.png`);t.colorSpace=THREE.SRGBColorSpace;textures.set(material,t);}return textures.get(material);};
@@ -40,7 +40,7 @@ export function createTemplatesLayer({view,scene,guideScene,overlayHost,helpers}
  const baseFor=shape=>{const floor=floorOf(shape);return floor===null?(column,row)=>helpers.groundAt(column+.5,row+.5):()=>floor;};
  function shownOn3d(shape){const shown=helpers.shownLevel;return shown===null||shown<0||helpers.levelIndex(shape.levelId||'level-0')<=shown;}
  // The 2D board's own level rule (applyTemplateLevelVisibility) leaves its result on the template's root.
- const shown2d=shape=>shape.isPreview||!shape.elements?.root?.hidden;
+ const isVisible=shape=>shape.isPreview||shape.visible!==false;
 
  function addArea(shape,selectedId){
   const {squares,height}=templateSquares(shape);if(!squares.length)return;
@@ -107,7 +107,7 @@ export function createTemplatesLayer({view,scene,guideScene,overlayHost,helpers}
  const geometryKey=s=>[s.id,s.type,s.color,s.levelId,s.isPreview,s.center?.column,s.center?.row,s.radius,s.start?.column,s.start?.row,s.length,s.width,s.rotation,s.wallColor,
   s.type==='wall'?(s.squares||[]).map(q=>wallSquareKey(q)+(q.broken?'b':'')).join(';'):'',s.hoverSquare?wallSquareKey(s.hoverSquare):'',s.selectedSquareKey||''].join('|');
  function update(){
-  const {shapes,selectedId}=liveShapes(),drawn=shapes.filter(s=>shown2d(s)&&shownOn3d(s));
+  const {shapes,selectedId}=liveShapes(),drawn=shapes.filter(s=>isVisible(s)&&shownOn3d(s));
   const key=[helpers.shownLevel,window.terrainPrototype?.revision,selectedId,...drawn.map(geometryKey)].join('\n');
   if(key!==signature){signature=key;rebuild(drawn,selectedId);placedFor='';}
   // Whether the chosen one may be changed now (not while a save is on its way) decides its controls.

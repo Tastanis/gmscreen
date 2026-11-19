@@ -1,6 +1,35 @@
+import {normalizePlacementForRender} from './token-render-normalize.js';
+import {normalizeCombatTeam} from '../combat/combat-state.js';
 import {getOrderedTokenMapLevels, getTokenLevelPresentation} from './token-levels.js';
 import {isAlwaysVisibleAlly} from './vision-ownership.js';
 const TOKEN_LEVEL_STACK_STRIDE = 10000;
+
+export function canPlayerMovePlacement(placement) {
+  const normalized = normalizePlacementForRender(placement);
+  if (!normalized || normalized.hidden) {
+    return false;
+  }
+  const metadata =
+    placement.metadata && typeof placement.metadata === 'object'
+      ? placement.metadata
+      : {};
+  const explicitTeam = normalizeCombatTeam(
+    placement.team
+      ?? placement.combatTeam
+      ?? metadata.team
+      ?? metadata.combatTeam
+      ?? null
+  );
+  if (explicitTeam) {
+    return explicitTeam === 'ally';
+  }
+  return !(
+    placement.monster
+    || placement.monsterId
+    || metadata.monster
+    || metadata.monsterId
+  );
+}
 
 export function normalizeTokenRenderGeometry(placement = {}) {
   const number=value=>Number.isFinite(Number(value))?Math.max(0,Number(value)):0;

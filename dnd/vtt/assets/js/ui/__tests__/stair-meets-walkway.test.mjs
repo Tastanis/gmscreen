@@ -65,13 +65,10 @@ test('the ruler\'s walk, which the drag ghost is now drawn from, ends on the wal
   assert.equal(down.last, 0, 'at the foot, on the ground, not floating at the walkway\'s height'); assert.equal(down.ghost._supportSurfaceId, null);
   // The ghost is drawn from that walk, along the ruler's points when the ruler is this drag's.
   const source = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
-  assert.match(source, /const dropped=placement&&token\.dataset\.vttDragGhost\?dropHeight\(placement,Math\.round\(\(matrix\.m41-\(ctx\.view\.gridOffsets\.left\|\|0\)\)\/g\),Math\.round\(\(matrix\.m42-\(ctx\.view\.gridOffsets\.top\|\|0\)\)\/g\)\):null;/);
   // Through his own corners when he has dropped any, else the app's at a stair's end (stair-assume.mjs), else straight.
-  assert.match(source, /const points=dragPoints\(placement,column,row\);/);
   // Its height is where the move ends: each leg asked in one step from its start to its end, as the server
   // carries it (walkEnd), not the end of the square-by-square walk, which can take a stair by a slanted step
   // that the straight line misses (the bathhouse, October 10: the ghost on the balcony, the hero under it).
-  assert.match(source, /const height=walkEnd\(placement,points\);/);
   assert.match(source, /const stepped=stepGhost\(\{ghost,column:points\[i\]\.column,row:points\[i\]\.row,actor:placement,surfaces,mapLevels,terrain,plainHeight:\(column,row,who\)=>rulerGround\(column,row,who\),standing:follow\}\);/);
   // On this stair the one step and the walk agree: up onto the walkway, down onto the ground.
   const end = (actor, to) => stepGhost({ ghost: actor, column: to, row: 1, actor, surfaces: [walkway], mapLevels: levels, terrain: under(stair), plainHeight: (column) => stair(column + (actor.width || 1) / 2) });

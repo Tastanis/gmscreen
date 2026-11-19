@@ -1,19 +1,13 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, abilityTerrainZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText, zonesAtSquare} from './terrain-zones.mjs';
+import {sceneZones, abilityTerrainZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText, zonesAtSquare} from './terrain-zones.mjs';
 import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise, isClimb} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {MOVEMENT_RULES} from './movement-rules.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {fallSquares} from './ruler-label-layout.mjs';
 
-const NS = 'http://www.w3.org/2000/svg';
-const transform = document.querySelector('#vtt-map-transform');
-const svg = document.createElementNS(NS, 'svg');
-svg.id = 'terrain-zone-overlay';
-svg.style.cssText = 'position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:2';
-svg.setAttribute('aria-hidden', 'true');
-let visible = true, preferenceKey = '', signature = '', builds = 0, saving = false;
+let visible = true, preferenceKey = '', saving = false;
 let cache = {key: '', zones: [], index: new Map(), hiddenFromPlayers: false};
 
 function context() { return window.terrainContext?.() || null; }
@@ -84,7 +78,7 @@ function stepMultiplier(actor, column, row, rawHeight) {
   return Math.max(cost, enemy) + crawl;
 }
 function moverFor(c) {
-  const id = c?.selectedIds?.[0] || window.visionPrototype?.viewerTokenId || c?.followId || null;
+  const id = c?.selectedIds?.[0] || c?.followId || null;
   return id ? placementOf(id, c) : null;
 }
 /**
@@ -217,7 +211,6 @@ document.body.append(control);
 function setVisible(value) {
   visible = !!value;
   try { if (preferenceKey) localStorage.setItem(preferenceKey, String(visible)); } catch {}
-  signature = '';
   showSwitches();
 }
 ownButton.addEventListener('click', () => setVisible(!visible));
@@ -246,7 +239,7 @@ async function setHiddenFromPlayers(hidden) {
     }
     return true;
   } catch (error) { console.error('[terrain zones] could not change the players switch', error); wantedHidden = null; return false; }
-  finally { saving = false; signature = ''; showSwitches(); }
+  finally { saving = false; showSwitches(); }
 }
 playersButton.addEventListener('click', () => setHiddenFromPlayers(!playersHidden()));
 // The players switch as last asked for, else as saved. Kept until the saved switch catches up, so it never flickers back for a moment after the save.
@@ -303,51 +296,12 @@ function syncControl(c, state) {
 
 function draw() {
   const c = context();
-  if (!c?.view?.mapLoaded) { control.hidden = true; if (svg.childNodes.length) { svg.replaceChildren(); signature = ''; } return; }
-  if (!svg.isConnected && transform) transform.insertBefore(svg, document.querySelector('#terrain-cost-markers') || document.querySelector('#vtt-grid-overlay'));
+  if (!c?.view?.mapLoaded) { control.hidden = true; return; }
   // Off by default for the Director (Brandon, November 17, 2026); a player follows the Director's switch unless they
   // turn zones off for themselves. A new key, so the old saved "on" is not read.
   const pref = 'terrain-zones-shown:' + String(c.userId || 'viewer'), byDefault = !c.isGM;
   if (pref !== preferenceKey) { preferenceKey = pref; try { const saved = localStorage.getItem(pref); visible = saved === null ? byDefault : saved === 'true'; } catch { visible = byDefault; } }
-  const state = current(c), {zones, key} = state, active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
-  syncControl(c, state);
-  // Each person chooses for their own screen; the GM can also switch zones off for every player.
-  const show = zones.some((zone) => !zone.fromAbility) && visible && (c.isGM || !state.hiddenFromPlayers);
-  const next = JSON.stringify([key, show, state.hiddenFromPlayers, c.levelId, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '']);
-  if (next === signature) return;
-  signature = next; builds++;
-  svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0);
-  svg.style.display = show ? '' : 'none';
-  if (!show) { svg.replaceChildren(); return; }
-  const floors = elevations(c), nodes = [];
-  for (const zone of zones) {
-    if (zone.fromAbility) continue;
-    // Ground zones show from every floor; an upper-floor zone shows while that floor is viewed.
-    if (zone.levelId !== BASE_LEVEL_ID && zone.levelId !== c.levelId) continue;
-    const surface = zoneSurface(zone, floors.get(zone.levelId) ?? 0);
-    const corner = (column, row) => { const x = ox + column * g, y = oy + row * g; return active ? active.project(x, y, zone.levelId === BASE_LEVEL_ID && zone.surfaceHeight === null ? active.heightAt(x, y) : surface) : {x, y}; };
-    const shape = zoneGeometry(zone, corner), color = zoneColor(zone.tag);
-    const group = document.createElementNS(NS, 'g');
-    group.dataset.zoneId = zone.id; group.dataset.zoneTag = zone.tag; group.dataset.zoneCost = String(zone.cost); if (zone.gmOnly) group.dataset.zoneGmOnly = 'true';
-    const fill = document.createElementNS(NS, 'path');
-    fill.setAttribute('d', shape.fill); fill.setAttribute('fill', color); fill.setAttribute('fill-opacity', zone.cost > 1 ? '0.2' : '0.1'); fill.setAttribute('stroke', 'none');
-    const outline = document.createElementNS(NS, 'path');
-    outline.setAttribute('d', shape.outline); outline.setAttribute('fill', 'none'); outline.setAttribute('stroke', color); outline.setAttribute('stroke-opacity', '0.85');
-    outline.setAttribute('stroke-width', String(Math.max(1.5, g * 0.035))); outline.setAttribute('stroke-linecap', 'round');
-    if (zone.gmOnly) outline.setAttribute('stroke-dasharray', `${g * 0.12} ${g * 0.1}`);
-    // Dark casing keeps the outline readable on art of the same colour (blood on a blood canal).
-    const casing = outline.cloneNode(false);
-    casing.setAttribute('stroke', '#000'); casing.setAttribute('stroke-opacity', '0.55'); casing.setAttribute('stroke-width', String(Math.max(3, g * 0.07)));
-    const a = corner(shape.labelSquare[0], shape.labelSquare[1]), b = corner(shape.labelSquare[0] + 1, shape.labelSquare[1] + 1);
-    const label = document.createElementNS(NS, 'text');
-    label.setAttribute('x', String((a.x + b.x) / 2)); label.setAttribute('y', String((a.y + b.y) / 2)); label.setAttribute('text-anchor', 'middle'); label.setAttribute('dominant-baseline', 'central');
-    label.setAttribute('font-size', String(g * 0.2)); label.setAttribute('font-weight', '700'); label.setAttribute('fill', '#fff'); label.setAttribute('stroke', '#000'); label.setAttribute('stroke-width', String(g * 0.045)); label.setAttribute('paint-order', 'stroke');
-    const name = zone.label || zone.tag;
-    label.textContent = (name.length > 16 ? name.slice(0, 15) + '…' : name) + (zone.cost > 1 ? ' ×' + zone.cost : '') + (zone.gmOnly ? ' (GM)' : '');
-    group.append(fill, casing, outline, label);
-    nodes.push(group);
-  }
-  svg.replaceChildren(...nodes);
+  syncControl(c, current(c));
 }
 
 window.terrainZones = {
@@ -368,7 +322,6 @@ window.terrainZones = {
   setVisible,
   get hiddenFromPlayers() { return current().hiddenFromPlayers; },
   setHiddenFromPlayers,
-  get builds() { return builds; },
 };
 setInterval(() => { try { draw(); } catch (error) { console.error('[terrain zones]', error); } }, 200);
 window.addEventListener('resize', () => { try { placeControl(); } catch {} });

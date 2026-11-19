@@ -1,6 +1,4 @@
-/* 3D board: the picture is drawn by #vtt-board3d underneath; the 2D map layer
-   stays on top, transparent and hidden, so the existing tools still receive the
-   pointer; tokens are projected into their own layer above both. */
+/* Three.js draws the scene. The transparent input surface receives board gestures. */
 #vtt-board3d{position:absolute;inset:0;overflow:hidden;background:#14282c;z-index:0;pointer-events:none}
 #vtt-board3d canvas{display:block;width:100%;height:100%}
 /* Between scenes: the old one is gone, the new one is being built (integration.mjs clearBoard). */

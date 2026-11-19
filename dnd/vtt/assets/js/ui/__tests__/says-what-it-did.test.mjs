@@ -16,11 +16,9 @@ const piece = (name) => { const found = board.match(new RegExp('  function ' + n
 function finder(tokens) {
   const pulses = [];
   const viewState = { scale: 1, translation: { x: 0, y: 0 } };
-  const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
-  const nodes = tokens.map((token) => ({ dataset: { placementId: token.id }, hidden: token.hidden === true, getBoundingClientRect: () => rect(token.x + viewState.translation.x, token.y + viewState.translation.y, 40, 40) }));
-  const make = new Function('tokenLayer', 'board', 'mapSurface', 'viewState', 'applyTransform', 'mapPings',
-    `${piece('centerOnBoardToken')}\n${piece('centerOnBoardTokens')}\n${piece('findTokenWords')}\nreturn { centerOnBoardToken, centerOnBoardTokens, findTokenWords };`);
-  const api = make({ querySelectorAll: () => nodes }, { getBoundingClientRect: () => rect(0, 0, 1000, 600) }, { getBoundingClientRect: () => rect(0, 0, 1000, 600) }, viewState, () => {}, { pulseAt: (x, y) => pulses.push([x, y]) });
+  const camera = { focusTokens: ids => tokens.filter(t=>ids.includes(t.id)&&!t.hidden).map(t=>({x:t.x,y:t.y,z:t.z||0})) };
+  const make = new Function('globalThis', 'mapPings', `${piece('centerOnBoardToken')}\n${piece('centerOnBoardTokens')}\n${piece('findTokenWords')}\nreturn { centerOnBoardToken, centerOnBoardTokens, findTokenWords };`);
+  const api = make({vtt3d:camera},{pulseAt:(x,y,z)=>pulses.push([x,y,z])});
   return { ...api, viewState, pulses };
 }
 
@@ -28,18 +26,15 @@ test('Find token with two selected: the view is centred on them together, and ea
   const { centerOnBoardTokens, viewState, pulses } = finder([{ id: 'cal', x: 100, y: 100 }, { id: 'ogre', x: 300, y: 500 }, { id: 'far', x: 5000, y: 5000 }]);
   assert.equal(centerOnBoardTokens(['cal', 'ogre']), 2);
   // The two cover 100..340 across and 100..540 down: their middle, 220 and 320, is brought to the board's middle, 500 and 300.
-  assert.deepEqual(viewState.translation, { x: 280, y: -20 });
-  assert.deepEqual(pulses, [[120, 120], [320, 520]], 'a pulse from the middle of each, where it is on the map');
+  assert.deepEqual(pulses, [[100, 100, 0], [300, 500, 0]], 'a pulse from the middle of each, where it is on the map');
 });
 
 test('one selected is what it always was; a token on a floor not being viewed is not "found"', () => {
   const one = finder([{ id: 'cal', x: 100, y: 100 }]);
   assert.equal(one.centerOnBoardToken('cal'), true);
-  assert.deepEqual(one.viewState.translation, { x: 380, y: 180 });
-  assert.deepEqual(one.pulses, [[120, 120]]);
+  assert.deepEqual(one.pulses, [[100, 100, 0]]);
   const upstairs = finder([{ id: 'cal', x: 100, y: 100 }, { id: 'bat', x: 300, y: 100, hidden: true }]);
   assert.equal(upstairs.centerOnBoardToken('bat'), false);
-  assert.deepEqual(upstairs.viewState.translation, { x: 0, y: 0 }, 'and the view does not move for it');
   assert.equal(upstairs.centerOnBoardTokens(['cal', 'bat']), 1, 'of two selected, the one that is drawn is centred');
   assert.equal(upstairs.centerOnBoardTokens([]), 0);
 });

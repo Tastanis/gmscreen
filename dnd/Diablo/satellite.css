@@ -11,26 +11,9 @@ html.diablo-theme {
 }
 
 /* Strix mini-nav (fixed bar at the very top) */
-body.diablo-theme .strix-mini-nav {
-    background: rgba(10, 8, 6, 0.97);
-    border-bottom: 1px solid rgba(110, 90, 51, 0.55);
-}
 
-body.diablo-theme .strix-mini-nav a {
-    color: #8d8474;
-    font-family: 'Cinzel', serif;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
 
-body.diablo-theme .strix-mini-nav a:hover {
-    color: #f0d68a;
-    background: rgba(200, 169, 94, 0.16);
-}
 
-body.diablo-theme .strix-mini-nav a.active {
-    color: #c8a95e;
-}
 
 /* Page shell */
 body.diablo-theme .main-container {

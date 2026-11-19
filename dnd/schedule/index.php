@@ -92,7 +92,6 @@ if (file_exists($schedules_file)) {
 }
 
 // Include navigation bar
-require_once '../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,12 +103,11 @@ require_once '../includes/strix-nav.php';
     <?php echo players_script(); ?>
 </head>
 <body>
-    <?php renderStrixNav('schedule'); ?>
     <div class="container">
         <header>
             <h1><?php echo $is_gm ? 'Game Master Schedule' : htmlspecialchars($character_names[$user] ?? strtoupper($user)) . ' Schedule'; ?></h1>
             <div class="user-info">
-                <a href="../dashboard.php" class="back-btn">← Back to Main</a>
+                <a href="/dnd/table/" class="back-btn">← Back to Main</a>
             </div>
         </header>
 

@@ -22,7 +22,7 @@ function curve(points){
  const last=points[points.length-1];out.push({x:last.x,y:last.y});return out;
 }
 
-export function createDrawingsLayer({guideScene,helpers}){
+export function createDrawingsLayer({guideScene,helpers,bridge}){
  const root=new THREE.Group();root.name='vtt-drawings';guideScene.add(root);
  const solid=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,forceSinglePass:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4,toneMapped:false});
  const ghost=solid.clone();ghost.depthFunc=THREE.GreaterDepth;ghost.transparent=true;ghost.opacity=.3;
@@ -102,7 +102,7 @@ export function createDrawingsLayer({guideScene,helpers}){
  function update(){
   const now=drawingViewRevision(),levelKey=`${helpers.shownLevel}:${window.terrainPrototype?.revision}:${(window.wallPrototype?.model?.ramps||[]).length}`;
   if(now===revision&&levelKey===strokesKey.split('|')[0])return;
-  revision=now;const view=getDrawingView();if(!view)return;
+  revision=now;const view=bridge?.drawingView?.() ?? getDrawingView();if(!view)return;
   const shown=view.drawings.filter(shownOn3d),key=levelKey+'|'+shown.map(d=>d.id+':'+(d._entityRevision??'')+':'+d.points.length).join(',');
   if(key!==strokesKey){strokesKey=key;report.triangles=fill('strokes',shown);report.strokes=shown.length;}
   const current=view.current&&view.current.points.length&&shownOn3d(view.current)?view.current:null,ck=current?`${current.points.length}:${current.color}:${current.strokeWidth}:${current.z}`:'';
@@ -112,7 +112,7 @@ export function createDrawingsLayer({guideScene,helpers}){
    ringMaterial.color.set(view.erase?'#ffffff':view.color);ringMaterial.opacity=view.erase?.8:1;ringMaterial.dashSize=4/helpers.gridSize/radius;ringMaterial.gapSize=3/helpers.gridSize/radius;disc.material.opacity=view.erase?.1:.15;}
  }
  // While drawing, the board's own cursor is hidden as on the 2D board (board.css .vtt-board__drawings).
- const style=document.createElement('style');style.textContent='.vtt3d-on #vtt-map-surface:has(#vtt-drawing-layer[data-drawing-active="true"]){cursor:none!important}';document.head.append(style);
+ const style=document.createElement('style');style.textContent='.vtt3d-on #vtt-map-surface[data-drawing-active="true"]{cursor:none!important}';document.head.append(style);
  const api={update,summary:()=>({...report}),dispose(){if(window.vtt3dLayers?.drawings===api)delete window.vtt3dLayers.drawings;style.remove();guideScene.remove(root);for(const m of Object.values(meshes))m.geometry.dispose();solid.dispose();ghost.dispose();ringGeometry.dispose();ringMaterial.dispose();discGeometry.dispose();disc.material.dispose();}};
  (window.vtt3dLayers??={}).drawings=api;return api;
 }

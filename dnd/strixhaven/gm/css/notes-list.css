@@ -1,0 +1,10 @@
+html { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #201a17; color: #f2e8dc; }
+body { max-width: 72rem; margin: auto; padding: 1rem; }
+header, nav, form { display: flex; align-items: baseline; flex-wrap: wrap; gap: .75rem; }
+header { justify-content: space-between; }
+main { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,16rem),1fr)); gap: 1rem; }
+section { padding: 1rem; border: 1px solid #675448; border-radius: .45rem; }
+h1, h2 { margin: 0 0 .6rem; }
+a, summary { color: #f6d497; }
+ul { padding-inline-start: 1.3rem; }
+li { margin-block: .25rem; }

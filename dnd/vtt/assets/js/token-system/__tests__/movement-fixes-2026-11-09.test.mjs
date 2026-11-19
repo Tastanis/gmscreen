@@ -59,7 +59,7 @@ test('B: the turn undo gives back the move it undid; a held key or Alt never und
   await key({ altKey: true });
   assert.equal(restored.length, 0, 'held Ctrl+Z and Ctrl+Alt+Z fell through to the move undo before');
   assert.equal(controller.getMovementLeft('hero').spent, 3);
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /tokenMovementController\?\.refundMove\?\.\(\{ tokenId: step\.entityId,/, 'performTurnUndo refunds a placement step that moved a token');
   assert.match(board, /isCustomConditionDialogOpen\(\) \|\|\n\s*document\.getElementById\('wall-panel'\)\?\.hidden === false,/, 'the walls panel suppresses the move undo too');
 });
@@ -70,13 +70,13 @@ test('C: conditions change the speed shown and the ring, and say why; nothing is
   assert.equal(harness({ rule: { halve: true, why: 'Grabbing Ogre: speed halved' } }).controller.getMovementLeft('hero').speed, 3);
   assert.equal(harness({ rule: { limit: 2 } }).controller.getMovementLeft('hero').why, undefined);
   assert.equal(formatMovementSummary({ spent: 1, dragCost: 2, speed: 2, why: 'Slowed: speed 2' }), 'Moved 3 / 2 - 1 over (Slowed: speed 2)');
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /if \(names\.has\('slowed'\)\) \{ rule\.limit = Math\.min\(rule\.limit \?\? Infinity, 2\);/);
   assert.match(board, /size\(placement\) <= size\(p\)/, 'halved only when grabbing a creature its size or larger');
-  const zones = readFileSync(new URL('../../ui/terrain-zones-overlay.js', import.meta.url), 'utf8');
+  const zones = readFileSync(new URL('../../ui/terrain-zones-overlay.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(zones, /window\.vttIsProne\?\.\(actor\)\) crawl = 1;/, 'prone crawls at one more a square');
   assert.match(zones, /return Math\.max\(cost, enemy\) \+ crawl;/, 'on top of difficult terrain or an enemy\'s square, by the book (November 10, 2026)');
-  const board3 = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board3 = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board3, /if \(movedId && dealt\.targetId === movedId\) \{ const cut = await forcedMovementDamageReduction\(dealt\.targetId\);/, 'R3: undo gives back only what the pushed creature took after its cut');
   assert.match(board3, /&& !\(request\.wallCells \|\| \[\]\)\.some\(/, 'R6: a square past a wall on the push line is a push into it, not a warning');
   assert.match(board3, /if \(Number\.isFinite\(lastMoveOutcome\?\.beyondLeft\)\) budget = lastMoveOutcome\.beyondLeft;/, 'R4: a slide\'s later legs are cut to what the break left');
@@ -96,11 +96,11 @@ test('C: a forced drag does not show as movement spent', () => {
 });
 
 test('E: moves through creatures switches the enemy surcharge off; a closed secret door stops the outline and the route', () => {
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /if \(rules\?\.moveThroughCreatures\) \{ enemySquaresCache = \{ state, id, squares \}; return squares; \}/);
-  const zones = readFileSync(new URL('../../ui/terrain-zones-overlay.js', import.meta.url), 'utf8');
+  const zones = readFileSync(new URL('../../ui/terrain-zones-overlay.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(zones, /q\?\.kind === 'door' && q\.edge\?\.secret === true && q\.edge\?\.open !== true\)\) return null;/);
-  const planner = readFileSync(new URL('../../../../board3d/route-planner.mjs', import.meta.url), 'utf8');
+  const planner = readFileSync(new URL('../../../../board3d/route-planner.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(planner, /q\?\.kind==='door'&&q\.edge\?\.secret===true&&q\.edge\?\.open!==true/);
 });
 
@@ -116,7 +116,7 @@ test('G: a creature right behind a wall is not hit through it (browser side; For
 });
 
 test('H: a hand slide with corners is announced once, as a slide, with its total', () => {
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /slideBeyond: leg\.beyond, announce: false \}\);/, 'no leg announces itself');
   assert.match(board, /if \(slid > 0 && sceneId === getActiveSceneId\(\)\) announceHandForcedMove\(id, slid, 'slide'\);/);
   assert.match(board, /if \(moved > 0\) announceHandForcedMove\(id, moved, 'push'\);/, 'a straight Ctrl-drag stays a push');
@@ -134,12 +134,12 @@ test('I: reminders walk the route the creature took', () => {
   const event = { type: 'token.moved', operationId: 'op', payload: { movementKind: 'walk', path: [{ column: 9, row: 9 }] } };
   const detail = normalMovementDetail('scene', 'hero', { column: 4, row: 4 }, { column: 4, row: 4 }, { source: 'acknowledgement', event });
   assert.ok(detail && detail.path.length === 1, 'out and back is a move with its route');
-  const store = readFileSync(new URL('../../../../lib/SyncV2Store.php', import.meta.url), 'utf8');
+  const store = readFileSync(new URL('../../../../lib/SyncV2Store.php', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(store, /if \(count\(\$kinds\) === 1 && in_array\(\$kinds\[0\], \['walk', 'shift'\], true\)\) \$event\['payload'\]\['movementKind'\] = \$kinds\[0\];/, 'a group walk says it is a walk (only walks and shifts: a restore is not a walk)');
 });
 
 test('J and K: a captive is no watcher of its own grabber; ending a grab is asked, with the likely answer first', () => {
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /if \(grabsOnScene\(\)\.some\(\(grab\) => grab\.grabberId === movingId && grab\.grabbedId === watcher\.id\)\) continue;/);
   assert.match(board, /if \(grabbedMoved && !grabberMoved\) \{ await askEndGrab\(grab, 'it was moved away'\); continue; \}/);
   assert.deepEqual(moveQuestionText({ kind: 'grab', squares: 2, why: 'x' }).answers.map(([k]) => k), ['end', 'keep'], 'apart: ending suggested');
@@ -158,7 +158,7 @@ test('D: a flier\'s height counts once a move is finished, and a reversal only a
   assert.equal(controller.getMovementLeft('hero').spent, 6, 'after the sideways move, up again counts: 3 + 3');
   controller.recordHeightChange('other', 0, 5);
   assert.equal(controller.getMovementLeft('hero').spent, 6, 'only the creature whose turn it is');
-  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+  const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(board, /tokenMovementController\?\.recordHeightChange\?\.\(id, before, z\);/, 'the 3D height drag, on letting go');
   assert.match(board, /tokenMovementController\?\.recordHeightChange\?\.\(token\.id,current,requested\);/, 'the height box');
 });

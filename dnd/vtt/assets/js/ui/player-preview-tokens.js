@@ -1,21 +1,18 @@
 import {normalizeMapLevelsState} from '../state/normalize/map-levels.js';
 import {normalizePlacementForRender} from './token-render-normalize.js';
-import {renderTokenAuras} from './token-aura-renderer.js';
 import {syncTokenHitPoints} from './token-hit-points.js';
 import {ensurePlacementConditions} from './token-conditions.js';
 import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {syncTriggeredActionIndicator} from './automation-trigger-ready.js';
-import {createFogChecker} from './fog-of-war.js';
 import {getDefaultTokenStackOrderMap,getPlacementStackOrder} from './token-stack-order.js';
 import {applyCombatGroupsToState,getCombatGroupColorAssignments,getRepresentativeIdForCombatant} from '../combat/combat-groups.js';
-import {resolveVisibleTokenPresentation,getTokenRenderStackOrder,buildTokenLevelTransform,applyTokenLevelPresentation,normalizeTokenRenderGeometry} from './token-presentation.js';
+import {canPlayerMovePlacement,resolveVisibleTokenPresentation,getTokenRenderStackOrder,applyTokenLevelPresentation} from './token-presentation.js';
 
 export function renderPlayerPreviewTokens(stage,state,view,levelId) {
   const sceneId=state.boardState.activeSceneId;
   const placements=state.boardState.placements[sceneId] ?? [];
   const config=state.boardState.sceneState[sceneId] ?? {};
   const levels=normalizeMapLevelsState(config.mapLevels,{sceneGrid:config.grid});
-  const isCellFogged=createFogChecker(state,levelId,{gmViewing:false});
   const stack=getDefaultTokenStackOrderMap(placements);
   const groupState={groups:new Map(),representatives:new Map(),missingCounts:new Map()};
   const combat=config.combat ?? {};
@@ -24,9 +21,11 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
   const layer=document.createElement('div');layer.className='vtt-board__tokens';
   for(const [index,raw] of placements.entries()) {
     const normalized=normalizePlacementForRender(raw);
-    if(!normalized)continue;
+    if(!normalized || normalized.hidden || raw.flags?.hidden)continue;
+    const conditions = ensurePlacementConditions(raw.conditions ?? raw.condition ?? null);
+    if (!canPlayerMovePlacement(raw) && conditions.some(c => c.name?.trim().toLowerCase() === 'invisible')) continue;
     const placement={...raw,...normalized};
-    const presentation=resolveVisibleTokenPresentation(placement,levels,{viewerLevelId:levelId,isCellFogged});
+    const presentation=resolveVisibleTokenPresentation(placement,levels,{viewerLevelId:levelId,gmViewing:true});
     if(!presentation)continue;
     const token=document.createElement('div');token.className='vtt-token';
     token.dataset.previewPlacementId=placement.id;token.dataset.mapLevelId=presentation.levelId;
@@ -34,9 +33,6 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
     if(groupColor)token.dataset.groupColor=String(groupColor);
     token.title=placement.name || 'Token';
     token.style.width=placement.width*view.gridSize+'px';token.style.height=placement.height*view.gridSize+'px';
-    token.style.transform=buildTokenLevelTransform(view.gridOffsets.left+placement.column*view.gridSize,
-      view.gridOffsets.top+placement.row*view.gridSize,presentation.scale);
-    token.style.transformOrigin='50% 50%';
     token.style.zIndex=String(getTokenRenderStackOrder(getPlacementStackOrder(raw,stack.get(raw.id) ?? index),presentation.levelId,levels));
     applyTokenLevelPresentation(token,presentation);
     if(placement.imageUrl) {
@@ -45,7 +41,7 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
     } else token.classList.add('vtt-token--placeholder');
     syncTokenHitPoints(token,placement,{isGm:false});
     syncTokenTeamAffiliation(token,placement);
-    paintTokenConditionLabel(token,ensurePlacementConditions(placement.conditions ?? placement.condition ?? null));
+    paintTokenConditionLabel(token,conditions);
     const judgment=placement.marks?.judgment;
     paintTokenMarkIndicator(token,judgment && typeof judgment==='object' ? judgment : null);
     syncTriggeredActionIndicator(token,placement);
@@ -54,8 +50,5 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
     layer.append(token);
   }
   stage.append(layer);
-  const auraLayer=document.createElement('div');auraLayer.className='vtt-board__auras';
-  renderTokenAuras({placements,layer:auraLayer,view,tokenLevelState:levels,auraViewerLevelId:levelId,isCellFogged,passive:true});
-  stage.append(auraLayer);
   return layer;
 }

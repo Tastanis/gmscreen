@@ -9,7 +9,7 @@ import { createAbilityAutomationHarness } from '../../../../../character_sheet/a
 // during his one turn. While he was actively taking it." And: "Check that they [his persistent abilities] do work the
 // way they're intended."
 
-const board = await readFile(new URL('../board-interactions.js', import.meta.url), 'utf8');
+const board = (await readFile(new URL('../board-interactions.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 function section(start, end) {
   const first = board.indexOf(start);
   const last = board.indexOf(end, first + start.length);

@@ -664,7 +664,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $studentData = loadStudentData();
 
 // Include navigation bar
-require_once '../../includes/strix-nav.php';
 ?>
 
 <!DOCTYPE html>
@@ -686,7 +685,6 @@ require_once '../../includes/strix-nav.php';
     <script src="../../Diablo/theme.js" defer></script>
 </head>
 <body>
-    <?php renderStrixNav('students'); ?>
     <!-- Top Navigation Bar -->
     <div class="top-nav">
         <div class="nav-buttons">

@@ -180,21 +180,12 @@ function renderVttSceneBoard(bool $isGm = false): string
                         <div id="vtt-map-backdrop" class="vtt-board__map-backdrop">
                             <img id="vtt-map-image" class="vtt-board__map-image" alt="Scene map" hidden />
                         </div>
-                        <div id="vtt-grid-overlay" class="vtt-board__grid" aria-hidden="true"></div>
-                        <div id="vtt-aura-layer" class="vtt-board__auras" aria-hidden="true" hidden></div>
-                        <div id="vtt-template-layer" class="vtt-board__templates" aria-hidden="true"></div>
-                        <svg id="vtt-drawing-layer" class="vtt-board__drawings" aria-hidden="true"></svg>
                         <div
                             id="vtt-token-layer"
                             class="vtt-board__tokens"
                             aria-live="off"
                             hidden
                         ></div>
-                        <canvas id="vtt-fog-layer" class="vtt-board__fog" aria-hidden="true"></canvas>
-                        <canvas id="vtt-fog-selection-layer" class="vtt-board__fog-selection" aria-hidden="true"></canvas>
-                        <svg id="vtt-stairs-layer" class="vtt-board__stairs" aria-hidden="true"></svg>
-                        <div id="vtt-ping-layer" class="vtt-board__pings" aria-hidden="true"></div>
-                        <div id="vtt-selection-box" class="vtt-board__selection-box" aria-hidden="true" hidden></div>
                     </div>
                 </div>
                 <p class="vtt-board__empty">Drag a scene map here or create a scene from the settings panel.</p>

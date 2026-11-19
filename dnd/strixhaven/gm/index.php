@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
 if (!$is_gm) {
-    header('Location: ../../dashboard.php');
+    header('Location: /dnd/table/');
     exit;
 }
 
@@ -428,14 +428,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         case 'session_backup':
             try {
-                $tabsData = loadTabsData($tabsFile);
-                
-                if (saveTabsData($tabsData, $tabsFile, 'session')) {
-                    echo json_encode(['success' => true]);
-                } else {
-                    throw new Exception('Failed to create session backup');
-                }
-                
+                $result = is_file($tabsFile)
+                    ? (new GMBackupHelper($dataDir))->createBackup($tabsFile, 'session')
+                    : ['success' => true];
+                echo json_encode($result);
             } catch (Exception $e) {
                 echo json_encode([
                     'success' => false,
@@ -455,168 +451,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
 }
 
-// Load panel titles for display
-$panelTitles = loadPanelTitles($panelTitlesFile);
+$notes = loadTabsData($tabsFile);
+$titles = loadPanelTitles($panelTitlesFile);
+$sections = ['left-1' => 'Notes', 'left-2' => 'References', 'right-1' => 'Rules', 'right-2' => 'Campaign'];
+$escape = static fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+if (isset($_GET['export'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="gm-notes.json"');
+    echo json_encode(['titles' => $titles, 'notes' => $notes], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    exit;
+}
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strixhaven GM Screen</title>
-    <link rel="stylesheet" href="css/gm-screen.css">
-    <link rel="stylesheet" href="css/character-refs.css">
-    <?php echo players_script(); ?>
-</head>
-<body>
-    <!-- Background Image -->
-    <div class="background-layer"></div>
-    
-    <!-- Main GM Screen Container -->
-    <div class="gm-screen-container">
-        
-        <!-- Left Side Panel 1 -->
-        <aside class="side-panel left-panel" id="left-panel-1">
-            <div class="panel-handle">
-                <span class="panel-title" title="Click to edit panel name"><?php echo htmlspecialchars($panelTitles['left-panel-1']); ?></span>
-                <div class="handle-icon">📝</div>
-            </div>
-            
-            <div class="panel-content">
-                <div class="panel-header">
-                    <h3><?php echo htmlspecialchars($panelTitles['left-panel-1']); ?></h3>
-                    <button class="panel-close" onclick="togglePanel('left-panel-1')">&times;</button>
-                </div>
-                
-                <div class="tabs-container">
-                    <div class="tabs-list" id="left-1-tabs">
-                        <!-- Tabs will be generated dynamically -->
-                    </div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Left Side Panel 2 -->
-        <aside class="side-panel left-panel" id="left-panel-2">
-            <div class="panel-handle">
-                <span class="panel-title" title="Click to edit panel name"><?php echo htmlspecialchars($panelTitles['left-panel-2']); ?></span>
-                <div class="handle-icon">📚</div>
-            </div>
-            
-            <div class="panel-content">
-                <div class="panel-header">
-                    <h3><?php echo htmlspecialchars($panelTitles['left-panel-2']); ?></h3>
-                    <button class="panel-close" onclick="togglePanel('left-panel-2')">&times;</button>
-                </div>
-                
-                <div class="tabs-container">
-                    <div class="tabs-list" id="left-2-tabs">
-                        <!-- Tabs will be generated dynamically -->
-                    </div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Central Content Area -->
-        <main class="central-content">
-            <div class="gm-header">
-                <h1>Strixhaven Campaign</h1>
-                <div class="session-info">
-                    <span id="session-date"></span>
-                    <span class="version-display">v<?php echo Version::get(); ?></span>
-                </div>
-            </div>
-            
-            <!-- Quick Actions Bar -->
-            <div class="quick-actions">
-                <button onclick="window.location.href='../../dashboard.php'">← Back to Dashboard</button>
-                <button onclick="window.location.href='data-recovery.php'">Data Recovery</button>
-                <button onclick="exportNotes()">Export Notes</button>
-                <button onclick="window.location.href='../../logout.php'">Logout</button>
-            </div>
-
-        </main>
-
-        <!-- Right Side Panel 1 -->
-        <aside class="side-panel right-panel" id="right-panel-1">
-            <div class="panel-handle">
-                <span class="panel-title" title="Click to edit panel name"><?php echo htmlspecialchars($panelTitles['right-panel-1']); ?></span>
-                <div class="handle-icon">📋</div>
-            </div>
-            
-            <div class="panel-content">
-                <div class="panel-header">
-                    <h3><?php echo htmlspecialchars($panelTitles['right-panel-1']); ?></h3>
-                    <button class="panel-close" onclick="togglePanel('right-panel-1')">&times;</button>
-                </div>
-                
-                <div class="tabs-container">
-                    <div class="tabs-list" id="right-1-tabs">
-                        <!-- Tabs will be generated dynamically -->
-                    </div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Right Side Panel 2 -->
-        <aside class="side-panel right-panel" id="right-panel-2">
-            <div class="panel-handle">
-                <span class="panel-title" title="Click to edit panel name"><?php echo htmlspecialchars($panelTitles['right-panel-2']); ?></span>
-                <div class="handle-icon">🌟</div>
-            </div>
-            
-            <div class="panel-content">
-                <div class="panel-header">
-                    <h3><?php echo htmlspecialchars($panelTitles['right-panel-2']); ?></h3>
-                    <button class="panel-close" onclick="togglePanel('right-panel-2')">&times;</button>
-                </div>
-                
-                <div class="tabs-container">
-                    <div class="tabs-list" id="right-2-tabs">
-                        <!-- Tabs will be generated dynamically -->
-                    </div>
-                </div>
-            </div>
-        </aside>
-    </div>
-
-    <!-- Character Autocomplete Container (for popup editor) -->
-    <div id="character-autocomplete" class="character-autocomplete" style="display: none;"></div>
-
-    <!-- Character Modal (kept for character details) -->
-    <div id="character-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title-container">
-                    <h2 id="character-modal-title">Character Details</h2>
-                </div>
-                <div class="modal-controls">
-                    <button onclick="openCharacterInNewTab()" class="modal-action-btn" title="Open in New Tab">📋</button>
-                    <button onclick="closeCharacterModal()" class="modal-close">&times;</button>
-                </div>
-            </div>
-            
-            <div class="modal-body">
-                <div id="character-details-content">
-                    <!-- Character details will be loaded here -->
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Dice Roller will be created dynamically by JavaScript -->
-
-    <!-- Scripts -->
-    <script src="js/rich-text-editor.js"></script>
-    <script src="js/character-lookup.js"></script>
-    <script src="js/gm-screen.js"></script>
-    
-    <script>
-        // Initialize the GM Screen
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Initializing GM Screen with Popup Tabs and Dice Roller...');
-            GMScreen.init();
-        });
-    </script>
-</body>
-</html>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GM notes</title>
+<link rel="stylesheet" href="css/notes-list.css">
+</head><body>
+<header><h1>GM notes</h1><nav><a href="?export=1" download>Export notes</a> <a href="data-recovery.php">Recover notes</a></nav></header>
+<main>
+<?php foreach ($sections as $key => $fallback):
+    $titleKey = str_replace('-', '-panel-', $key);
+    $title = $titles[$titleKey] ?? $fallback;
+?>
+<section><header><h2><?= $escape($title) ?></h2>
+<details><summary>Rename</summary>
+<form method="post" data-rename>
+    <input type="hidden" name="action" value="save_panel_title">
+    <input type="hidden" name="panel_id" value="<?= $escape($titleKey) ?>">
+    <label>Group name <input name="title" value="<?= $escape($title) ?>" required></label>
+    <button>Save</button>
+</form></details></header>
+<ul>
+<?php foreach ($notes[$key] ?? [] as $note):
+    $query = http_build_query(['tab' => $note['id'], 'panel' => $title]);
+?>
+<li><a href="note-editor.php?<?= $escape($query) ?>"><?= $escape($note['name']) ?></a></li>
+<?php endforeach; ?>
+</ul></section>
+<?php endforeach; ?>
+</main><p role="status" id="status"></p>
+<script>
+const statusLine = document.getElementById('status');
+async function request(fields) {
+  const response = await fetch('index.php', {method:'POST', body:fields});
+  const result = await response.json();
+  if (!response.ok || !result.success) throw new Error(result.error || 'The notes request failed.');
+}
+for (const form of document.querySelectorAll('[data-rename]')) {
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try { await request(new FormData(form)); location.reload(); }
+    catch (error) { statusLine.textContent = error.message; button.disabled = false; }
+  });
+}
+function backUp() {
+  request(new URLSearchParams({action:'session_backup'})).catch(error => { statusLine.textContent = error.message; });
+}
+backUp();
+setInterval(backUp, 600000);
+</script></body></html>

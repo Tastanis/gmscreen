@@ -8,7 +8,7 @@ import { createAbilityAutomationHarness } from '../../../../../character_sheet/a
 // whole turn; each undo says so in chat named for who did it; "Start <name>'s turn?" once a round when acting in the
 // picking phase.
 
-const board = await readFile(new URL('../board-interactions.js', import.meta.url), 'utf8');
+const board = (await readFile(new URL('../board-interactions.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 function section(start, end) {
   const first = board.indexOf(start);
   const last = board.indexOf(end, first + start.length);
@@ -50,13 +50,13 @@ test('one action is one group; commands carry it; an inner action belongs to the
     assert.equal(inner.undoGroup, tag.undoGroup);
   });
   assert.deepEqual(currentUndoTag(), {}, 'cleared after');
-  const runtime = await readFile(new URL('../../sync-v2/token-movement-runtime.js', import.meta.url), 'utf8');
+  const runtime = (await readFile(new URL('../../sync-v2/token-movement-runtime.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(runtime, /submit\('placement\.batch', \{ actions, \.\.\.currentUndoTag\(\) \}\)/);
   assert.match(runtime, /\.\.\.\(move\.undoRevision === undefined \? currentUndoTag\(\) : \{\}\)/);
 });
 
 test('an ability use is one group and asks the page first (start-turn hook)', async () => {
-  const runner = await readFile(new URL('../../../../../character_sheet/ability-automation/runner.js', import.meta.url), 'utf8');
+  const runner = (await readFile(new URL('../../../../../character_sheet/ability-automation/runner.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   const open = runner.slice(runner.indexOf('  async function open(options) {'), runner.indexOf('  async function openRun(options) {'));
   assert.ok(open.indexOf('vttBeforeAbilityRun') < open.indexOf('globalThis.vttUndoGroup = { id'), 'asked before the action starts');
   assert.match(open, /if \(globalThis\.vttUndoGroup\?\.id\) return openRun\(options\);/, 'inside another action: part of it');

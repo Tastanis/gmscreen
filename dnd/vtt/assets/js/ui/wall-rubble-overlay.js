@@ -1,177 +1,72 @@
-// Draws rubble over broken walls, for everyone. The rules (what, where, how big, which picture)
-// are in wall-rubble.mjs; this file only puts them on the board.
-//
-// Two layers, because a map can be painted in two places:
-//  - rubble on bare ground sits just above the map picture, under the fog and the tokens, the same
-//    place terrain zones are drawn;
-//  - rubble on a floor plate (an upper floor, or any floor that has its own picture) sits just
-//    above the plates, which are painted over the fog. It is drawn only while that floor is being
-//    viewed and, for a player, only while the spot is in sight, the test door markers already use.
-//    The GM looks from a chosen height, not from a floor: the GM is shown the rubble on every floor
-//    at or below that height that no higher floor in view covers.
-import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, stripAcross, standInRubble, plateUnder, coveredAbove, stableHash } from './wall-rubble.mjs';
+import {rubblePieces,plateUnder,coveredAbove} from './wall-rubble.mjs';
 import { wallHeights } from './wall-properties.mjs';
 import { cubeRubble } from './wall-break.mjs';
 import { resolveSupportSurfaces } from './floor-support.js';
 
-const NS = 'http://www.w3.org/2000/svg';
-const transform = document.querySelector('#vtt-map-transform');
-function layer(id, zIndex) {
-  const svg = document.createElementNS(NS, 'svg');
-  svg.id = id;
-  svg.style.cssText = `position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:${zIndex}`;
-  svg.setAttribute('aria-hidden', 'true');
-  return svg;
-}
-const ground = layer('wall-rubble-ground', 2), floors = layer('wall-rubble-floors', 100001);
-// The page lists whatever picture files are in assets/images/rubble, with their sizes; a kind with none is drawn.
-const library = rubbleLibrary(window.vttRubbleImages);
-let signature = '', builds = 0, drawn = [];
+let drawn = [];
+let lastSignature = null;
+let lastView = null;
 
 function context() { return window.terrainContext?.() || null; }
 function terrain() { return window.terrainPrototype?.active ? window.terrainPrototype : null; }
-function mount() {
-  if (!ground.isConnected) transform.insertBefore(ground, document.querySelector('#terrain-cost-markers') || document.querySelector('#vtt-grid-overlay'));
-  // The layer the floor pictures are painted on is made by another part of the page and may arrive
-  // after this one. Both have the same height in the stack, so the later one in the page is on top:
-  // the rubble has to come straight after it, every time, or the floor picture covers the rubble.
-  const plates = document.querySelector('#roof-prototype');
-  if (plates ? plates.nextElementSibling !== floors : !floors.isConnected) { if (plates) plates.after(floors); else transform.append(floors); }
-}
-function clear(mark) {
-  window.vtt3d?.setOverlay?.("rubble", []);
-  if (signature === mark) return;
-  ground.replaceChildren(); floors.replaceChildren(); signature = mark; drawn = [];
-}
-
-const svgNode = (name, attributes = {}) => {
-  const node = document.createElementNS(NS, name);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
-  return node;
-};
-
-/**
- * A strip picture over one piece. The whole picture is scaled evenly until its band of rubble is
- * thicker than the painted wall; only the stretch over this piece is shown, fading out just past
- * each end, so the wall is hidden from end to end and nothing spills over pieces still standing.
- * `unit` is one square in pixels; `mark` makes the fade's name its own.
- */
-function stripNodes(picture, piece, squares, unit, mark) {
-  const strip = rubbleStrip(squares, picture.aspect, piece.id, stripAcross(piece.kind));
-  const along = strip.along * unit, across = strip.across * unit, shown = strip.shown * unit;
-  const ramp = svgNode('linearGradient', { id: `wall-rubble-ramp-${mark}`, gradientUnits: 'userSpaceOnUse', x1: -shown / 2, y1: 0, x2: shown / 2, y2: 0 });
-  const edge = strip.fade / strip.shown;
-  for (const [offset, opacity] of [[0, 0], [edge, 1], [1 - edge, 1], [1, 0]]) ramp.append(svgNode('stop', { offset, 'stop-color': '#fff', 'stop-opacity': opacity }));
-  const fade = svgNode('mask', { id: `wall-rubble-fade-${mark}`, maskUnits: 'userSpaceOnUse', x: -shown / 2, y: -across / 2, width: shown, height: across });
-  fade.append(svgNode('rect', { x: -shown / 2, y: -across / 2, width: shown, height: across, fill: `url(#wall-rubble-ramp-${mark})` }));
-  const image = svgNode('image', { href: picture.url, x: -along / 2 + strip.shift * unit, y: -across / 2, width: along, height: across, preserveAspectRatio: 'none', mask: `url(#wall-rubble-fade-${mark})` });
-  return [ramp, fade, image];
-}
-
-function pieceNode(entry, g, mark) {
-  const { piece, from, to } = entry;
-  const lengthPx = Math.hypot(to.x - from.x, to.y - from.y), squares = Math.hypot(piece.b.x - piece.a.x, piece.b.y - piece.a.y);
-  const picture = rubblePicture(library, piece.kind, piece.id);
-  const size = rubbleSize(squares), along = lengthPx * (size.along / squares), across = size.across * g;
-  // Half the pieces are turned end for end, so a run of them does not repeat.
-  const turn = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI + (stableHash(piece.id) & 1 ? 180 : 0);
-  const group = document.createElementNS(NS, 'g');
-  group.dataset.rubbleId = piece.id; group.dataset.rubbleKind = piece.kind;
-  group.setAttribute('transform', `translate(${((from.x + to.x) / 2).toFixed(2)} ${((from.y + to.y) / 2).toFixed(2)}) rotate(${turn.toFixed(2)})`);
-  if (picture && piece.heap) {
-    // A heap is one whole picture over the square, a little larger than it, in its own shape.
-    group.dataset.rubbleSource = 'picture';
-    const unit = lengthPx / squares, heap = rubbleSize(squares, picture.aspect || 1), wide = heap.along * unit, high = heap.across * unit;
-    group.append(svgNode('image', { href: picture.url, x: -wide / 2, y: -high / 2, width: wide, height: high, preserveAspectRatio: 'none' }));
-    return group;
-  }
-  if (picture) {
-    group.dataset.rubbleSource = 'picture';
-    // One scale both ways, taken from the piece as it lies on the board, so the picture keeps its shape.
-    group.append(...stripNodes(picture, piece, squares, lengthPx / squares, mark));
-    return group;
-  }
-  group.dataset.rubbleSource = 'drawn';
-  const drawing = standInRubble(piece.kind, piece.id), scaled = document.createElementNS(NS, 'g');
-  scaled.setAttribute('transform', `scale(${along.toFixed(2)} ${across.toFixed(2)})`);
-  const band = document.createElementNS(NS, 'path');
-  band.setAttribute('d', drawing.band); band.setAttribute('fill', drawing.bandFill); band.setAttribute('fill-opacity', '0.96');
-  scaled.append(band);
-  for (const bit of drawing.bits) {
-    const path = document.createElementNS(NS, 'path');
-    path.setAttribute('d', bit.d); path.setAttribute('fill', bit.fill);
-    path.setAttribute('stroke', drawing.line); path.setAttribute('stroke-width', '1'); path.setAttribute('vector-effect', 'non-scaling-stroke'); path.setAttribute('stroke-linejoin', 'round');
-    scaled.append(path);
-  }
-  group.append(scaled);
-  return group;
+function clear(){
+  if (drawn.length) window.vtt3d?.setOverlay('rubble', []);
+  lastSignature = null;
+  drawn = [];
 }
 
 function draw() {
   // 3D board: the same pieces, as small stones along each broken wall at its base (window.vtt3d overlay 'rubble').
-  const three = !!window.vtt3d?.active;
+  if (!window.vtt3d?.active) return;
   const c = context();
-  if (!c?.view?.mapLoaded || !transform) { clear('no-map'); return; }
+  if (!c?.view?.mapLoaded) { clear(); return; }
   const sceneId = c.state.boardState.activeSceneId, walls = c.state.boardState.sceneState?.[sceneId]?.environment?.walls;
   // Broken walls of the map's own design, and broken cubes of walls made during play.
   const cubes = cubeRubble(c.state.boardState.templates?.[sceneId]);
   const model = walls?.value || (cubes.length ? { nodes: [], segments: [] } : null), pieces = model ? [...rubblePieces(model), ...cubes] : [];
-  if (!pieces.length) { clear('none:' + sceneId); return; }
-  mount();
+  if (!pieces.length) { clear(); return; }
   const active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
   const groundAt = (x, y) => (active ? active.heightAt(ox + x * g, oy + y * g) : 0);
-  const project = (point, height) => { const x = ox + point.x * g, y = oy + point.y * g; return active ? active.project(x, y, height) : { x, y }; };
   const surfaces = resolveSupportSurfaces(model);
   // A player, or the GM looking through a token's eyes, sees floor rubble only where they can see the spot.
-  const bySight = !three && (!c.isGM || document.documentElement.classList.contains('height-vision-active'));
   // The GM with no single token selected looks down from a chosen height. Otherwise the view is a
   // token's: a player's own floor, or the floor of the token the GM is looking through.
   const fromHeight = c.isGM && window.gmVision?.manual ? Number(window.gmVision.height) : null;
   const placements = c.state.boardState.placements?.[sceneId], throughToken = c.isGM && fromHeight === null
-    ? (Array.isArray(placements) ? placements : Object.values(placements || {})).find((placement) => placement.id === window.visionPrototype?.viewerTokenId) : null;
+    ? (Array.isArray(placements) ? placements : Object.values(placements || {})).find((placement) => placement.id === c.selectedIds?.[0]) : null;
   const viewed = throughToken?.levelId || c.levelId || 'level-0';
   const entries = pieces.map((piece) => {
     const middle = { x: (piece.a.x + piece.b.x) / 2, y: (piece.a.y + piece.b.y) / 2 };
     const heights = wallHeights(piece.edge, piece.a, piece.b, middle, groundAt), plate = plateUnder(piece, heights.base, surfaces);
     let shown = true;
     if (plate && fromHeight !== null) shown = Number(plate.height) <= fromHeight + 0.001 && !coveredAbove(piece, plate, surfaces, fromHeight);
-    else if (plate) shown = (plate.levelId || 'level-0') === viewed && (!bySight || !!window.visionPrototype?.portalVisible({ a: piece.a, b: piece.b, base: heights.base, top: heights.top }));
+    else if (plate) shown = (plate.levelId || 'level-0') === viewed;
+    if (shown && !c.isGM && window.vttSightSees?.(middle.x, middle.y) === false) shown = false;
     return {
       piece, onPlate: !!plate, shown,
-      from: project(piece.a, wallHeights(piece.edge, piece.a, piece.b, piece.a, groundAt).base),
-      to: project(piece.b, wallHeights(piece.edge, piece.a, piece.b, piece.b, groundAt).base),
     };
   });
-  const next = JSON.stringify([sceneId, walls?.revision ?? 0, cubes.map((cube) => cube.id + cube.kind).join('|'), viewed, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '', entries.map((entry) => (entry.onPlate ? 'p' : 'g') + (entry.shown ? 1 : 0)).join('')]);
-  if (three) {
-    const stones = [];
-    entries.forEach((entry, index) => {
-      if (!entry.shown) return;
-      const { a, b, edge } = entry.piece, from = wallHeights(edge, a, b, a, groundAt).base, to = wallHeights(edge, a, b, b, groundAt).base;
-      const count = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 5));
-      for (let i = 0; i <= count; i += 1) {
-        const t = i / count, noise = Math.sin((index * 31 + i) * 12.9898) * 43758.5453, r = noise - Math.floor(noise), r2 = (r * 7.31) % 1;
-        stones.push({ kind: 'dot', x: a.x + (b.x - a.x) * t + (r - 0.5) * 0.16, y: a.y + (b.y - a.y) * t + (r2 - 0.5) * 0.16, z: from + (to - from) * t, r: 0.05 + r * 0.06, color: r > 0.5 ? '#7c7468' : '#9a9184', opacity: 1 });
-      }
-    });
-    window.vtt3d.setOverlay('rubble', stones);
-    drawn = entries.map((entry) => ({ id: entry.piece.id, kind: entry.piece.kind, layer: entry.onPlate ? 'floor' : 'ground', shown: entry.shown }));
-    return;
-  }
-  if (next === signature) return;
-  signature = next; builds++;
-  for (const svg of [ground, floors]) { svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0); }
-  const low = [], high = [];
-  entries.forEach((entry, index) => { if (entry.shown) (entry.onPlate ? high : low).push(pieceNode(entry, g, index)); });
-  ground.replaceChildren(...low); floors.replaceChildren(...high);
+  const signature = JSON.stringify([sceneId, walls?.revision, active?.fieldVersion, entries]);
+  if (signature === lastSignature && lastView === window.vtt3d.view) return;
+  lastSignature = signature;
+  lastView = window.vtt3d.view;
+  const stones = [];
+  entries.forEach((entry, index) => {
+    if (!entry.shown) return;
+    const { a, b, edge } = entry.piece, from = wallHeights(edge, a, b, a, groundAt).base, to = wallHeights(edge, a, b, b, groundAt).base;
+    const count = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 5));
+    for (let i = 0; i <= count; i += 1) {
+      const t = i / count, noise = Math.sin((index * 31 + i) * 12.9898) * 43758.5453, r = noise - Math.floor(noise), r2 = (r * 7.31) % 1;
+      stones.push({ kind: 'dot', x: a.x + (b.x - a.x) * t + (r - 0.5) * 0.16, y: a.y + (b.y - a.y) * t + (r2 - 0.5) * 0.16, z: from + (to - from) * t, r: 0.05 + r * 0.06, color: r > 0.5 ? '#7c7468' : '#9a9184', opacity: 1 });
+    }
+  });
+  window.vtt3d.setOverlay('rubble', stones);
   drawn = entries.map((entry) => ({ id: entry.piece.id, kind: entry.piece.kind, layer: entry.onPlate ? 'floor' : 'ground', shown: entry.shown }));
 }
 
 // For the console and for tests: what is drawn right now.
 window.wallRubble = {
   get pieces() { return drawn.map((entry) => ({ ...entry })); },
-  get builds() { return builds; },
-  get pictures() { return Object.fromEntries(Object.entries(library).map(([kind, urls]) => [kind, urls.length])); },
   redraw: draw,
 };
 const timer = setInterval(() => { try { draw(); } catch (error) { console.error('[wall rubble]', error); } }, 200);
