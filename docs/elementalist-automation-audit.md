@@ -13,6 +13,151 @@
 
 A player choosing a legal target, a damage type, a destination, or whether to spend a resource is normal automated play. Existing board warnings and Director overrides are compatible with a JSON-ready rating. A chat line asking someone to hand-edit terrain, resolve damage a second time, or remember a continuing bonus does not execute that mechanic. The class-wide out-of-combat Essence rules and class features are treated separately from individual card execution.
 
+## Shared changes needed for the 56 class cards
+
+**Plan for 21 reusable runtime changes in six groups.** Eight cards already have the necessary JSON execution paths, and Remember Growth and Sun and Rain uses the existing Director prompt. The other 47 cards have at least one missing capability. Fourteen could be completed with one shared change. The other 33 need a combination. A change here means one behavior that JSON authors can call and that we can test independently. A change can span the runner, board UI, persistence and multiplayer sync.
+
+### Which changes to build first
+
+**Start with values from the current action (1), target and origin selection (2), power rolls across targets (3), and maintaining a particular cast (6).** Together they contribute to 35 of the 47 blocked cards and supply every missing capability for 10. Once those ten recipes are authored and tested, 18 of the 56 class cards would be JSON-ready, with one further card handled by its Director prompt. Of all four-change combinations in the matrix below, ten is the most cards completed. This combination reaches the most cards among those tied at ten. This comparison weights each change equally. Maintenance is a larger implementation than exposing numeric values.
+
+| Milestone | Cards that could be completed with JSON at this point |
+|---|---|
+| Power rolls across targets (3) | Bifurcated Incineration, Behold the Mystery, Conflagration |
+| Add values (1) and target/origin selection (2) | Add Ward of Nature’s Affection, Grasp of Beyond, Practical Magic, Earth Rejects You and Translated Through Flame. **8 total.** |
+| Add cast maintenance (6) | Add The Flesh, a Crucible and Web of All That’s Come Before. **10 total.** |
+
+Two cards illustrate the boundary. **Bifurcated Incineration** needs one roll that can produce a different tier for each target. Its fire damage already works. **Storm of Sands** uses that same roll but also needs to remember the cast, move its area, price movement differently for enemies and grant concealment to allies. Completing the roll change finishes the first card and advances the second. [Multi-target roll rule](../dnd/ai-reference/source/rules-v1.01b/chapters/chapter-05-classes.md#L602) · [Storm of Sands](../dnd/ai-reference/source/rules-v1.01b/classes/elementalist.md#L959)
+
+### Shared changes and the cards that call them
+
+Each count is the number of unique class cards using that change. Names in **bold** could be finished after that change alone. The link on each ability in the later readiness tables leads to its printed rule. The numbers below identify planning items. JSON should refer to named operations and facts. Hit and movement reactions can share how a pending choice is opened, accepted and committed, while each resolver owns its rules for damage or movement. Ongoing effects, maintained casts and temporary Stamina can share source and instance IDs. Avoid testing the display name of an ability in a handler.
+
+#### Values, targeting and rolls
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 1. Values from the current action | Read a named stat, Victories, an effective ability range or a captured result in a numeric field. Support bounds and simple arithmetic. Teleport distance and trigger radius are the first consumers. | 10 · **Ward of Nature's Affection** · **Grasp of Beyond** · Practical Magic · The Mountain Does Not Move · Subtle Relocation · Magma Titan · Ripples in the Earth · Wall of Fire · Meteor · Shared Void Sense |
+| 2. Target and origin selection | Bind caster, recipient, trigger subject and destination independently. Combine allegiance, creature/object, size, status and role predicates, cap a selection from the roll, and ask the proper chooser. | 9 · Earth Rejects You · Practical Magic · Breath of Dawn Remembered · Erase · Translated Through Flame · Meteor · Return to Oblivion · World Torn Asunder · Shared Void Sense |
+| 3. Power rolls across targets | Default to one accepted roll with target-specific modifiers and tiers. Allow an explicitly separate roll per creature, suppression of maneuver criticals, and one per-roll consequence alongside per-target consequences. | 16 · **Bifurcated Incineration** · **Behold the Mystery** · The Flesh, a Crucible · **Conflagration** · Test of Rain · Web of All That's Come Before · Earth Rejects You · Swarm of Spirits · Muse of Fire · Unquiet Ground · Ripples in the Earth · Instantaneous Excavation · Translated Through Flame · Maw of Earth · Storm of Sands · World Torn Asunder |
+
+#### Ongoing effects and their sources
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 4. Ending a qualifying effect | Let the affected recipient optionally end one eligible effect, including a visible benefit stored as a rider. Match save and end-of-turn durations against the correct turn owner. | 3 · **Afflict a Bountiful Decay** · Test of Rain · Heart of the Wode |
+| 5. Effects that listen for later events | Attach an effect to a source and recipient or object. Advance, consume, transfer or remove it on a specified event. A main-action removal, a save, death or a turn boundary can each end the right instance. | 7 · **Invigorating Growth** · Erase · **Combustion Deferred** · Earth Accepts Me · Heart of the Wode · There is No Space Between · Summon Source of Earth |
+| 6. Maintaining a particular cast | Track each cast, its recipients and its upkeep independently. Let maintenance extend, move, add, reroll, or activate a specified child. Share the roll across eligible maintained targets when required. | 14 · The Flesh, a Crucible · Web of All That's Come Before · Swarm of Spirits · Luminous Champion Aloft · Magma Titan · The Green Defends Its Servants · Instantaneous Excavation · No More than a Breeze · O Flower Aid, O Earth Defend · Wall of Fire · Storm of Sands · The Wode Remembers and Returns · Summon Source of Earth · Subverted Perception of Space |
+| 7. Modifiers limited to a particular use | Apply and expire modifiers at the calculation that reads them, including transferred Stability, characteristic substitution, resistance to potency, saving throws and strikes. Restore only the originating grant. | 3 · The Mountain Does Not Move · Swarm of Spirits · Magma Titan |
+| 20. Temporary Stamina by source | Identify the specific grant that expired, was displaced or depleted. Remove its linked effect and trigger its consequence once. Preserve unrelated grants. | 1 · The Green Defends Its Servants |
+
+#### Damage and resources
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 8. Spending and gaining resources | Return the accepted spend to the effect, respect the recipient’s available Recoveries, adjust allowed gains once, and prevent prohibited healing. Reuse the existing fixed spend and gain paths. | 4 · Breath of Dawn Remembered · Luminous Champion Aloft · O Flower Aid, O Earth Defend · Summon Source of Earth |
+| 9. Changing a pending hit | Amend damage or potency for one target before damage, conditions and zero-Stamina consequences commit. Make the modifier and optional spend resolve once for that hit. | 1 · **Skin Like Castle Walls** |
+| 21. Signed Director resource changes | Apply an authorized Malice change to the shared GM pool, allow a negative result when the rule permits it, and synchronize one result to all clients. | 1 · Muse of Fire |
+
+#### Movement and landings
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 10. Changing movement in progress | Identify an attempted move even with zero travel. Let a reaction amend it or interrupt at a legal square, then resume or end it. Preview consequences and commit the final path once. | 4 · The Mountain Does Not Move · **Explosive Assistance** · Subtle Relocation · There is No Space Between |
+| 14. Legal placement and movement through solids | Check footprints and clearance. Support phasing, binding to an object, recording an entry square, restoring at the nearest legal square and displacing occupants when size or support changes. | 8 · Erase · Magma Titan · Earth Accepts Me · Ripples in the Earth · Instantaneous Excavation · No More than a Breeze · World Torn Asunder · Summon Source of Earth |
+| 15. Fall and landing outcomes | Use the existing 3D fall resolver with ability-specified height reduction, Agility and damage type. Report support, actual landing and resolved damage for follow-up effects. | 4 · Instantaneous Excavation · Maw of Earth · Meteor · World Torn Asunder |
+
+#### Areas, terrain and perception
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 11. Rules for occupants of an area | Query occupancy, allegiance, size, material, entry, turn and round. Use the same rule for preview and committed terrain cost, eligibility and benefits. Filter growth cells by occupancy at creation. Count entered footprint squares and first entries separately. | 9 · Swarm of Spirits · Unquiet Ground · O Flower Aid, O Earth Defend · Wall of Fire · Storm of Sands · The Wode Remembers and Returns · Heart of the Wode · Return to Oblivion · Summon Source of Earth |
+| 12. Editing an existing area | Keep one zone identity when its footprint moves, grows or gains only eligible cells. Recompute membership and eligibility, including line-of-effect expiry, without replaying its opening effect. | 3 · O Flower Aid, O Earth Defend · Wall of Fire · Storm of Sands |
+| 13. Editing 3D terrain and objects | Query material and object tags. Cut, seal, raise, lower, tunnel or destroy tagged cells or a whole object. Refresh collision, support and line of effect and emit the changed cells. | 8 · **Motivate Earth** · Earth Accepts Me · **Return to Formlessness** · Ripples in the Earth · Instantaneous Excavation · Maw of Earth · World Torn Asunder · Summon Source of Earth |
+| 16. Perception and line of effect by observer | Grant or restrict what a specific actor can perceive or target. Cover magical information, ignoring concealment, temporary concealment and directional line-of-effect exceptions. | 5 · Luminous Champion Aloft · Earth Accepts Me · Storm of Sands · Shared Void Sense · Subverted Perception of Space |
+
+#### Scene entities, portals and granted actions
+
+| Change | Behavior the JSON can request | Cards using it |
+|---|---|---|
+| 17. Lifecycle of a scene creature or object | Create, suspend, restore, dismiss or destroy an entity by ID. A summoned actor also needs a template, controller, turn order, retained encounter state and recharge. A tree needs only the object operations. | 4 · Erase · Heart of the Wode · Return to Oblivion · Summon Source of Earth |
+| 18. Linked portal destinations | Extend existing portal traversal with an owned network, legal heights and exits, and a designated exit chooser. Tie additions and removal to the parent effect. | 1 · There is No Space Between |
+| 19. Granting or invoking another action | Select eligible known or standard actions on the right actor. Allow declared target, timing and cost exceptions, and enforce shared budgets, sequencing, cancellation and recursion limits. | 5 · The Green Defends Its Servants · Heart of the Wode · Summon Source of Earth · **Subvert the Green Within** · **Prism** |
+
+### All dependencies for a single card
+
+Read across a row to see everything a card still needs. Existing targeting, damage, typed movement, zones, spending, conditions and other supported operations can be composed with these changes. For a card that grants another ability, the row covers selecting, authorizing and invoking it. The selected ability still needs its own runnable recipe.
+
+| Card | Required changes |
+|---|---|
+| Afflict a Bountiful Decay | 4 |
+| Behold the Mystery | 3 |
+| Bifurcated Incineration | 3 |
+| Breath of Dawn Remembered | 2, 8 |
+| Combustion Deferred | 5 |
+| Conflagration | 3 |
+| Earth Accepts Me | 5, 13, 14, 16 |
+| Earth Rejects You | 2, 3 |
+| Erase | 2, 5, 14, 17 |
+| Explosive Assistance | 10 |
+| Grasp of Beyond | 1 |
+| Heart of the Wode | 4, 5, 11, 17, 19 |
+| Instantaneous Excavation | 3, 6, 13, 14, 15 |
+| Invigorating Growth | 5 |
+| Luminous Champion Aloft | 6, 8, 16 |
+| Magma Titan | 1, 6, 7, 14 |
+| Maw of Earth | 3, 13, 15 |
+| Meteor | 1, 2, 15 |
+| Motivate Earth | 13 |
+| Muse of Fire | 3, 21 |
+| No More than a Breeze | 6, 14 |
+| O Flower Aid, O Earth Defend | 6, 8, 11, 12 |
+| Practical Magic | 1, 2 |
+| Prism | 19 |
+| Return to Formlessness | 13 |
+| Return to Oblivion | 2, 11, 17 |
+| Ripples in the Earth | 1, 3, 13, 14 |
+| Shared Void Sense | 1, 2, 16 |
+| Skin Like Castle Walls | 9 |
+| Storm of Sands | 3, 6, 11, 12, 16 |
+| Subtle Relocation | 1, 10 |
+| Subvert the Green Within | 19 |
+| Subverted Perception of Space | 6, 16 |
+| Summon Source of Earth | 5, 6, 8, 11, 13, 14, 17, 19 |
+| Swarm of Spirits | 3, 6, 7, 11 |
+| Test of Rain | 3, 4 |
+| The Flesh, a Crucible | 3, 6 |
+| The Green Defends Its Servants | 6, 19, 20 |
+| The Mountain Does Not Move | 1, 7, 10 |
+| The Wode Remembers and Returns | 6, 11 |
+| There is No Space Between | 5, 10, 18 |
+| Translated Through Flame | 2, 3 |
+| Unquiet Ground | 3, 11 |
+| Wall of Fire | 1, 6, 11, 12 |
+| Ward of Nature's Affection | 1 |
+| Web of All That's Come Before | 3, 6 |
+| World Torn Asunder | 2, 3, 13, 14, 15 |
+
+**Acceptance at the table.** For the first four changes, use a disposable scene with two different target modifiers, two casters or casts with the same ability ID, a changed Reason score and an origin different from the token being teleported. Exercise acceptance, cancellation and reconnect on the player and GM clients. For a late reaction, the movement or hit operation needs its own provisional result and decision point before dependent consequences become final. Only the triggering action stays open during that decision. Allowing revisions after subsequent actions depend on the result would need a separate undo policy. For Muse of Fire, agree how the one Malice loss is selected when enemy tiers differ before authoring its recipe.
+
+### Scope beyond the class cards
+
+The builder also lists 37 optional ability grants across possible Elementalist builds, and the class has passive features. The 21-change estimate covers the 56 class action cards. There is immediate reuse outside them. Draconian Guard and Resist the Unnatural can share pending-hit changes (9), Friend Catapult and I’ve Got You use the landing result (15), and Issue Order uses granted actions (19). These callers are excluded from the reach counts above.
+
+Seven further areas deserve a separate estimate if the target expands to every possible hero build. Each connects a rule to a different part of the game. Existing systems may already supply part of each integration.
+
+| Additional integration to check | Examples that establish the need |
+|---|---|
+| Install passive rules from the hero’s current build and remove them when the source changes | The four Acolytes, enchantments, wards and Mantles. Feed persistence as structured card data through the builder, so maintenance also works on a fresh export. |
+| Offer a reaction before the roller accepts their result | Keeper of Order removes one edge or bane. Foresight imposes a bane on a pending strike. Both must reach the person resolving the roll. |
+| Enter, combine and leave forms | Disciple of the Green and Chimeric Manifestation change statistics, equipment and free strikes together. The latter can combine two forms under a level budget. |
+| Track time, recharge and relevant campaign events across encounters | Out-of-combat Essence, the uninterrupted fire conversation, the Victory recharge for Friend Catapult, and the nearby deaths during the past day used by Contact Spirits. |
+| Deliver information or speech privately across actors and scenes | Psychic Whisper, Share Head and A Conversation With Fire need a recipient, visibility/consent rules and a way to end the link. |
+| Give, consume and track durable items and their effects | Master of Green’s Life Fruit can be fed to an ally. Master of Fire grants breath equal to the echelon of a treasure the caster melts. |
+| Apply feature exceptions to negotiation and downtime project resolution | Mantle of Quintessence affects starting patience. Master of Void can complete a qualifying research project on its respite roll. |
+
+The appendices list the optional grants and feature rules individually. No full-class estimate for the other eight classes follows from this count.
+
 ## Shared code gaps · 10
 
 These are the closest to full coverage. Some already have working JSON for ordinary combat use.
