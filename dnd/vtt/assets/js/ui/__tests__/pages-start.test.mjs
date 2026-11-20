@@ -284,8 +284,7 @@ async function finishAndKeepHero(page) {
     await fresh.goto(list + '?__start_as=cal');
     await fresh.getByRole('link', { name: new RegExp(name) }).click();
     assert.equal(fresh.url(), savedUrl);
-    await fresh.goto(new URL('./', savedUrl).href);
-    const headers = { 'X-Character-Token': await fresh.locator('body').getAttribute('data-library-token') };
+    const headers = { 'X-Character-Token': await fresh.locator('input[name="token"]').inputValue() };
     const saveUrl = new URL('save.php', savedUrl).href;
     const retry = await owner.request.post(saveUrl, { headers, data: sheet });
     assert.equal((await retry.json()).id, new URL(savedUrl).searchParams.get('id'));
@@ -314,6 +313,31 @@ async function finishAndKeepHero(page) {
   }
 }
 
+async function checkBuilderWindow(table) {
+  const win = table.locator('.win').filter({ has: table.locator('iframe[src="/dnd/character_sheet/builder/"]') });
+  const frame = win.frameLocator('iframe');
+  await frame.locator('[name="hero-name"]').fill('Keep my draft');
+  await win.locator('[data-b="close"]').click();
+  assert.equal(await win.count(), 0);
+  await table.reload();
+  await table.getByRole('button', { name: 'Table menu' }).waitFor();
+  assert.equal(await win.count(), 0);
+  await openBuilder(table);
+  assert.equal(await frame.locator('[name="hero-name"]').inputValue(), 'Keep my draft');
+
+  const popup = table.waitForEvent('popup');
+  await win.locator('[data-b="pop"]').click();
+  const detached = await popup;
+  try {
+    assert.equal(await detached.locator('[name="hero-name"]').inputValue(), 'Keep my draft');
+    // Stop the Table's chat/layout writers before measuring storage changes made by the detached builder.
+    await table.goto('about:blank');
+    await finishAndKeepHero(detached);
+  } finally {
+    await detached.close();
+  }
+}
+
 const PAGES = [
   { name: 'the map, as the Director', as: 'GM', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
   { name: 'the map, as a player', as: 'cal', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
@@ -323,8 +347,8 @@ const PAGES = [
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
   { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:finishDirectorBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
   { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishPlayerBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishAndKeepHero,
-    started: () => !!document.querySelector('[data-step="Identity"]') && !!document.querySelector('[name="hero-name"]') },
+  { name: 'a direct character builder link as a player', as: 'cal', path: '/dnd/character_sheet/builder/', landing: '/dnd/table/', check:checkBuilderWindow,
+    started: () => !!document.querySelector('.win iframe[src="/dnd/character_sheet/builder/"]') },
 ];
 
 test('every page starts: the map as Director and as a player, the character sheet, the Table and standalone character builder', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
@@ -353,11 +377,13 @@ test('every page starts: the map as Director and as a player, the character shee
         const page = await context.newPage();
         const storedPCs = ['dnd/data/players.json', 'dnd/data/characters.json', 'dnd/character_sheet/data/character_sheets.json', 'dnd/character_sheet/data/hero_tokens.json'];
         const pcContents = () => storedPCs.map(file => existsSync(path.join(site, file)) ? readFileSync(path.join(site, file), 'utf8') : null);
-        const before = one.check === finishAndKeepHero ? pcContents() : null;
-        if([finishAndKeepHero,finishPlayerBuilds,finishDirectorBuilds].includes(one.check))page.on('request',request=>{
-          if (one.check !== finishAndKeepHero && !request.frame().url().includes('/character_sheet/builder/')) return;
+        const before = one.check === checkBuilderWindow ? pcContents() : null;
+        if([checkBuilderWindow,finishPlayerBuilds,finishDirectorBuilds].includes(one.check))context.on('request',request=>{
+          // The first navigation of a pop-out is emitted before its frame exists.
+          const source = request.isNavigationRequest() ? request.headers().referer || request.url() : request.frame().url();
+          if (!source.includes('/character_sheet/builder/')) return;
           const url=new URL(request.url());
-          const libraryWrite = one.check === finishAndKeepHero && request.method() === 'POST' && /^\/dnd\/character_sheet\/builder\/(?:save|library)\.php$/.test(url.pathname);
+          const libraryWrite = one.check === checkBuilderWindow && request.method() === 'POST' && /^\/dnd\/character_sheet\/builder\/(?:save|library)\.php$/.test(url.pathname);
           if((request.method()!=='GET' && !libraryWrite) || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
         });
         page.on('pageerror', (error) => errors.push(error.message));
@@ -372,7 +398,8 @@ test('every page starts: the map as Director and as a player, the character shee
           return route.continue();
         });
         await page.goto(`${origin}${one.path}?__start_as=${one.as}`, { waitUntil: 'load', timeout: 30000 });
-        assert.ok(new URL(page.url()).pathname.startsWith(one.path.replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
+        if (one.landing) await page.waitForURL(url => url.pathname === one.landing);
+        assert.ok(new URL(page.url()).pathname.startsWith((one.landing || one.path).replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
         await page.waitForFunction(one.started, null, { timeout: 20000 });
         // Listen for late start-up errors while the longer interactive checks run.
         await Promise.all([page.waitForTimeout(1500), one.check?.(page)]);

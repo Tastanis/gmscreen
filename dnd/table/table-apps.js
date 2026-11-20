@@ -932,5 +932,12 @@
     place(apps.map(), 270, 16, b.width - 270 - 40, b.height - 32);   // clear of the right-hand drawer tabs
     if (SERVED) T.dock(apps.chat(), 'right', false, .24);
   }
+  function openLinkedBuilder() {
+    if (location.hash !== '#character-builder') return;
+    apps.page('Character builder');
+    history.replaceState(history.state, '', location.pathname + location.search);
+  }
+  window.addEventListener('hashchange', openLinkedBuilder);
+  openLinkedBuilder();
   })();
 })();

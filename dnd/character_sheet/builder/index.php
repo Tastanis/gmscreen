@@ -15,6 +15,12 @@ $build = max(array_map('filemtime', glob(__DIR__ . '/*.{css,mjs,json,php}', GLOB
 ?><!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Character builder · Draw Steel</title>
+<script>
+  // Direct links open the same Table window as the S menu. Keep the Table's intentional second-screen pop-out.
+  if (window.self === window.top && !(window.opener && window.name.startsWith('table-'))) {
+    location.replace('/dnd/table/#character-builder');
+  }
+</script>
 <link rel="stylesheet" href="builder.css?v=<?= $build ?>">
 </head><body data-account="<?= htmlspecialchars($user, ENT_QUOTES, 'UTF-8') ?>" data-build="<?= $build ?>" data-library-token="<?= $libraryToken ?>">
 <header class="mast"><span>Draw Steel</span><h1>Character builder</h1></header>
