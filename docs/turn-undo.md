@@ -19,4 +19,4 @@ Brandon, October 2026.
 - Hero sheet counters are reported by the page that changed them (`character-write.js`, the character panel) and given back by the undoing page; PC Stamina follows the token back to the sheet.
 - "Start <name>'s turn?": combat on, nobody's turn running, the first move or ability by a creature (own hero for players; anything for the Director), once a round per creature.
 
-Not undone: chat, dice already rolled, the turn's start/end itself, map editing (walls, terrain, drawings keep their own undo), broken walls from a push (mend by hand).
+Undoing a qualifying push can restore the token and mend the wall pieces recorded on its movement receipt. The individual move-undo path also attempts to refund recorded collision damage. Falls and later dependent actions require separate review. Chat, dice already rolled and turn boundaries remain visible. Ordinary map edits use their own undo. [Turn restore](../dnd/vtt/lib/SyncV2Store.php#L1501) · [Move undo and collision refund](../dnd/vtt/assets/js/ui/board-interactions.js#L10018)
