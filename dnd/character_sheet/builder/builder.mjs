@@ -76,15 +76,16 @@ function clean() {
 }
 const stepBtn = (s, text = s) =>
   `<button type="button" data-step="${esc(s)}"${step === s ? ' aria-current="step"' : ''}>${esc(text)}</button>`;
-function identity() {
-  return `<fieldset><legend>Hero</legend><label>Name<input name="hero-name" maxlength="90" autocomplete="off" value="${esc(draft.name)}"></label>
-  <label>Class<select name="hero-class">${Object.entries(CLASSES)
+function classPicker() {
+  return `<label>Class<select name="hero-class">${Object.entries(CLASSES)
     .map(
       ([id, c]) => `<option value="${id}" ${id === model.classId ? 'selected' : ''}>${esc(c.name)}</option>`,
     )
-    .join(
-      '',
-    )}</select></label><label>Level<select name="hero-level">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${draft.level === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label></fieldset>`;
+    .join('')}</select></label>`;
+}
+function identity() {
+  return `<fieldset><legend>Hero</legend><label>Name<input name="hero-name" maxlength="90" autocomplete="off" value="${esc(draft.name)}"></label>
+  ${classPicker()}<label>Level<select name="hero-level">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${draft.level === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label></fieldset>`;
 }
 function cultures() {
   return `<fieldset><legend>Culture</legend><label>Use a published culture<select name="culture-preset"><option value="">Build your own</option>${db.cultures.map((c) => `<option ${draft.preset === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
@@ -220,7 +221,7 @@ function draw() {
     .join('');
   const n = STEPS.indexOf(step);
   $('#main').innerHTML =
-    `<h2>${step}</h2><p>${step === 'Class' ? classInstructions[model.classId] : instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
+    `<h2>${step}</h2>${step === 'Class' ? classPicker() : ''}<p>${step === 'Class' ? classInstructions[model.classId] : instructions[step]}</p>${step === 'Identity' ? identity() : step === 'Background' ? cultures() : ''}${fields}${step === 'Review' ? review() : ''}
     <div class="controls">${n ? stepBtn(STEPS[n - 1], 'Back') : ''}${n < STEPS.length - 1 ? stepBtn(STEPS[n + 1], 'Next · ' + STEPS[n + 1]) : ''}</div><p class="status" role="status">${esc(status)}</p>`;
   summary();
 }
@@ -335,6 +336,7 @@ document.addEventListener('change', (e) => {
   clean();
   store();
   draw();
+  if (e.target.name === 'hero-class') $('[name="hero-class"]').focus({ preventScroll: true });
 });
 try {
   const response = await fetch('rules.json?v=' + encodeURIComponent(document.body.dataset.build), {
