@@ -1,5 +1,9 @@
 # Table character builder
 
+A finished hero can be kept under **S → My Characters**. Choose **Save to My Characters** on Review to save a read-only snapshot to the signed-in account. Saving the same finished sheet again opens the existing copy. The browser draft and JSON download are still available.
+
+**Send to GM’s PCs** makes that snapshot visible to the GM under **Heroes → Submitted PCs** and **Players & roster → View submitted PCs**. Submissions are available to inspect or download. The library uses its own SQLite file under `dnd/data/.my-characters/` and has no write path to campaign sheets, player accounts, inventory, or the map.
+
 ## Implementation plan
 
 1. Open Character builder inside the Table's S menu for either role. Keep the existing Diablo typography, parchment lettering, brass controls, and dark panels.

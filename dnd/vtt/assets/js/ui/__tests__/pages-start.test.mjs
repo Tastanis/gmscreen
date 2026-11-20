@@ -81,13 +81,13 @@ const SCRIPT_DELAY_MS = 250;
 async function openBuilder(page) {
   await page.getByRole('button',{name:'Table menu'}).click();
   await page.getByText('Character builder',{exact:true}).click();
-  const frame=page.frameLocator('iframe[src*="character_sheet/builder/"]');
+  const frame=page.frameLocator('iframe[src="/dnd/character_sheet/builder/"]');
   await frame.locator('[name="hero-name"]').waitFor();
 }
 
 async function finishTableHeroes(page, ...classes) {
   await openBuilder(page);
-  const frame = page.frames().find(f => f.url().includes('/character_sheet/builder/'));
+  const frame = page.frames().find(f => f.url().endsWith('/character_sheet/builder/'));
   assert.ok(frame);
   for (const [index, classId] of classes.entries()) {
     if (index) {
@@ -99,6 +99,9 @@ async function finishTableHeroes(page, ...classes) {
   return frame;
 }
 async function finishPlayerBuilds(page) {
+  await page.getByRole('button', { name: 'Table menu' }).click();
+  await page.getByText('My Characters', { exact: true }).click();
+  await page.frameLocator('iframe[src*="builder/library.php"]').getByRole('link', { name: 'Open character builder' }).waitFor();
   const frame = await finishTableHeroes(page, 'null', 'conduit');
   await frame.locator('nav [data-step="Identity"]').click();
   await finishIndependentHero(page, frame, 'shadow');
@@ -254,6 +257,63 @@ async function finishIndependentHero(page, builder = page.mainFrame(), classId =
 }
 
 // Each page: who opens it, where, and how it shows that it has started.
+async function finishAndKeepHero(page) {
+  await finishIndependentHero(page);
+  await page.getByRole('button', { name: 'Save to My Characters' }).click();
+  await page.waitForURL(/\/builder\/library\.php\?id=/);
+  const name = 'Ember Polder';
+  await page.getByRole('heading', { name, exact: true }).waitFor();
+  const savedUrl = page.url();
+  await page.getByRole('tab', { name: 'Abilities' }).click();
+  await page.getByRole('heading', { name: 'Hurl Element', exact: true }).waitFor();
+  assert.equal(await page.locator('[data-sheet-use], [data-character-stamina-action], [data-sheet-edit], [data-sheet-chat]').count(), 0);
+  await page.getByRole('tab', { name: 'Background' }).click();
+  await page.getByRole('heading', { name: 'Background', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Features' }).click();
+  await page.getByRole('heading', { name: 'House rules' }).waitFor();
+  const exported = await page.request.get(savedUrl + '&download=1');
+  const sheet = await exported.json();
+  assert.equal(sheet.hero.name, name);
+
+  const gm = await page.context().browser().newContext();
+  const other = await page.context().browser().newContext();
+  const owner = await page.context().browser().newContext();
+  const list = new URL('library.php', savedUrl).href;
+  try {
+    const fresh = await owner.newPage();
+    await fresh.goto(list + '?__start_as=cal');
+    await fresh.getByRole('link', { name: new RegExp(name) }).click();
+    assert.equal(fresh.url(), savedUrl);
+    await fresh.goto(new URL('./', savedUrl).href);
+    const headers = { 'X-Character-Token': await fresh.locator('body').getAttribute('data-library-token') };
+    const saveUrl = new URL('save.php', savedUrl).href;
+    const retry = await owner.request.post(saveUrl, { headers, data: sheet });
+    assert.equal((await retry.json()).id, new URL(savedUrl).searchParams.get('id'));
+    const second = await owner.request.post(saveUrl, { headers, data: { ...sheet, hero: { ...sheet.hero, name: 'Second Polder' } } });
+    const secondId = (await second.json()).id;
+    assert.ok(secondId && secondId !== new URL(savedUrl).searchParams.get('id'));
+    const director = await gm.newPage();
+    await director.goto(list + '?scope=pcs&__start_as=GM');
+    assert.equal(await director.getByRole('link', { name: new RegExp(name) }).count(), 0);
+    assert.equal((await gm.request.get(savedUrl)).status(), 404);
+    await other.request.get(list + '?__start_as=sharon');
+    assert.equal((await other.request.get(savedUrl + '&download=1')).status(), 404);
+    assert.equal((await other.request.get(list + '?scope=pcs')).status(), 403);
+    assert.equal((await owner.request.post(savedUrl, { form: { action: 'submit' } })).status(), 403);
+    await page.getByRole('button', { name: 'Send to GM’s PCs' }).click();
+    await page.getByText('Shared with the GM').waitFor();
+    assert.equal((await gm.request.get(list + '?id=' + secondId)).status(), 404);
+    await director.goto(new URL('/dnd/players.php', savedUrl).href);
+    await director.getByRole('link', { name: 'View submitted PCs' }).click();
+    await director.getByRole('link', { name: new RegExp(name) }).click();
+    await director.getByRole('tab', { name: 'Abilities' }).click();
+    await director.getByRole('heading', { name: 'Hurl Element', exact: true }).waitFor();
+    assert.equal((await other.request.get(savedUrl)).status(), 404);
+  } finally {
+    await Promise.all([gm.close(), other.close(), owner.close()]);
+  }
+}
+
 const PAGES = [
   { name: 'the map, as the Director', as: 'GM', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
   { name: 'the map, as a player', as: 'cal', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
@@ -263,7 +323,7 @@ const PAGES = [
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
   { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:finishDirectorBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
   { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishPlayerBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
-  { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishIndependentHero,
+  { name: 'the character builder as a player', as: 'cal', path: '/dnd/character_sheet/builder/', check:finishAndKeepHero,
     started: () => !!document.querySelector('[data-step="Identity"]') && !!document.querySelector('[name="hero-name"]') },
 ];
 
@@ -291,10 +351,14 @@ test('every page starts: the map as Director and as a player, the character shee
       try {
         assert.ok(await answers(origin), 'PHP\'s own server did not come up');
         const page = await context.newPage();
-        if([finishIndependentHero,finishPlayerBuilds,finishDirectorBuilds].includes(one.check))page.on('request',request=>{
-          if (one.check !== finishIndependentHero && !request.frame().url().includes('/character_sheet/builder/')) return;
+        const storedPCs = ['dnd/data/players.json', 'dnd/data/characters.json', 'dnd/character_sheet/data/character_sheets.json', 'dnd/character_sheet/data/hero_tokens.json'];
+        const pcContents = () => storedPCs.map(file => existsSync(path.join(site, file)) ? readFileSync(path.join(site, file), 'utf8') : null);
+        const before = one.check === finishAndKeepHero ? pcContents() : null;
+        if([finishAndKeepHero,finishPlayerBuilds,finishDirectorBuilds].includes(one.check))page.on('request',request=>{
+          if (one.check !== finishAndKeepHero && !request.frame().url().includes('/character_sheet/builder/')) return;
           const url=new URL(request.url());
-          if(request.method()!=='GET' || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
+          const libraryWrite = one.check === finishAndKeepHero && request.method() === 'POST' && /^\/dnd\/character_sheet\/builder\/(?:save|library)\.php$/.test(url.pathname);
+          if((request.method()!=='GET' && !libraryWrite) || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
         });
         page.on('pageerror', (error) => errors.push(error.message));
         // A script or stylesheet of ours that will not load is a start-up fault too.
@@ -312,6 +376,7 @@ test('every page starts: the map as Director and as a player, the character shee
         await page.waitForFunction(one.started, null, { timeout: 20000 });
         // Listen for late start-up errors while the longer interactive checks run.
         await Promise.all([page.waitForTimeout(1500), one.check?.(page)]);
+        if (before) assert.deepEqual(pcContents(), before, 'Saving, viewing and sharing a character must leave campaign files intact');
         if (errors.length) failures.push(`${one.name}: ${errors.slice(0, 3).join(' | ')}`);
       } catch (error) {
         failures.push(`${one.name}: DID NOT START. ${error.message}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);

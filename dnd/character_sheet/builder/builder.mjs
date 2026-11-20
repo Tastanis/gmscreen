@@ -193,7 +193,9 @@ function review() {
   }
   return (
     boxes.join('') +
-    `<button class="primary" type="button" data-download ${model.complete ? '' : 'disabled'}>Download hero JSON</button><p class="hint block">Downloads a new character file. Your current PCs are separate.</p><button type="button" data-new>Start another hero</button>`
+    `<button class="primary" type="button" data-save-character ${model.complete ? '' : 'disabled'}>Save to My Characters</button>
+    <button type="button" data-download ${model.complete ? '' : 'disabled'}>Download hero JSON</button>
+    <p class="hint block">Save a private character sheet to your account or download a copy.</p><button type="button" data-new>Start another hero</button>`
   );
 }
 function summary() {
@@ -260,6 +262,25 @@ document.addEventListener('click', async (e) => {
       draft = newDraft();
       filters.clear();
       jump('Identity');
+    }
+    return;
+  }
+  if (b.hasAttribute('data-save-character')) {
+    if (!model.complete || b.disabled) return;
+    b.disabled = true;
+    try {
+      const response = await fetch('save.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Character-Token': document.body.dataset.libraryToken },
+        body: JSON.stringify(buildSheet(db, draft)),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.id) throw Error(result.error || 'Could not save your hero.');
+      window.location.assign('library.php?id=' + encodeURIComponent(result.id));
+    } catch (error) {
+      status = error.message || 'Could not save your hero. Try again.';
+      draw();
     }
     return;
   }
