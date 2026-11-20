@@ -771,6 +771,8 @@
       return {
         id: `automation-area:${originName}`,
         name: originName,
+        ...(template.levelId ? { levelId: template.levelId } : {}),
+        ...(Number.isFinite(template.flightHeight) ? { flightHeight: template.flightHeight } : {}),
         column: asInt(template.column, 0),
         row: asInt(template.row, 0),
         width: Math.max(1, asInt(template.width, 1)),
@@ -783,6 +785,8 @@
     // origin when a group contains more than one token.
     const originTarget = getTargetGroup(state, originName)[0];
     if (originTarget) {
+      const live = liveTokenFor(state, originTarget);
+      if (Number.isFinite(live?.column) && Number.isFinite(live?.row)) return live;
       return originTarget.placement && typeof originTarget.placement === "object"
         ? originTarget.placement
         : originTarget;
@@ -828,7 +832,84 @@
     }
   }
 
+  async function readActionNumber(state, ref, field) {
+    if (!ref || typeof ref !== "object") return { value: asInt(ref, 0), label: "" };
+    let ability = ref.source === "abilityRange" ? await state.context.getAbility?.({ placementId: state.sourcePlacement?.id, name: ref.name }) : null;
+    if (ability?.name && ability.name.trim().toLowerCase() !== ref.name.trim().toLowerCase()) ability = null;
+    if (ability?.automation?.cards?.length) {
+      const copy = schema.normalizeAutomation(ability.automation);
+      const scope = { ...state, action: ability, automation: copy, executionKeywords: null };
+      const modifiers = collectMatchingModifiers(copy, ability, state.context.features, scope);
+      if (modifiers.length) applyModifiersInPlace(copy, modifiers, scope);
+      const range = copy.cards.find(card => card.type === "target" && card.distance?.form === "ranged")?.distance.value;
+      if (Number.isFinite(range)) ability = { ...ability, range: "Ranged " + range };
+    }
+    const { raw, source } = P.actionNumberSource(ref, { stats: { ...state.sourceTraits, ...state.hero?.stats }, victories: state.hero?.victories,
+      ability, roll: state.lastPowerRoll, trigger: state.triggerPayload?.payload || state.triggerPayload });
+    const key = JSON.stringify([ref.source, ref.name || ""]);
+    state.numberRulings ??= new Map();
+    let number = raw == null || String(raw).trim() === "" ? (state.numberRulings.get(key) ?? NaN) : Number(raw);
+    while (!Number.isSafeInteger(number)) {
+      const question = field + " needs " + source + ". Enter a whole number for this use.";
+      const answer = state.context.askActionNumber ? await state.context.askActionNumber(question) : window.prompt(question);
+      if (answer == null) { state.aborted = true; return { value: 0, label: "" }; }
+      number = String(answer).trim() ? Number(answer) : NaN;
+      if (Number.isSafeInteger(number)) state.numberRulings.set(key, number);
+    }
+    const value = P.adjustActionNumber(ref, number);
+    return { value, label: field + " " + value + " from " + source + " (" + number + ")" };
+  }
+
+  async function eligibleTarget(state, block, target, manuallyPicked) {
+    if (!block.eligible?.length) return true;
+    const token = liveTokenFor(state, target) || {};
+    const caster = liveTokenFor(state, state.sourcePlacement) || {};
+    const facts = await state.context.getTargetFacts?.(target.id) || {};
+    const team = token.combatTeam || token.team;
+    const casterTeam = caster.combatTeam || caster.team;
+    const kind = facts.kind || token.entityKind || (token.monster || token.characterId ? "creature" : null);
+    const results = block.eligible.map(rule => {
+      const tests = [];
+      if (rule.kind) tests.push(kind ? kind === rule.kind : null);
+      if (rule.relation === "self") tests.push(token.id === caster.id);
+      else if (rule.relation) tests.push(team && casterTeam ? (rule.relation === "enemy" ? team !== casterTeam : team === casterTeam) : null);
+      if (rule.maxSizeFrom) {
+        const raw = state.hero?.stats?.[rule.maxSizeFrom.attribute.toLowerCase()];
+        const size = tokenSizeRank(token);
+        const rank = sizeRank(raw, "max");
+        tests.push(raw == null || rank == null || size == null ? null : Number(raw) >= rule.maxSizeFrom.minimum && size <= rank);
+      }
+      if (rule.casterSizeOrSmaller) tests.push(checkTargetFacts(state, { sizeVsSelf: "sameOrSmaller" }, token));
+      if (rule.condition) tests.push(token.conditions || token.condition ? checkTargetFacts(state, { condition: [rule.condition] }, token) : null);
+      if (rule.role) {
+        const role = token.monster?.role || token.role;
+        tests.push(role ? String(role).toLowerCase() === rule.role : null);
+      }
+      return tests.includes(false) ? false : tests.includes(null) ? null : true;
+    });
+    if (results.includes(true)) return true;
+    const unknown = results.includes(null);
+    if (!unknown && !manuallyPicked) return false;
+    return askAutomationPrompt(state, { question: (target.name || "This target") + (unknown
+      ? " has incomplete targeting information. Include it for this use?" : " falls outside this ability’s targeting rules. Include it anyway?"),
+      yesLabel: "Include", noLabel: "Skip" }, [target]);
+  }
+
   async function runTargetBlock(state, block) {
+    const labels = [];
+    for (const [section, key, title] of [["distance", "value", "Range"], ["distance", "within", "Within"], ["count", "value", "Target count"]]) {
+      const ref = block[section]?.[key];
+      if (!ref || typeof ref !== "object") continue;
+      const result = await readActionNumber(state, ref, title);
+      if (state.aborted) return;
+      block = { ...block, [section]: { ...block[section], [key]: result.value } };
+      labels.push(result.label);
+      if (section === "count" && result.value === 0 && block.count.mode !== "all") {
+        setTargetGroup(state, block.name, []);
+        return;
+      }
+    }
+    if (labels.length) block = { ...block, promptText: [block.promptText, ...labels].filter(Boolean).join(" · ") };
     if (block.oncePer && block.oncePer.per !== "target" && await oncePerUsed(state, block)) {
       await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${block.promptTitle || block.name || "this"} was already used this ${block.oncePer.scope || "turn"}.` });
       setTargetGroup(state, block.name, []);
@@ -839,7 +920,8 @@
   }
 
   async function pickTargetBlock(state, block) {
-    const desired = getTokenTargetCount(block);
+    const maintainedTargets = state.action?._maintainRerun && state.automation?.maintenance?.mode === "targets" && !state.presetTargetsUsed && block.mode === "token" ? state.presetTargetIds : null;
+    const desired = maintainedTargets?.length || getTokenTargetCount(block);
     const upTo = block.count?.mode === "upTo";
     // The board already owns the multi-pick/Done prompt and its cancellation.
     const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.near || block.promptTitle || block.promptText || block.optional || upTo || desired > 1);
@@ -900,7 +982,11 @@
           setTargetGroup(state, block.name, []);
           return;
         }
-        const tokens = Array.isArray(result?.targets) ? result.targets : [];
+        const tokens = [];
+        for (const candidate of result?.targets || []) {
+          if (await eligibleTarget(state, block, candidate, false)) tokens.push(candidate);
+          if (state.aborted) return;
+        }
         markCommitted(state);
         setTargetGroup(state, block.name, tokens);
         fireTargetedEvents(state, tokens);
@@ -995,6 +1081,12 @@
           break;
         }
         if (result?.id && !seen.has(result.id) && !excludedIds.has(result.id)) {
+          if (!await eligibleTarget(state, block, result, true)) {
+            if (state.aborted) return;
+            if (autoPickTargetIds[pickIndex] === result.id) autoPickTargetIds[pickIndex] = null;
+            pickIndex -= 1;
+            continue;
+          }
           seen.add(result.id);
           selected.push(result);
           markCommitted(state);
@@ -1057,9 +1149,11 @@
       const row = Number(placement.row);
       if (!Number.isFinite(column) || !Number.isFinite(row)) continue;
       const spot = { column, row, width: Math.max(1, Number(placement.width) || 1), height: Math.max(1, Number(placement.height) || 1), levelId: placement.levelId || "level-0" };
-      let landed = typeof state.context.getDistanceBetween === "function" ? Number(await state.context.getDistanceBetween(hop.id, placement.id)) : NaN;
-      if (!Number.isFinite(landed)) landed = planarSquaresBetween(hop.to, spot);
-      if (landed <= within || planarSquaresBetween(hop.from, spot) <= within) {
+      const landed = typeof state.context.getDistanceBetween === "function"
+        ? await state.context.getDistanceBetween(hop.id, placement.id)
+        : planarSquaresBetween(hop.to, spot);
+      const leftNearby = near.teleport === true && planarSquaresBetween(hop.from, spot) <= within;
+      if (leftNearby || (Number.isFinite(landed) && landed <= within)) {
         candidates.push({ id: placement.id, name: placement.name || placement.label || "Creature", placement });
       }
     }
@@ -1085,7 +1179,7 @@
       if (!nearPredicateFits(block.predicate || "creature", placement, casterTeam, casterId)) continue;
       let close = false;
       for (const anchor of anchors) {
-        const squares = Number(await state.context.getDistanceBetween(anchor.id, placement.id));
+        const squares = await state.context.getDistanceBetween(anchor.id, placement.id);
         if (Number.isFinite(squares) && squares <= within) { close = true; break; }
       }
       if (close) candidates.push({ id: placement.id, name: placement.name || placement.label || "Creature", placement });
@@ -1140,7 +1234,8 @@
     const anchors = found.anchors;
     const candidates = [];
     for (const candidate of found.candidates) {
-      if (!(await oncePerUsed(state, block, candidate.id))) candidates.push(candidate);
+      if (!(await oncePerUsed(state, block, candidate.id)) && await eligibleTarget(state, block, candidate, false)) candidates.push(candidate);
+      if (state.aborted) return;
     }
     const label = state.action.name || "Ability";
     if (!candidates.length) {
@@ -1186,6 +1281,10 @@
       }
       if (selected.has(result.id)) selected.delete(result.id);
       else {
+        if (!await eligibleTarget(state, block, result, true)) {
+          if (state.aborted) return;
+          continue;
+        }
         if (selected.size >= max) selected.delete(selected.keys().next().value);
         selected.set(result.id, result);
       }
@@ -1218,13 +1317,12 @@
     }).join("");
   }
 
-  function refreshPowerRollSuggestions(state, block) {
+  function refreshPowerRollSuggestions(state, block, targetGroup = getTargetGroup(state, block.target)) {
     const callback = state?.context?.getPowerRollSuggestions;
     if (typeof callback !== "function") {
       state.rollSuggestions = [];
       return;
     }
-    const targetGroup = getTargetGroup(state, block.target);
     const payload = {
       actorId: state.sourcePlacement?.id || "",
       sourceId: state.sourcePlacement?.id || "",
@@ -1276,9 +1374,10 @@
       if (stopped) return;
       if (!host.isConnected) { stopped = true; return; }
       if (!state.roll) {
-        const previous = JSON.stringify(state.rollSuggestions);
-        refreshPowerRollSuggestions(state, block);
-        if (previous !== JSON.stringify(state.rollSuggestions)) render(host, state, block);
+        const snapshot = () => JSON.stringify([state.rollSuggestions, ...(state.rollTargets || []).map(row => row.rollSuggestions)]);
+        const previous = snapshot();
+        refreshRollTargets(state, block);
+        if (previous !== snapshot()) render(host, state, block);
       }
       timer = window.setTimeout(tick, 1000);
     };
@@ -1429,7 +1528,16 @@
 
   async function consumePowerRollSurgeBonus(state, ctx, targets) {
     const surgeCtx = ctx?.powerRollSurges;
-    if (!surgeCtx || surgeCtx.consumed) return { spent: 0, damage: 0 };
+    if (!surgeCtx) return { spent: 0, damage: 0 };
+    if (surgeCtx.allocated) {
+      const bonus = surgeCtx.allocated;
+      if (targets.some(target => target.id === bonus.targetId)) {
+        delete surgeCtx.allocated;
+        return bonus;
+      }
+      return { spent: 0, damage: 0 };
+    }
+    if (surgeCtx.consumed) return { spent: 0, damage: 0 };
     surgeCtx.consumed = true;
     const requested = Math.max(0, Math.min(3, asInt(surgeCtx.requested, 0)));
     if (!requested) return { spent: 0, damage: 0 };
@@ -1524,6 +1632,33 @@
     return parts.join("; ") || '<span class="pr5-none">No effects</span>';
   }
 
+  function refreshRollTargets(state, block) {
+    refreshPowerRollSuggestions(state, block);
+    for (const row of state.rollTargets || []) refreshPowerRollSuggestions(row, block, [row.target]);
+  }
+
+  function rollTargetResult(state, block, row) {
+    const suggested = getActiveRollSuggestionCounts(row);
+    const edge = row.edgeOverride ?? Math.min(2, suggested.edge + state.edgeCount);
+    const bane = row.baneOverride ?? Math.min(2, suggested.bane + state.baneCount);
+    const edgeState = getEdgeState(edge, bane);
+    const info = getPowerRollTotal(state, block);
+    const total = state.roll ? info.total - info.edgeState.bonus + edgeState.bonus : null;
+    const tier = total == null ? "" : row.tierOverride || P.shiftTierKey(P.tierFromTotal(total), edgeState.tierShift);
+    return { id: row.target.id, name: row.target.hidden || row.target.placement?.hidden ? "Hidden target" : row.target.name, total, tier, edge, bane };
+  }
+
+  function renderRollTargets(state, block) {
+    return state.rollTargets.map((row, index) => {
+      const result = rollTargetResult(state, block, row);
+      const button = (kind, label) => '<button type="button" class="pr5-chip" data-roll-row="' + index +
+        '" data-row-adjust="' + kind + '">' + escapeHtml(label) + '</button>';
+      return '<div class="pr5-target-row"><b>' + escapeHtml(result.name || "Target") + '</b> ' +
+        button("edge", "Edges " + result.edge) + button("bane", "Banes " + result.bane) +
+        (result.tier ? button("tier", result.total + " · " + P.tierLabel(result.tier)) : "") + '</div>';
+    }).join("");
+  }
+
   function renderPowerRoll(host, state, block) {
     const { total, attribute, attributeBonus, skill, skillBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
     const manualEdgeState = getEdgeState(state.edgeCount, state.baneCount);
@@ -1546,6 +1681,7 @@
     if (manualBonus) breakdown.push(`<span class="pr5-tag pr5-tag--bonus">Bonus ${escapeHtml(formatModifier(manualBonus))}</span>`);
 
     const rolled = Boolean(state.roll);
+    const split = Boolean(state.rollTargets?.length);
     const tierShifted = rolled && state.baseTier && state.selectedTier && state.baseTier !== state.selectedTier;
     const tierNumber = (key) => String(key || "").replace(/\D/g, "");
     const tierBadge = rolled && state.selectedTier
@@ -1558,7 +1694,7 @@
     const ctx = buildResolveCtx(state);
     const tiers = block.tiers || {};
     const rows = TIER_ROWS.map(({ key, range, label }) => {
-      const hit = rolled && state.selectedTier === key;
+      const hit = rolled && (split ? state.rollTargets.some(row => rollTargetResult(state, block, row).tier === key) : state.selectedTier === key);
       return `
         <button class="pr5-row ${hit ? "pr5-row--hit" : ""}" type="button" data-select-tier="${key}" ${rolled ? "" : "disabled"} aria-pressed="${hit ? "true" : "false"}">
           <span class="pr5-range">${escapeHtml(range)}<small>${escapeHtml(label.toUpperCase())}</small></span>
@@ -1574,14 +1710,14 @@
           <div class="pr5-sum">
             <div class="pr5-formula">${escapeHtml(formula)}</div>
             <div class="pr5-parts">${breakdown.join(" · ")}</div>
-            ${rolled ? `<div class="pr5-dice">${dice}${tierBadge}</div>` : ""}
+            ${rolled ? `<div class="pr5-dice">${dice}${split ? "" : tierBadge}</div>` : ""}
           </div>
         </div>
         ${state.resultText && !/^Rolled /.test(state.resultText) ? `<div class="pr5-status">${escapeHtml(state.resultText)}</div>` : ""}
         <div class="pr5-rows ${rolled ? "pr5-rows--rolled" : ""}">${rows}</div>
         ${description ? `<details class="pr5-text"><summary>Ability text</summary><p>${escapeHtml(description)}</p></details>` : ""}
         <div class="pr5-mods">
-          ${renderRollSuggestionButtons(state, manualEdgeState)}
+          ${state.rollTargets?.length ? renderRollTargets(state, block) : renderRollSuggestionButtons(state, manualEdgeState)}
           <div class="pr5-pills">
             <span class="pr5-pill pr5-bonus ${manualBonus ? "is-on" : ""}">Bonus
               <button class="pr5-step" type="button" data-power-roll-bonus-adjust="-1" aria-label="Bonus minus one">−</button>
@@ -1658,6 +1794,19 @@
       if (pending || finished) return;
       pending = true;
       try {
+      const rowButton = target.closest("[data-roll-row]");
+      if (rowButton) {
+        const row = state.rollTargets[Number(rowButton.getAttribute("data-roll-row"))];
+        const kind = rowButton.getAttribute("data-row-adjust");
+        const result = rollTargetResult(state, block, row);
+        if (kind === "tier" && result.tier) row.tierOverride = P.TIER_KEYS[(P.TIER_KEYS.indexOf(result.tier) + 1) % 3];
+        if (kind === "edge" || kind === "bane") {
+          row[kind + "Override"] = (result[kind] + 1) % 3;
+          row.tierOverride = null;
+        }
+        renderPowerRoll(host, state, block);
+        return;
+      }
       if (target.closest("[data-power-roll-edge-adjust]")) {
         const button = target.closest("[data-power-roll-edge-adjust]");
         const selection = setManualEdgeBaneSelection(state, "edge", button?.getAttribute("data-power-roll-edge-adjust"));
@@ -1716,6 +1865,7 @@
         state.baneCount = 0;
         state.manualBonus = 0;
         state.powerRollSurges = 0;
+        (state.rollTargets || []).forEach(row => { row.edgeOverride = 0; row.baneOverride = 0; row.tierOverride = null; });
         (state.rollSuggestions || []).forEach((suggestion) => {
           setRollSuggestionActive(state, suggestion, false);
         });
@@ -1724,7 +1874,8 @@
         return;
       }
       if (target.closest("[data-power-roll-roll]")) {
-        refreshPowerRollSuggestions(state, block);
+        refreshRollTargets(state, block);
+        (state.rollTargets || []).forEach(row => { row.tierOverride = null; });
         state.roll = rollFormula(block.rollFormula || "2d10");
         markCommitted(state);
         const { total, attributeBonus, skill, skillBonus, bonus, edgeState } = getPowerRollTotal(state, block);
@@ -1744,13 +1895,18 @@
       const tierButton = target.closest("[data-select-tier]");
       if (tierButton && state.roll) {
         state.selectedTier = tierButton.getAttribute("data-select-tier");
+        (state.rollTargets || []).forEach(row => { row.tierOverride = state.selectedTier; });
         state.resultText = `Manual tier selected: ${P.tierLabel(state.selectedTier)}.`;
         renderPowerRoll(host, state, block);
         return;
       }
       if (target.closest("[data-power-roll-accept]") && state.roll && state.selectedTier) {
+        if (state.rollTargets?.length) {
+          const outcomes = state.rollTargets.map(row => rollTargetResult(state, block, row));
+          await postChat(state.context, { message: outcomes.map(r => (r.name || r.id) + " " + r.total + " (" + P.tierLabel(r.tier) + ")").join(" · ") });
+        }
         const acceptedEdgeState = getPowerRollTotal(state, block).edgeState;
-        if (acceptedEdgeState.net > 0) {
+        if (state.rollTargets?.length ? state.rollTargets.some(row => { const result = rollTargetResult(state, block, row); return result.edge > result.bane; }) : acceptedEdgeState.net > 0) {
           state.acceptedPowerRollWithEdge = true;
         }
         closeRunner();
@@ -1768,6 +1924,28 @@
   }
 
   async function runPowerRollBlock(state, block) {
+    if (block.targetTiers && block.target && !getTargetGroup(state, block.target).length) return;
+    if (block.rollMode === "individual") {
+      const targets = getTargetGroup(state, block.target);
+      const originalGroup = state.currentGroup;
+      const names = [].concat(block.target || originalGroup || "primary");
+      const originalGroups = state.groups;
+      const members = new Map(names.map(name => [name, getTargetGroup(state, name)]));
+      try {
+        for (const target of targets) {
+          state.groups = { ...originalGroups };
+          for (const name of names) {
+            state.groups[name] = members.get(name).filter(member => member.id === target.id);
+          }
+          await runPowerRollBlock(state, { ...block, rollMode: "shared" });
+          if (state.aborted) break;
+        }
+      } finally {
+        state.groups = originalGroups;
+        state.currentGroup = originalGroup;
+      }
+      return;
+    }
     await refreshPowerRollSurges(state);
     state.edgeCount = Math.max(0, Math.min(2, asInt(block?.edge, 0)));
     state.baneCount = Math.max(0, Math.min(2, asInt(block?.bane, 0)));
@@ -1778,7 +1956,12 @@
     state.baseTier = null;
     state.resultText = "";
     state.rollSuggestionContext = null;
-    refreshPowerRollSuggestions(state, block);
+    const targets = getTargetGroup(state, block.target);
+    state.rollTargets = block.targetTiers && targets.length > 1
+      ? targets.map(target => ({ target, context: state.context, sourcePlacement: state.sourcePlacement, action: state.action,
+          automation: state.automation, executionKeywords: state.executionKeywords, rollSuggestionContext: null }))
+      : [];
+    refreshRollTargets(state, block);
     // Spends the ability asks for before the roll ("timing": "preRoll") are offered now, before the dice.
     await offerPreRollSpends(state);
     if (state.aborted) return;
@@ -1794,6 +1977,37 @@
     await fireRollTriggerEvent(state, block);
     await consumeActiveRollRiders(state, block);
 
+    const once = block.oncePerRoll?.[state.selectedTier];
+    if (once?.length) await applyEffects(state, once, "self", { sourceLabel: state.action.name || "Ability" });
+    const surgeBudget = { requested: clampPowerRollSurges(state, block), spent: 0, damage: 0, consumed: false };
+    if (state.rollTargets?.length) {
+      const originalGroup = state.currentGroup;
+      const acceptedRoll = state.lastPowerRoll;
+      if (surgeBudget.requested) {
+        const eligible = state.rollTargets.filter(row => block.tiers?.[rollTargetResult(state, block, row).tier]?.effects?.some(fx => fx.kind === "damage"));
+        if (eligible.length) surgeBudget.allocated = await consumePowerRollSurgeBonus(state, { powerRollSurges: surgeBudget }, eligible.map(row => row.target));
+      }
+      try {
+        for (const row of state.rollTargets) {
+          const outcome = rollTargetResult(state, block, row);
+          const tier = block.tiers?.[outcome.tier];
+          const bonuses = activeRollBonuses(row);
+          state.lastPowerRoll = { ...acceptedRoll, total: outcome.total, tier: outcome.tier, net: outcome.edge - outcome.bane };
+          state.rollPotencyBonus = bonuses.potency;
+          const effects = bonuses.damage ? withDamageBonus(tier?.effects || [], bonuses.damage) : tier?.effects || [];
+          await applyEffects(state, effects, block.target, {
+            sourceLabel: (state.action.name || "Ability") + " (" + P.tierLabel(outcome.tier) + ")",
+            tierTarget: row.target, tierGroup: block.target, powerRollSurges: surgeBudget,
+          });
+          if (state.aborted) break;
+        }
+      } finally {
+        state.lastPowerRoll = acceptedRoll;
+        state.rollPotencyBonus = 0;
+        state.currentGroup = originalGroup;
+      }
+      return;
+    }
     const tier = block.tiers?.[state.selectedTier] || { effects: [] };
     const targetGroupName = block.target;
     // Timed buffs ticked in the roll window: +damage on the roll's first damage effect, +potency on its potencies.
@@ -1806,12 +2020,7 @@
     try {
     await applyEffects(state, tierEffects, targetGroupName, {
       sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
-      powerRollSurges: {
-        requested: clampPowerRollSurges(state, block),
-        spent: 0,
-        damage: 0,
-        consumed: false,
-      },
+      powerRollSurges: surgeBudget,
     });
     } finally {
       state.rollPotencyBonus = 0;
@@ -1967,7 +2176,8 @@
     const callback = state?.context?.consumeRollRiders;
     if (typeof callback !== "function") return;
     const seenRefs = new Set();
-    const activeSuggestions = (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [])
+    const rollSuggestions = state.rollTargets?.length ? state.rollTargets.flatMap(row => row.rollSuggestions || []) : state.rollSuggestions;
+    const activeSuggestions = (Array.isArray(rollSuggestions) ? rollSuggestions : [])
       .filter((suggestion) => suggestion?.active && suggestion.conditionRef)
       .filter((suggestion) => {
         const key = `${suggestion.conditionRef.placementId}#${suggestion.conditionRef.conditionIndex}`;
@@ -2037,6 +2247,7 @@
       keywords: getAbilityKeywords(state),
       attribute: totalInfo.attribute || block.attribute || "",
       rollTotal: totalInfo.total,
+      ...(state.rollTargets?.length ? { targetResults: state.rollTargets.map(row => rollTargetResult(state, block, row)) } : {}),
       tier: state.selectedTier || "",
       targetIds,
       targetNames,
@@ -2161,6 +2372,7 @@
           casterId: state.sourcePlacement?.id || "",
           abilityId: state.action?.id || `ability_${block.id}`,
           abilityName: state.action?.name || "",
+          ...(state.castId ? { castId: state.castId } : {}),
           area: areaRecord,
           upkeep: {
             cost: Number(block.cost) || 0,
@@ -2218,7 +2430,7 @@
       const effectTarget = effect?.target !== undefined && effect?.target !== null && effect?.target !== ""
         ? effect.target
         : targetGroupName;
-      const targets = getTargetGroup(state, effectTarget);
+      const targets = ctx.tierTarget && effectTarget === ctx.tierGroup ? [ctx.tierTarget] : getTargetGroup(state, effectTarget);
       await applyEffect(state, effect, targets, ctx);
     }
   }
@@ -3555,7 +3767,7 @@
       net: accepted.edgeState.net,
       natural,
       tier: state.selectedTier || "",
-      critical: Boolean(twoD10 && natural !== null && natural >= 19),
+      critical: Boolean(block.allowCritical !== false && twoD10 && natural !== null && natural >= 19),
     };
   }
 
@@ -4470,6 +4682,7 @@
       width: Math.max(1, Number(token.width) || 1),
       height: Math.max(1, Number(token.height) || 1),
       levelId: token.levelId || "level-0",
+      flightHeight: Number.isFinite(token.flightHeight) ? token.flightHeight : null,
     };
   }
 
@@ -4483,6 +4696,7 @@
   }
 
   async function applyTeleportEffect(state, effect, targets, _ctx) {
+    state.lastTeleport = null;
     const effectHasExplicitTarget = effect?.target !== undefined
       && effect?.target !== null
       && effect?.target !== "";
@@ -4494,7 +4708,10 @@
       ? [state.sourcePlacement]
       : targets;
     if (!teleportTargets.length) return;
-    let distance = asInt(effect.distance, 0);
+    const allowance = await readActionNumber(state, effect.distance, "Teleport");
+    if (state.aborted) return;
+    let distance = allowance.value;
+    if (allowance.label) await postChat(state.context, { message: allowance.label });
     if (effect.spend && typeof state.context.spendHeroicResource === "function") {
       const spendResult = await state.context.spendHeroicResource({
         amount: effect.spend.amount || 1,
@@ -4502,11 +4719,13 @@
         resource: effect.spend.resource || "",
         abilityName: state.action.name || "Ability",
         prompt: effect.spend.prompt || `Spend ${effect.spend.resource || "resource"} to teleport farther?`,
+        ...(effect.spend.allowOverride ? { allowOverride: true } : {}),
       });
-      if (spendResult?.spent) {
-        distance += spendResult.spent * (effect.spend.perAmount || 1);
+      const declared = spendResult?.overrideAmount ?? spendResult?.spent;
+      if (declared) {
+        distance += declared * (effect.spend.perAmount || 1);
         await postChat(state.context, {
-          message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spendResult.spent} ${spendResult.resource || effect.spend.resource || "resource"} to increase teleport to ${distance}.`,
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${spendResult.overrideAmount ? "declared " + declared + " by override" : "spent " + declared} ${spendResult.resource || effect.spend.resource || "resource"} to increase teleport to ${distance}.`,
         });
       }
     }
@@ -4528,7 +4747,10 @@
       // (Burning Ash: "teleport away from or into a space adjacent to an enemy"). Brandon, November 10, 2026: "Check
       // Sharon's teleporting causing fire damage... When she teleported away from a creature."
       const before = await readTokenFootprint(state, target.id);
+      const rangeOrigin = effect.rangeOrigin ? getRangeOriginPlacement(state, effect) : null;
       const result = await state.context.applyTeleport({
+        ...(rangeOrigin ? { rangeOrigin } : {}),
+        ...(effect.previewTargets ? { previewTargets: effect.previewTargets } : {}),
         placementId: target.id,
         distance,
         abilityName: state.action.name || "Ability",
@@ -4539,7 +4761,7 @@
         continue;
       }
       const after = await readTokenFootprint(state, target.id);
-      if (before && after && (before.column !== after.column || before.row !== after.row || before.levelId !== after.levelId)) {
+      if (before && after && (before.column !== after.column || before.row !== after.row || before.levelId !== after.levelId || before.flightHeight !== after.flightHeight)) {
         state.lastTeleport = { id: target.id, name: result.name || target.name || "", from: before, to: after };
       }
       const moved = Number.isFinite(result.movedDistance) ? result.movedDistance : distance;
@@ -4978,6 +5200,19 @@
   async function runReadyTriggerResolution(state, blocks) {
     const { block, index } = findReadyTriggerBlock(blocks, state);
     if (!block) return false;
+    const radius = block.match?.filter?.withinSquares;
+    if (radius && typeof radius === "object") {
+      const range = await readActionNumber(state, radius, "Trigger range");
+      if (state.aborted) return false;
+      const event = state.triggerPayload?.payload || state.triggerPayload || {};
+      const distance = await state.context.getDistanceBetween?.(state.sourcePlacement?.id, event.sourceId || event.actorId);
+      if (!Number.isFinite(distance) || distance > range.value) {
+        if (!await askAutomationPrompt(state, { question: range.label + ". " + (Number.isFinite(distance) ? "Source is " + distance + " squares away." : "Source distance is unknown.") + " Use the trigger anyway?" }, [])) {
+          state.aborted = true;
+          return false;
+        }
+      }
+    }
     if (Array.isArray(block.effects) && block.effects.length) {
       await applyEffects(state, block.effects, block.effectTarget || block.resolveTarget || "eventActor", {
         sourceLabel: `${state.action.name || "Ability"} trigger`,
@@ -5057,7 +5292,7 @@
     // not its own action (November 10, 2026): The Flesh, a Crucible "(no action required)", Conflagration "you can use
     // a maneuver to use this ability again". Words that name neither leave the ability's own action.
     if (state.action?._maintainRerun) {
-      const rerun = getPersistentRerunActionKind(state.action);
+      const rerun = state.automation?.maintenance?.action || getPersistentRerunActionKind(state.action);
       if (rerun) return rerun;
     }
     // "No action required" (Mantle of Essence switched on or off): it uses neither the main action nor the maneuver.
@@ -5211,6 +5446,20 @@
     return "";
   }
 
+  async function offerResolvedMaintenance(state) {
+    const plan = state.automation?.maintenance;
+    if (!plan || state.aborted || state.action?._maintainRerun || !state.context.fireTriggerEvent) return;
+    const threshold = plan.breakOnTurnDamage == null ? null : await readActionNumber(state, plan.breakOnTurnDamage, "Damage threshold");
+    if (state.aborted) return;
+    const groups = Object.fromEntries(Object.entries(state.groups).map(([name, tokens]) => [name, tokens.map(t => t.id).filter(Boolean)]));
+    state.context.fireTriggerEvent({ eventType: "maintenanceCastResolved", payload: {
+      actorId: state.sourcePlacement?.id, actionId: state.action?.id || state.action?._stableActionId || "",
+      actionName: state.action?.name, persistent: plan.cost, castId: state.castId, maintenance: plan,
+      ...(threshold ? { damageThreshold: threshold.value, thresholdSource: threshold.label } : {}),
+      targetIds: state.pickedTokenTargetIds || [], ...(plan.mode === "steps" ? { bindings: { groups, areas: state.areas } } : {}),
+    } });
+  }
+
   function fireActionUsedEvent(state, force = false) {
     if (state.actionUsedFired || (state.deferActionUsed && !force)) return;
     if (typeof state.context.fireTriggerEvent !== "function") return;
@@ -5225,7 +5474,8 @@
         actionKind: getActionKind(state),
         cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
         keywords: getAbilityKeywords(state),
-        persistent: getPersistentValue(state.action),
+        persistent: state.automation?.maintenance?.cost || getPersistentValue(state.action),
+        ...(state.automation?.maintenance ? { castId: state.castId, maintenance: state.automation.maintenance } : {}),
         // Used again for free because it is maintained (VTTCharacterAbilities.runFree): not asked to maintain again.
         maintainRerun: Boolean(state.action?._maintainRerun),
         // The creatures it was used on, picked one by one (a maintained persistent ability is marked on them).
@@ -5247,7 +5497,7 @@
     });
   }
 
-  async function preflightDamageTypeChoices(state) {
+  async function preflightDamageTypeChoices(state, activeBlocks = state.automation?.cards) {
     const groups = new Map();
     const collectEffects = (effects, path) => {
       if (!Array.isArray(effects)) return;
@@ -5280,6 +5530,7 @@
           // effect family, so it gets one choice before the roll.
           for (const tier of P.TIER_KEYS) {
             collectEffects(block.tiers[tier]?.effects, `${blockPath}.tiers.*.effects`);
+            collectEffects(block.oncePerRoll?.[tier], `${blockPath}.oncePerRoll.*`);
           }
         } else {
           collectEffects(block.effects, `${blockPath}.effects`);
@@ -5288,13 +5539,15 @@
           collectBlocks(block.then, `${blockPath}.then`);
           collectBlocks(block.else, `${blockPath}.else`);
         } else if (block.type === "choice") {
+          const selected = getSelectedChoice(state, block);
           (block.options || []).forEach((option, optionIndex) => {
+            if (selected && selected !== option.id) return;
             collectBlocks(option?.cards, `${blockPath}.options.${optionIndex}.cards`);
           });
         }
       });
     };
-    collectBlocks(state.automation?.cards);
+    collectBlocks(activeBlocks);
     for (const group of groups.values()) {
       const choice = typeof state.context.chooseDamageType === "function"
         ? await state.context.chooseDamageType({
@@ -5506,6 +5759,7 @@
     const features = Array.isArray(options?.features) ? options.features : [];
     const state = {
       action: options?.action || {},
+      castId: automation.maintenance ? options?.maintenanceCastId || globalThis.crypto?.randomUUID?.() || ("cast-" + Date.now().toString(36) + "-" + (++undoGroupCount)) : null,
       automation,
       context: options || {},
       hero: options?.hero || {},
@@ -5549,7 +5803,19 @@
     };
 
     try {
-      const blocks = automation.cards || [];
+      let blocks = automation.cards || [];
+      if (state.action?._maintainRerun && automation.maintenance) {
+        const { mode, steps } = automation.maintenance;
+        if (mode === "extend") return;
+        if (mode === "steps") {
+          blocks = [...blocks.filter(card => steps?.includes(card.id)), ...(automation.maintenance.cards || [])];
+          const bindings = options.maintenanceBindings || {};
+          for (const [name, ids] of Object.entries(bindings.groups || {})) {
+            setTargetGroup(state, name, ids.map(id => state.context.getPlacementById?.(id)).filter(Boolean));
+          }
+          state.areas = { ...(bindings.areas || {}) };
+        }
+      }
       if (!blocks.length) {
         await postChat(state.context, {
           message: `${state.action.name || "Ability"} has no automation configured.`,
@@ -5572,7 +5838,7 @@
           await preflightChoiceBlock(state, block);
           if (state.aborted) return;
         }
-        if (!await preflightDamageTypeChoices(state)) {
+        if (!await preflightDamageTypeChoices(state, blocks)) {
           closeRunner();
           return;
         }
@@ -5603,6 +5869,12 @@
         }
       }
 
+      if (!isArmingOnly) {
+        const actor = liveTokenFor(state, state.sourcePlacement);
+        const kind = getActionKind(state);
+        const used = kind === "main" ? actor?.mainActionUsedThisTurn : kind === "maneuver" && actor?.maneuverUsedThisTurn;
+        if (used && !await askAutomationPrompt(state, { question: "You already used your " + kind + " action this turn. Use this ability anyway?", yesLabel: "Use anyway", noLabel: "Cancel" }, [])) return;
+      }
       if (!isArmingOnly && typeof state.context.spendResource === "function") {
         const spendResult = await state.context.spendResource(state.action);
         if (spendResult?.canceled) {
@@ -5625,19 +5897,23 @@
           placementId: state.sourcePlacement?.id || "",
           abilityName: state.action.name || "Ability",
         });
-        if (consumeResult?.blocked) {
+        let override = false;
+        if (consumeResult?.blocked && consumeResult.reason === "already-used") {
+          override = await askAutomationPrompt(state, { question: "Your triggered action has already been used this round. Use this ability anyway?", yesLabel: "Use anyway", noLabel: "Cancel" }, []);
+        }
+        if (consumeResult?.blocked && !override) {
           await postChat(state.context, {
-            message: `${state.heroName} - ${state.action.name || "Ability"}: triggered action already used this round.`,
+            message: `${state.heroName} - ${state.action.name || "Ability"}: ${consumeResult.reason === "already-used" ? "triggered action already used this round" : "could not resolve the acting token"}.`,
           });
           await refundRefusedAbility(state);
           return;
         }
-        state.triggeredActionSpend = consumeResult || { consumed: true };
+        state.triggeredActionSpend = override ? null : consumeResult || { consumed: true };
       }
       await markUsageLimit(state);
       if ((isResolvingReadyTrigger || isManualTriggerResolution) && structuredTriggerBlocks.length) {
         await runReadyTriggerResolution(state, blocks);
-        if (!state.aborted) fireActionUsedEvent(state, defersActionUsed);
+        if (!state.aborted) { fireActionUsedEvent(state, defersActionUsed); await offerResolvedMaintenance(state); }
         return;
       }
       for (let index = 0; index < blocks.length; index += 1) {
@@ -5648,7 +5924,7 @@
       }
       // Manual/narrative effects still represent a successfully used ability.
       // Earlier concrete attempts reserve this once; canceled selection does not.
-      if (!state.aborted) fireActionUsedEvent(state, defersActionUsed);
+      if (!state.aborted) { fireActionUsedEvent(state, defersActionUsed); await offerResolvedMaintenance(state); }
       if (state.aborted) {
         if (state.committed) fireActionUsedEvent(state, defersActionUsed);
         await postChat(state.context, {

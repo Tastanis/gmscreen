@@ -723,7 +723,28 @@
     }
   }
 
+  function actionNumberSource(ref, { stats, victories, ability, roll, trigger } = {}) {
+    switch (ref.source) {
+      case "attribute": return { source: ref.name, raw: stats?.[ref.name.toLowerCase()] ?? stats?.[ref.name] };
+      case "victories": return { source: "Victories", raw: victories };
+      case "abilityRange": {
+        const range = String(ability?.range || ability?.fields?.range || "");
+        return { source: ref.name + " range", raw: range.match(/\branged\s+(\d+)\b/i)?.[1] ?? range.match(/^\s*(\d+)\s*$/)?.[1] };
+      }
+      case "rollTotal": return { source: "last roll total", raw: roll?.total };
+      case "rollTier": return { source: "last roll tier", raw: roll?.tier?.match(/^tier([123])$/)?.[1] };
+      case "triggerAmount": return { source: "triggering amount", raw: trigger?.amount };
+      default: return { source: "unknown value", raw: null };
+    }
+  }
+
+  function adjustActionNumber(ref, number) {
+    return Math.max(0, ref.min ?? 0, Math.min(ref.max ?? Infinity, number * (ref.multiply ?? 1) + (ref.add ?? 0)));
+  }
+
   global.AbilityAutomationPrimitives = {
+    actionNumberSource,
+    adjustActionNumber,
     BLOCK_TYPES,
     EFFECT_KINDS,
     TRIGGER_VALUE_SOURCES,

@@ -1,5 +1,11 @@
 # Which Elementalist abilities need VTT code?
 
+## Implemented on the review branch
+
+Modules 1, 2, 3 and 6 now have shared runtime hooks and ten opt-in Elementalist recipes. They cover action values, target eligibility and origins, power rolls with a tier per target, and maintenance of individual casts. The example pack supplies the ten cards listed in the milestone table below. Against the original 56-card audit, that brings 18 cards within JSON coverage, with one Director-resolved card and 37 cards still requiring further runtime work. [Recipes](../dnd/ai-reference/vtt-json/elementalist-shared-hooks.json) · [Authoring guide](../dnd/character_sheet/ability-automation/AUTHORING.md#values-targets-rolls-and-maintained-casts)
+
+## Original audit and implementation plan
+
 **56 class action cards, levels 1–10, across all four specializations.** This audit asks whether a single reusable JSON definition can execute the printed ability on the current 3D VTT. It assumes the definition is supplied. The audited runtime is the local `refactor/table-3d-only` branch at `21b63af9`.
 
 | Verdict | Count | What to do |

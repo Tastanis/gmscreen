@@ -1535,10 +1535,22 @@ export function mountBoardInteractions(store, routes = {}) {
     return { refunded: true };
   }
 
-  function promptTeleport(from,to,range=null,preferredSurface=null){
+  function abilityTargetDistance(from, to) {
+    const levels = getActiveSceneTokenLevelState();
+    if (!from || !to) return null;
+    const heights = teleportFloorElevations(levels);
+    const height = p => p.flightHeight ?? (window.terrainPrototype?.active ? window.terrainPrototype.groundFor(p) : null) ?? heights.get(p.levelId || BASE_MAP_LEVEL_ID);
+    const a = height(from), b = height(to);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    const planar = placementSquareDistance({ ...from, levelId: BASE_MAP_LEVEL_ID }, { ...to, levelId: BASE_MAP_LEVEL_ID }, {});
+    return Number.isFinite(planar) ? Math.max(planar, Math.abs(a - b)) : null;
+  }
+
+  function promptTeleport(from,to,range=null,preferredSurface=null,rangeOrigin=null){
     const context=window.terrainContext(),active=window.terrainPrototype?.active;
     const startHeight=active?terrainPrototype.groundFor(from):from.flightHeight??teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(from.levelId||'level-0')??0;
-    return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,preferredSurface,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
+    const rangeHeight = rangeOrigin ? (rangeOrigin.flightHeight ?? (active ? terrainPrototype.groundFor(rangeOrigin) : teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(rangeOrigin.levelId || 'level-0')) ?? 0) : startHeight;
+    return chooseTeleportHeight({from,to,range,rangeOrigin:rangeOrigin || from,rangeHeight,context,startHeight,combatActive,preferredSurface,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
   }
 
   // Route cost for the per-turn movement counter: the same walk the ruler draws,
@@ -4528,10 +4540,21 @@ export function mountBoardInteractions(store, routes = {}) {
     return list.filter((item) => item && item.id && Number(item.value) > 0).map((item) => ({ ...item, value: Number(item.value) }));
   }
 
+  function reconcileMaintenanceChoice(current, shown, kept) {
+    const shownIds = new Set(shown.map(item => item.id));
+    const keptIds = new Set(kept.map(item => item.id));
+    const dropped = current.filter(item => shownIds.has(item.id) && !keptIds.has(item.id));
+    const remaining = current.filter(item => !shownIds.has(item.id) || keptIds.has(item.id));
+    const upkeep = current.reduce((total, item) => total + (keptIds.has(item.id) ? item.value : 0), 0);
+    return { dropped, remaining, upkeep };
+  }
+
   function setMaintainedAbilities(placementId, list) {
     return updatePlacementById(placementId, (target) => {
       // targetIds: the creatures it is on (their marking, and where "use it again" goes); none = shown on the hero.
       target.maintainedAbilities = list.length ? list.map((item) => ({ id: item.id, abilityId: item.abilityId || '', name: item.name || 'Ability', value: item.value, since: item.since ?? null,
+        ...(item.castId ? { castId: item.castId, mode: item.mode, action: item.action, ...(item.bindings ? { bindings: item.bindings } : {}),
+          ...(Number.isFinite(item.damageThreshold) ? { damageThreshold: item.damageThreshold } : {}) } : {}),
         targetIds: Array.isArray(item.targetIds) ? item.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [] })) : null;
       if (!list.length) target.maintainedDamage = null;
     });
@@ -4545,6 +4568,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const value = Number(used.persistent) || 0;
     const usedOn = Array.isArray(used.targetIds) ? used.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [];
     // Used again while maintained (the free use, or picked by hand): its marking moves to whoever it went to this time.
+    if (used.maintainRerun && used.castId) return;
     if (value && used.maintainRerun && usedOn.length) {
       const owner = getPlacementFromStore(used.actorId);
       const list = getMaintainedAbilities(owner);
@@ -4557,22 +4581,31 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!value || used.maintainRerun || !combatActive) return;
     const placement = getPlacementFromStore(used.actorId);
     if (!placement) return;
-    const id = String(used.actionId || used.actionName || '').trim();
+    const abilityId = String(used.actionId || used.actionName || '').trim();
+    const castId = used.maintenance && typeof used.castId === 'string' ? used.castId : '';
+    const id = castId || abilityId;
     if (!id || getMaintainedAbilities(placement).some((item) => item.id === id)) return;
+    const overlap = castId && getActiveScenePlacements(boardApi.getState?.() ?? {}).some(owner =>
+      getMaintainedAbilities(owner).some(item => (item.abilityId === abilityId || item.name === used.actionName)
+        && item.targetIds?.some(targetId => usedOn.includes(targetId))));
+    const sceneId = getActiveSceneId();
     const who = tokenLabel(placement) || 'Hero';
     const name = used.actionName || 'Ability';
     const answer = await queueHeroicResourcePrompt({
       title: `${who} - Persistent ${value}`,
-      message: `Maintain ${name}?`,
-      detail: `While it is kept, ${who} gains ${value} less essence at the start of each turn. It ends when the fight does, or on 5 x Reason damage in one turn.`,
+      message: overlap ? `${name} is already maintained on one of these targets. Maintain this cast anyway?` : `Maintain ${name}?`,
+      detail: `Keeping this cast reduces the next turn’s heroic resource gain by ${value}. It ends with the encounter. ` +
+        (castId ? used.thresholdSource || '' : 'Damage threshold is 5 × Reason in one turn.'),
       applyLabel: 'Maintain',
       dismissLabel: 'Not now',
     });
-    if (!answer?.applied) return;
+    if (!answer?.applied || !combatActive || sceneId !== getActiveSceneId()) return;
     const fresh = getPlacementFromStore(placement.id);
-    if (!fresh) return;
-    setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh).filter((item) => item.id !== id),
-      { id, abilityId: used.actionId || '', name, value, since: combatRound, targetIds: usedOn }]);
+    if (!fresh || getMaintainedAbilities(fresh).some(item => item.id === id)) return;
+    setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh),
+      { id, abilityId: used.actionId || '', name, value, since: combatRound, targetIds: usedOn,
+        ...(castId ? { castId, mode: used.maintenance.mode, action: used.maintenance.action, ...(used.bindings ? { bindings: used.bindings } : {}),
+          ...(Number.isFinite(used.damageThreshold) ? { damageThreshold: used.damageThreshold } : {}) } : {}) }]);
     sayInChat(`${who} maintains ${name} (Persistent ${value}).`);
   }
 
@@ -4649,7 +4682,8 @@ export function mountBoardInteractions(store, routes = {}) {
               ${maintained.map((item, index) => `
                 <div class="maintain-row">
                   <label><input type="checkbox" data-keep="${index}" checked> Keep <b>${escapeHtml(item.name)}</b> (${item.value})</label>
-                  <label class="maintain-again"><input type="checkbox" data-again="${index}"> use it again now (free)</label>
+                  ${item.castId && item.targetIds?.length ? '<small>' + escapeHtml(item.targetIds.map(id => tokenLabel(getPlacementFromStore(id)) || 'Absent target').join(', ')) + '</small>' : ''}
+                  ${item.mode === 'extend' ? '<small>Extend this cast</small>' : '<label class="maintain-again"><input type="checkbox" data-again="' + index + '"> Use again (' + escapeHtml(item.action || 'no essence cost') + ')</label>'}
                 </div>`).join('')}
             </div>
             <p class="heroic-resource-prompt__detail" data-maintain-sum></p>
@@ -4677,8 +4711,16 @@ export function mountBoardInteractions(store, routes = {}) {
       };
       host.addEventListener('change', paint);
       paint();
-      const done = (applied) => {
+      let confirming = false;
+      const done = async (applied) => {
+        if (confirming) return;
         const keptNow = kept();
+        if (applied && keptNow.reduce((total, item) => total + item.value, 0) > gain) {
+          confirming = true;
+          const override = await confirmBoardAction('The upkeep exceeds this turn’s gain. Keep these casts and gain zero?', { title: 'Override upkeep', confirmText: 'Keep anyway', cancelText: 'Review casts' });
+          confirming = false;
+          if (!override) return;
+        }
         const again = maintained.filter((item, index) => host.querySelector(`[data-again="${index}"]`)?.checked);
         host.remove();
         resolve({ applied, kept: keptNow, again });
@@ -4695,14 +4737,29 @@ export function mountBoardInteractions(store, routes = {}) {
   // The free uses, one after another (each waits for the ability runner before it to close).
   async function runMaintainedAgain(placement, profileId, list) {
     const runnerOpen = () => Boolean(document.getElementById('ability-automation-runner'));
+    const sceneId = getActiveSceneId();
+    const batches = [];
     for (const item of list) {
-      for (let waited = 0; runnerOpen() && waited < 600; waited += 1) await new Promise((wake) => setTimeout(wake, 500));
-      const fresh = getPlacementFromStore(placement.id) || placement;
+      if (item.mode === 'extend') continue;
+      const batch = item.mode === 'targets' && batches.find(([first]) => first.mode === 'targets' && first.abilityId === item.abilityId && first.name === item.name);
+      if (batch) batch.push(item);
+      else batches.push([item]);
+    }
+    for (const batch of batches) {
+      while (runnerOpen() && combatActive && getActiveSceneId() === sceneId) await new Promise(wake => setTimeout(wake, 500));
+      if (!combatActive || getActiveSceneId() !== sceneId) return;
+      const fresh = getPlacementFromStore(placement.id);
+      if (!fresh) return;
+      const active = getMaintainedAbilities(fresh).filter(entry => batch.some(chosen => chosen.id === entry.id));
+      if (!active.length) continue;
+      const item = active[0];
+      const markedIds = [...new Set(active.flatMap(entry => entry.targetIds || []))];
+      const presetTargetIds = markedIds.filter(targetId => getPlacementFromStore(targetId));
+      if (markedIds.length && !presetTargetIds.length && !await confirmBoardAction('The marked targets have left the scene. Choose replacement targets for this use?', { title: item.name, confirmText: 'Choose targets', cancelText: 'Skip use' })) continue;
+
       const result = await window.VTTCharacterAbilities?.runFree?.({
         characterId: profileId, sourceToken: cloneJsonSafe(fresh), abilityId: item.abilityId, name: item.name,
-        // To the creatures carrying its marking, still on the map (out of range: warned, never refused).
-        presetTargetIds: (getMaintainedAbilities(fresh).find((entry) => entry.id === item.id)?.targetIds || item.targetIds || [])
-          .filter((targetId) => getPlacementFromStore(targetId)),
+        maintenanceCastId: item.castId, maintenanceBindings: item.bindings, presetTargetIds,
       }).catch(() => null);
       if (!result?.ran) {
         showConditionBanner(`${item.name}: ${result?.reason === 'no-automation' ? 'it has no automation, use it again by hand' : 'not found on the sheet, use it again by hand'}.`, { tone: 'reminder' });
@@ -4719,15 +4776,24 @@ export function mountBoardInteractions(store, routes = {}) {
     const amount = Math.max(0, Number(hit.amount) || 0);
     if (!placement || !amount || !combatActive || !getMaintainedAbilities(placement).length) return;
     const turnKey = `${combatRound}:${activeCombatantId || ''}`;
-    const before = placement.maintainedDamage && placement.maintainedDamage.turn === turnKey ? placement.maintainedDamage : { turn: turnKey, amount: 0, asked: false };
-    const total = before.amount + amount;
-    const sheet = await getAutomationSheetForPlacement(placement.id).catch(() => null);
-    const reason = Number.parseInt(sheet?.hero?.stats?.reason ?? sheet?.hero?.stats?.Reason ?? 0, 10) || 0;
-    const limit = Math.max(1, reason * 5);
-    const ask = total >= limit && !before.asked;
-    updatePlacementById(placement.id, (target) => { target.maintainedDamage = { turn: turnKey, amount: total, asked: before.asked || ask }; });
-    if (!ask) return;
-    const details = { total, limit, reason };
+    const watched = getMaintainedAbilities(placement).filter(item => !item.castId || Number.isFinite(item.damageThreshold));
+    if (!watched.length) return;
+    const before = placement.maintainedDamage?.turn === turnKey ? placement.maintainedDamage : {};
+    const total = (Number(before.amount) || 0) + amount;
+    updatePlacementById(placement.id, target => { target.maintainedDamage = { ...before, turn: turnKey, amount: total }; });
+    const sheet = watched.some(item => !item.castId) ? await getAutomationSheetForPlacement(placement.id).catch(() => null) : null;
+    if (!combatActive || turnKey !== `${combatRound}:${activeCombatantId || ''}`) return;
+    const current = getPlacementFromStore(placement.id);
+    if (current?.maintainedDamage?.turn !== turnKey) return;
+    const damage = current.maintainedDamage;
+    const asked = new Set(damage.askedIds || (damage.asked ? watched.map(item => item.id) : []));
+    const legacyLimit = Math.max(1, 5 * (Number(sheet?.hero?.stats?.reason ?? sheet?.hero?.stats?.Reason) || 0));
+    const affected = getMaintainedAbilities(current).filter(item => !asked.has(item.id) &&
+      (item.castId ? Number.isFinite(item.damageThreshold) && damage.amount >= item.damageThreshold : damage.amount >= legacyLimit));
+    if (!affected.length) return;
+    const ids = affected.map(item => item.id);
+    updatePlacementById(placement.id, target => { target.maintainedDamage = { ...damage, askedIds: [...asked, ...ids] }; });
+    const details = { total: damage.amount, ids };
     const profileId = getAutomationProfileIdForPlacement(placement.id);
     const ownerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
     if (ownerId && ownerId === normalizeProfileId(getCurrentUserId())) {
@@ -4741,19 +4807,24 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   async function askMaintainBreak(placement, details = {}) {
-    const list = getMaintainedAbilities(getPlacementFromStore(placement.id) || placement);
+    const list = getMaintainedAbilities(getPlacementFromStore(placement.id) || placement)
+      .filter(item => !Array.isArray(details.ids) || details.ids.includes(item.id));
     if (!list.length) return;
     const who = tokenLabel(placement) || 'Hero';
     const answer = await queueHeroicResourcePrompt({
       title: `${who} - persistent abilities`,
-      message: `You took ${details.total ?? '?'} damage this turn (5 x Reason = ${details.limit ?? '?'}). That breaks ${list.map((item) => item.name).join(', ')}. End them?`,
-      detail: 'The rules end them. Keep only if the Director says so.',
+      message: `You took ${details.total ?? '?'} damage this turn, reaching the threshold for ${list.map(item => item.name + (Number.isFinite(item.damageThreshold) ? ' (' + item.damageThreshold + ')' : '')).join(', ')}. End these casts?`,
+      detail: 'Choose Keep to override the damage rule.',
       applyLabel: 'End them',
       dismissLabel: 'Keep',
     });
     if (!answer?.applied) return;
-    setMaintainedAbilities(placement.id, []);
-    sayInChat(`${who} stops maintaining ${list.map((item) => item.name).join(', ')} (took ${details.total} damage in one turn).`);
+    const fresh = getPlacementFromStore(placement.id);
+    if (!fresh) return;
+    const { dropped, remaining } = reconcileMaintenanceChoice(getMaintainedAbilities(fresh), list, []);
+    setMaintainedAbilities(placement.id, remaining);
+    endZonesOfDroppedMaintenance(placement.id, dropped);
+    sayInChat(`${who} stops maintaining ${dropped.map(item => item.name).join(', ')} (took ${details.total} damage in one turn).`);
   }
 
   function clearMaintainedAbilitiesAtCombatEnd() {
@@ -4851,6 +4922,13 @@ export function mountBoardInteractions(store, routes = {}) {
   //   Exception: silent autoApply rules are applied immediately by the GM
   //   (the GM may write any sheet), so they don't wait on the controller's
   //   client being open.
+  function attachTurnMaintenance(rules) {
+    const firstGain = rules.find(rule => rule.effect.kind === 'gain');
+    if (firstGain) return rules.map(rule => ({ ...rule, maintenanceOffer: rule === firstGain }));
+    return [...rules, { id: 'maintained-casts-upkeep', event: 'turnStart', enabled: true, maintenanceOffer: true,
+      filter: { whose: 'self' }, effect: { kind: 'gain', amount: 0 }, limit: { scope: 'round', key: 'maintained-casts-upkeep', markOn: 'offered' } }];
+  }
+
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
     if (!eventType) return;
     // The action that caused this (read before anything waits): a gain it gives is undone with it.
@@ -4868,13 +4946,14 @@ export function mountBoardInteractions(store, routes = {}) {
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
-      if (!automation.rules.length) continue;
+      const hasCasts = eventType === 'turnStart' && getMaintainedAbilities(placement).length > 0;
+      if (!sheet || (!automation.rules.length && !hasCasts)) continue;
       const env = getHeroicResourceRuleEnv(placement.id);
-      for (const rule of automation.rules) {
-        if (!ruleMatchesHeroicResourceEvent(rule, eventType, payload, env)) continue;
+      const matching = automation.rules.filter(rule => ruleMatchesHeroicResourceEvent(rule, eventType, payload, env));
+      for (const rule of hasCasts ? attachTurnMaintenance(matching) : matching) {
         const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
         if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
-        if (isController || (rule.autoApply && isGmUser())) {
+        if (isController || (rule.autoApply && !rule.maintenanceOffer && isGmUser())) {
           await offerHeroicResourceRule({
             eventType,
             payload,
@@ -5024,7 +5103,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (rule.limit?.scope === 'round' && Number.isFinite(Number(record.round)) && Number(record.round) !== combatRound) return;
       const sheet = await getAutomationSheetForPlacement(placementId);
       const resource = sheet?.hero?.resource;
-      if (!sheet || !resource) return;
+      if (!sheet || (!resource && !rule.maintenanceOffer)) return;
       await offerHeroicResourceRule({
         eventType: record.eventType || 'event',
         payload: record.payload && typeof record.payload === 'object' ? record.payload : {},
@@ -5084,12 +5163,14 @@ export function mountBoardInteractions(store, routes = {}) {
     noteResourceLevel(profileId, resource?.value);
     const context = getSheetHeroicResourceContext(sheet, resource);
     const preview = previewHeroicResourceAmount(rule.effect.amount, context);
-    const shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
+    let shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
+    const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && rule.maintenanceOffer !== false
+      ? getMaintainedAbilities(getPlacementFromStore(placement.id) || placement) : [];
     const initialResolved = shouldRollAfterPrompt
       ? preview
       : resolveHeroicResourceAmount(rule.effect.amount, context);
     let amount = Math.max(0, Number.parseInt(initialResolved.amount, 10) || 0);
-    if (!amount && rule.effect.kind !== 'set' && !shouldRollAfterPrompt) return;
+    if (!amount && rule.effect.kind !== 'set' && !shouldRollAfterPrompt && !maintained.length) return;
     let change = normalizeHeroicResourceChange(rule, sheet, amount);
     const action = rule.effect.kind === 'set'
       ? 'Set'
@@ -5117,15 +5198,21 @@ export function mountBoardInteractions(store, routes = {}) {
     if (rule.limit?.markOn === 'offered') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
-    const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && !shouldRollAfterPrompt
-      ? getMaintainedAbilities(placement)
-      : [];
     if (maintained.length) {
+      const sceneId = getActiveSceneId(), offeredRound = combatRound, offeredTurn = activeCombatantId;
+      if (shouldRollAfterPrompt) {
+        const roll = await queueHeroicResourcePrompt({ title: resourceName, message: 'Roll ' + preview.label + ' for the gain available before upkeep?', applyLabel: 'Roll', dismissLabel: 'Cancel' });
+        if (!roll?.applied) return;
+        amount = Math.max(0, Number(resolveHeroicResourceAmount(rule.effect.amount, context).amount) || 0);
+        shouldRollAfterPrompt = false;
+      }
       const choice = await queueMaintainPrompt({ placement, maintained, gain: amount, resourceName, current: change.current });
-      if (!choice?.applied) return;
-      setMaintainedAbilities(placement.id, choice.kept);
-      endZonesOfDroppedMaintenance(placement.id, maintained.filter((item) => !choice.kept.some((keep) => keep.id === item.id)));
-      const upkeep = choice.kept.reduce((sum, item) => sum + item.value, 0);
+      if (!choice?.applied || !combatActive || sceneId !== getActiveSceneId() || offeredRound !== combatRound || offeredTurn !== activeCombatantId) return;
+      const fresh = getPlacementFromStore(placement.id);
+      if (!fresh) return;
+      const { remaining, dropped, upkeep } = reconcileMaintenanceChoice(getMaintainedAbilities(fresh), maintained, choice.kept);
+      setMaintainedAbilities(placement.id, remaining);
+      endZonesOfDroppedMaintenance(placement.id, dropped);
       amount = Math.max(0, amount - upkeep);
       change = normalizeHeroicResourceChange(rule, sheet, amount);
       if (choice.again.length) runMaintainedAgain(placement, profileId, choice.again);
@@ -5943,6 +6030,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ownerName: ownerPlacement ? tokenLabel(ownerPlacement) : payload.casterName || '',
       abilityId: payload.abilityId || '',
       abilityName: payload.abilityName || 'Persistent Zone',
+      ...(payload.castId ? { castId: payload.castId } : {}),
       template: {
         column: Number(template.column) || 0,
         row: Number(template.row) || 0,
@@ -7026,6 +7114,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (eventType === 'actionUsed') {
       markTurnActionUsedFromAutomation(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+    }
+    if (eventType === 'maintenanceCastResolved' || (eventType === 'actionUsed' && !payload.payload?.castId)) {
       offerMaintainPersistentAbility(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}).catch((err) => {
         console.warn('[VTT] maintain question failed', err);
       });
@@ -7111,6 +7201,16 @@ export function mountBoardInteractions(store, routes = {}) {
       getPlacementMark,
       getPlacementFromStore,
       getResourceLevel: resourceLevelForPlacement,
+      getTriggerRange(id, ref, trigger) {
+        const placement = getPlacementFromStore(id);
+        if (!placement) return null;
+        const hero = characterSummaryCache.get(sheetIdForPlacement(placement))?.hero;
+        const api = window.AbilityAutomationPrimitives;
+        const fact = api?.actionNumberSource(ref, { stats: hero?.stats || placement.monster?.stats, victories: hero?.victories,
+          ability: ref.source === 'abilityRange' ? abilityForPlacement(id, ref.name) : null, trigger });
+        const raw = fact?.raw;
+        return raw == null || String(raw).trim() === '' || !Number.isSafeInteger(Number(raw)) ? null : api.adjustActionNumber(ref, Number(raw));
+      },
       isInsideAura: isInsideAuraOf,
       hasEndableCondition: (casterId, spec) => endableConditionsFor(casterId, spec).length > 0,
       isTriggerActionAvailable(casterId) {
@@ -7134,7 +7234,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const casterPlacement = getPlacementFromStore(casterId);
         const otherPlacement = getPlacementFromStore(otherId);
         if (!casterPlacement || !otherPlacement) return null;
-        return placementSquareDistance(casterPlacement, otherPlacement, getActiveSceneTokenLevelState());
+        return abilityTargetDistance(casterPlacement, otherPlacement);
       },
       // Line of effect between two tokens' middles, past the map's walls (null when it can't be told).
       hasLineOfEffect(casterId, otherId) {
@@ -7163,6 +7263,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function zoneBelongsToMaintained(zone, item) {
     if (!zone || !item) return false;
+    if (zone.castId || item.castId) return Boolean(zone.castId) && zone.castId === item.castId;
     if (item.abilityId && zone.abilityId) return zone.abilityId === item.abilityId;
     const name = String(item.name || '').trim().toLowerCase();
     return Boolean(name) && String(zone.abilityName || '').trim().toLowerCase() === name;
@@ -15081,6 +15182,11 @@ export function mountBoardInteractions(store, routes = {}) {
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
     // An ability of a token by name, for useAbility. "signature": the one whose keywords or text say so, else its
     // first action. Monsters from their stat block; heroes from the sheet the VTT holds.
+    getTargetFacts: function (id) {
+      const token = getPlacementFromStore(id);
+      const kind = objectRulesFor(token) ? 'object' : token?.monster || (token && isPlayerCharacterPlacement(token)) ? 'creature' : null;
+      return { kind };
+    },
     getAbility: async function (payload) {
       const found = abilityForPlacement(payload?.placementId, payload?.name);
       if (found || !payload?.placementId) return found;
@@ -15136,7 +15242,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const a = getPlacementFromStore(idA);
       const b = getPlacementFromStore(idB);
       if (!a || !b) return null;
-      return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
+      return abilityTargetDistance(a, b);
     },
     // The minion squad a token belongs to: members, the shared Stamina pool, how many are still
     // standing, and its captain. null when the token is not in a squad.
@@ -18071,10 +18177,7 @@ export function mountBoardInteractions(store, routes = {}) {
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
-      if (!target) {
-        blocked = true;
-        return;
-      }
+      if (!target) return;
       if (target.triggeredActionReady === false || target.triggeredActionUsedThisRound === true) {
         blocked = true;
         return;
@@ -18919,7 +19022,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const autoPlacement = autoId ? getPlacementFromStore(autoId) : null;
     if (autoPlacement) {
       const request = pendingAutomationTarget;
-      setTimeout(() => { if (pendingAutomationTarget === request) acceptAutomationTargetPlacement(getPlacementFromStore(autoId) || autoPlacement); }, 0);
+      setTimeout(async () => {
+        if (pendingAutomationTarget !== request) return;
+        const target = getPlacementFromStore(autoId);
+        if (!target) return;
+        const far = automationRangeShortfall(request.targetConfig, target);
+        if (far && !await confirmBoardAction(`${tokenLabel(target)} is ${far.distance} squares away, beyond this ability’s range of ${far.range}. Use it on this target anyway?`, { title: 'Maintained target', confirmText: 'Use anyway', cancelText: 'Review targets' })) return;
+        if (pendingAutomationTarget === request && getPlacementFromStore(autoId)) acceptAutomationTargetPlacement(getPlacementFromStore(autoId));
+      }, 0);
     }
   }
 
@@ -20262,6 +20372,7 @@ export function mountBoardInteractions(store, routes = {}) {
       payload,
       resolve,
       reject,
+      rangeOrigin: payload.rangeOrigin ? getPlacementFromStore(payload.rangeOrigin.id) || payload.rangeOrigin : null,
       sourcePlacement: { ...targetPlacement },
       targetPlacement,
       requestedDistance: distance,
@@ -20767,10 +20878,13 @@ export function mountBoardInteractions(store, routes = {}) {
     // moves another creature ("allies shift") moves it the same way: it is passed as its own source.
     const ownMove = Boolean(sourceSnapshot?.id) && sourceSnapshot.id === targetSnapshot?.id && request.movementKind !== 'teleport';
     // A square off the map is never a destination.
-    const listed = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
+    const center = request.rangeOrigin ? { ...targetSnapshot, column: request.rangeOrigin.column, row: request.rangeOrigin.row } : targetSnapshot;
+    const candidates = buildAutomationMoveLegalCells(sourceSnapshot, center, request.effectiveDistance, baseVerb);
+    if (request.rangeOrigin) candidates.push({ column: center.column, row: center.row, width: targetSnapshot.width, height: targetSnapshot.height });
+    const listed = cellsOnMap(candidates, clampPlacementToBounds, targetSnapshot);
     // A push, pull or slide offers only the squares it really reaches along its own straight line (Brandon, November 8,
     // 2026): one a wall or a rising face would stop it short of is not offered. Any square can still be picked, with a warning.
-    const forcedLine = (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
+    const forcedLine = request.movementKind !== 'teleport' && (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
     const onMap = forcedLine ? listed.filter((cell) => { try { return !globalThis.wallPrototype.forcedBlockedMove(targetSnapshot, { ...targetSnapshot, column: cell.column, row: cell.row }); } catch (error) { return true; } }) : listed;
     pendingAutomationMove = {
       ...request,
@@ -20985,7 +21099,21 @@ export function mountBoardInteractions(store, routes = {}) {
     if(request.movementKind==='teleport'){
       request.committing=true;
       const origin=getPlacementFromStore(request.targetSnapshot.id);
-      teleportChoice=await promptTeleport(origin,clamped,request.effectiveDistance);
+      teleportChoice=await promptTeleport(origin,clamped,request.effectiveDistance,null,request.rangeOrigin);
+      if (teleportChoice && request.payload?.previewTargets && request.sceneId === getActiveSceneId()) {
+        const spec = request.payload.previewTargets;
+        const caster = getPlacementFromStore(request.payload.sourcePlacement?.id) || request.sourcePlacement;
+        const landing = { ...origin, ...clamped, flightHeight: teleportChoice.height };
+        const nearby = getPlacementsForActiveScene().filter(other => {
+          if (other.id === origin?.id || isAutomationPlacementHidden(other) || !doesAutomationTargetFilterMatch(other, spec.predicate, caster)) return false;
+          const distance = abilityTargetDistance(landing, other);
+          return Number.isFinite(distance) && distance <= spec.within;
+        });
+        const place = await confirmBoardAction('Affected at this landing: ' + (nearby.map(tokenLabel).join(', ') || 'no visible targets') + '.', { title: 'Teleport landing', confirmText: 'Place here', cancelText: 'Pick again' });
+        if (request.sceneId !== getActiveSceneId() || pendingAutomationMove !== request) return true;
+        if (!place) { request.committing = false; return true; }
+      }
+      if (teleportChoice && request.rangeOrigin) teleportChoice = { ...teleportChoice, allowOutOfRange: true };
       if(!teleportChoice||request.sceneId!==getActiveSceneId()){clearAutomationMoveOverlay();request.resolve?.({skipped:true,reason:'user-cancel'});return true;}
     }
     let forcedIntent=null,forcedCollision=null;
@@ -21203,7 +21331,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // Why a picked square is not one the move offers: too far, or (a push or a pull) not farther or closer every step.
   function automationMoveWarning(request, destination) {
     const name = request.targetSnapshot?.name || 'It';
-    const moved = automationChebyshevDistance(request.targetSnapshot, destination);
+    const moved = automationChebyshevDistance(request.rangeOrigin || request.targetSnapshot, destination);
     const allowed = Number(request.effectiveDistance) || 0;
     const verb = String(request.verbLabel || 'move').toLowerCase();
     const by = tokenLabel(getPlacementFromStore(request.sourceSnapshot?.id)) || 'the mover';

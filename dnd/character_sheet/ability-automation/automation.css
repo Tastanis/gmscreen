@@ -3,6 +3,18 @@
    and the small "configured" pip on the character-sheet ability button.
    Replaces the v2 builder.css. */
 
+.power-roll-runner .pr5-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  margin-block: .35rem;
+}
+
+.power-roll-runner .pr5-target-row b {
+  flex: 1 1 8rem;
+}
+
 /* ---------- character-sheet button indicator ---------- */
 
 .automation-action-btn {

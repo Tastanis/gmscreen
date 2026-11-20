@@ -196,7 +196,48 @@ test('a maintained area stays past the start of the turn; one let go at the ques
   assert.deepEqual(ended[0][0], ['z-flower', 'z-other'], 'not maintained: the area ends at the start of his turn as written');
   // The question's answer ends what was let go.
   assert.match(section('  async function offerHeroicResourceRuleNow({', '  // The gain (or loss, or damage) taken:'),
-    /setMaintainedAbilities\(placement\.id, choice\.kept\);\s*endZonesOfDroppedMaintenance\(placement\.id, maintained\.filter\(\(item\) => !choice\.kept\.some/);
+    /endZonesOfDroppedMaintenance\(placement\.id, dropped\)/);
+});
+
+test('classes with rolled gains or no turn-start gain get one upkeep decision', async () => {
+  const attach = new Function(section('  function attachTurnMaintenance(', '  async function processHeroicResourceAutomationEvent(') + '; return attachTurnMaintenance;')();
+  const [fallback] = attach([]);
+  const gains = [1,2].map(n => ({id:'gain' + n, effect:{kind:'gain', amount:n}}));
+  const [rolled, extra] = attach(gains);
+  assert.equal(rolled.maintenanceOffer, true);
+  assert.equal(extra.maintenanceOffer, false);
+
+  for (const [rule, hasDice] of [[fallback,false], [rolled,true]]) {
+    const placement = {id:'caster', maintainedAbilities:[{id:'test',value:1}]};
+    const offers = [], applied = [];
+    const deps = {
+      characterSummaryCache: new Map(), getAutomationSheetForPlacement: async () => ({hero:{resource:{value:1}}}),
+      noteResourceLevel() {}, getSheetHeroicResourceContext: () => ({}),
+      previewHeroicResourceAmount: () => ({amount:0, hasDice, label:'1d3'}),
+      resolveHeroicResourceAmount: () => ({amount:hasDice ? 3 : 0}),
+      normalizeHeroicResourceChange: (_rule,_sheet,amount) => ({current:1, next:1+amount, resourceName:'Test resource'}),
+      getPlacementFromStore: () => placement, getMaintainedAbilities: token => token.maintainedAbilities,
+      formatHeroicResourcePrompt: () => '', heroicResourceEventSentence: () => '', markHeroicResourceRuleLimit() {},
+      queueMaintainPrompt: async ({gain, maintained}) => { offers.push(gain); return {applied:true,kept:maintained,again:[]}; },
+      queueHeroicResourcePrompt: async () => ({applied:true}),
+      getActiveSceneId: () => 'practice', combatRound:1, activeCombatantId:'caster',combatActive:true,
+      setMaintainedAbilities() {},endZonesOfDroppedMaintenance() {}, updateStatus() {}, tokenLabel: () => 'Caster',
+      inCausingUndoGroup: (_group,_label,take) => take(), takeHeroicResourceRule: data => applied.push(data.amount),
+    };
+    const offer = new Function('deps', `with(deps) { ${section('  function reconcileMaintenanceChoice(', '  function setMaintainedAbilities(')}
+      ${section('  async function offerHeroicResourceRuleNow(', '  // The gain (or loss, or damage) taken:')}
+      return offerHeroicResourceRuleNow; }`)(deps);
+    await offer({eventType:'turnStart',rule,placement,sheet:{hero:{}},resource:{value:1}});
+    assert.deepEqual(offers, [hasDice ? 3 : 0]);
+    assert.deepEqual(applied, hasDice ? [2] : []);
+  }
+});
+
+test('a turn-start decision preserves new casts and charges only chosen casts still on the board', () => {
+  const reconcile = new Function(section('  function reconcileMaintenanceChoice(', '  function setMaintainedAbilities(') + '; return reconcileMaintenanceChoice;')();
+  const [keep, drop, expired, added] = ['keep','drop','expired','new'].map(id => ({ id, value: 2 }));
+  const result = reconcile([keep, drop, added], [keep, drop, expired], [keep, expired]);
+  assert.deepEqual(result, { remaining: [keep, added], dropped: [drop], upkeep: 2 });
 });
 
 // ---------------------------------------------------------------- markings (Brandon, November 11, 2026)
@@ -216,6 +257,7 @@ function markingBoard({ gm = false, me = 'zepha-player' } = {}) {
   const deps = {
     boardApi: { getState: () => ({}) },
     getActiveScenePlacements: () => placements,
+    getActiveSceneId: () => 'test-scene',
     getPlacementFromStore: (id) => placements.find((p) => p.id === id) || null,
     updatePlacementById: (id, fn) => { fn(placements.find((p) => p.id === id)); return true; },
     tokenLabel: (p) => p?.name || '',
@@ -246,6 +288,51 @@ test('a maintained ability shows on the creature it is on; one with no creature 
   assert.deepEqual(on('cal'), []);
   placements.splice(1, 1);                         // the goblin is gone from the map: the marking falls back to Zepha
   assert.deepEqual(on('zepha').map(([text]) => text), [`${FLESH.name} (Zepha)`, `${FLOWER.name} (Zepha)`]);
+});
+
+test('cumulative damage asks once per cast at its threshold and only ends confirmed casts', async () => {
+  const hero = { id: 'hero', name: 'Practice hero', maintainedAbilities: [
+    {id:'ward', castId:'ward', name:'Ward', value:1, damageThreshold:10},
+    {id:'web', castId:'web', name:'Web', value:1, damageThreshold:15},
+    {id:'third', castId:'third', name:'Other effect', value:1},
+  ] };
+  const ended = [], prompts = [];
+  const deps = {
+    combatActive:true, combatRound:1, activeCombatantId:'foe',
+    getPlacementFromStore: () => hero, updatePlacementById: (id, edit) => edit(hero),
+    getAutomationProfileIdForPlacement: () => 'hero', getLinkedProfileUserIdForPlacement: () => 'player',
+    getCurrentUserId: () => 'player', normalizeProfileId: id => id,
+    queueHeroicResourcePrompt: async prompt => { prompts.push(prompt.message); return {applied: prompts.length === 2}; },
+    endZonesOfDroppedMaintenance: (id, list) => ended.push(...list.map(item=>item.id)),
+    tokenLabel: placement => placement.name, sayInChat: () => {},
+  };
+  const hit = new Function('deps', `with (deps) { ${section('  function getMaintainedAbilities(placement) {', '  function sayInChat(')}
+    ${section('  async function noteMaintainedDamage(', '  function clearMaintainedAbilitiesAtCombatEnd(')}
+    return noteMaintainedDamage; }`)(deps);
+  for (const amount of [6,4,2,3]) await hit({targetId:hero.id, amount});
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[0], /Ward \(10\)/);
+  assert.match(prompts[1], /Web \(15\)/);
+  assert.deepEqual(ended, ['web']);
+  assert.deepEqual(hero.maintainedAbilities.map(item=>item.id), ['ward','third']);
+});
+
+test('two structured casts of the same spell keep individual targets and zone IDs through a retry and reload', async () => {
+  const {api,placements}=markingBoard({gm:true,me:'gm'});
+  const actor=placements[0];
+  actor.maintainedAbilities=[];
+  const metadata={actorId:actor.id,actionId:'practice-spell',actionName:'The Flesh, a Crucible',persistent:1,maintenance:{mode:'targets',action:'free'}};
+  for(const [castId,targetId] of [['cast-a','gob'],['cast-b','cal'],['cast-a','gob']]) {
+    await api.offerMaintainPersistentAbility({...metadata,castId,targetIds:[targetId]});
+  }
+  actor.maintainedAbilities=JSON.parse(JSON.stringify(actor.maintainedAbilities));
+  const before=api.getMaintainedAbilities(actor);
+  assert.deepEqual(before.map(item=>[item.id,item.targetIds]),[['cast-a',['gob']],['cast-b',['cal']]]);
+  const matches=new Function(section('  function zoneBelongsToMaintained(', '  // Abilities let go')+'; return zoneBelongsToMaintained;')();
+  assert.equal(matches({abilityId:'practice-spell',castId:'cast-a'},before[1]),false);
+  assert.equal(matches({abilityId:'practice-spell',castId:'cast-a'},before[0]),true);
+  assert.equal(api.stopMaintainingAbility(actor.id,'cast-a'),true);
+  assert.deepEqual(api.getMaintainedAbilities(actor).map(item=>item.id),['cast-b']);
 });
 
 test("the × is for Zepha's player and the Director only; it stops the maintenance, its area and its markings", () => {
@@ -293,7 +380,9 @@ test('used again, it goes to the creatures carrying the marking; out of range is
   const request = section('  function handleAutomationTargetRequest(event) {', '  function clearAutomationTargetPrompt() {');
   assert.match(request, /autoPickTargetIds[^]*?acceptAutomationTargetPlacement\(/, 'picked through the ordinary pick');
   assert.match(section('  function acceptAutomationTargetPlacement(placement) {', '  function handleAutomationAreaRequest('), /Targeted anyway\./, 'which warns past range and goes on');
-  assert.match(section('  async function runMaintainedAgain(', '  // Damage to a hero who maintains something'), /presetTargetIds: \(getMaintainedAbilities\(fresh\)/);
+  const rerun = section('  async function runMaintainedAgain(', '  // Damage to a hero who maintains something');
+  assert.match(rerun, /getMaintainedAbilities\(fresh\)\.filter/);
+  assert.match(rerun, /markedIds\.filter\(targetId => getPlacementFromStore\(targetId\)\)/);
 });
 
 test('the marking is drawn with the conditions, in its own look, with an × only where it may be stopped', async () => {

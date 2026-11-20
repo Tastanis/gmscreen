@@ -447,6 +447,14 @@ function createUiDriver(window, script) {
 
     if (acceptButton) {
       const host = document.getElementById('ability-automation-runner');
+      if (host && host.getAttribute('data-harness-row-selected') !== 'true' && script.rollRowClick) {
+        host.setAttribute('data-harness-row-selected', 'true');
+        const { row, kind } = script.rollRowClick;
+        const control = [...document.querySelectorAll('[data-roll-row]')].find(b => b.getAttribute('data-roll-row') === String(row) && b.getAttribute('data-row-adjust') === kind);
+        if (!control) throw new Error('Target roll control missing');
+        control.click();
+        return;
+      }
       if (host && host.getAttribute('data-harness-surges-selected') !== 'true') {
         const requestedSurges = Number(script.powerRollSurges[acceptedPowerRolls] || 0);
         for (let index = 0; index < requestedSurges; index += 1) {
@@ -514,6 +522,7 @@ export async function createAbilityAutomationHarness(options = {}) {
 
   async function runAutomation(runOptions = {}) {
     const script = {
+      rollRowClick: runOptions.rollRowClick,
       targetSelections: [...(runOptions.targetSelections || options.targetSelections || [baseTargets[0]])],
       areaSelections: [...(runOptions.areaSelections || options.areaSelections || [])],
       damageTypeChoices: [...(runOptions.damageTypeChoices || options.damageTypeChoices || [])],

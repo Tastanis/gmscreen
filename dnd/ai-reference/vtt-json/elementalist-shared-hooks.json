@@ -1,0 +1,392 @@
+{
+  "Ward of Nature's Affection": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [
+      {
+        "type": "trigger",
+        "match": {
+          "event": "damage",
+          "filter": {"whose": "self", "withinSquares": {"source": "attribute", "name": "Reason"}}
+        },
+        "effectTarget": "eventSource",
+        "effects": [
+          {
+            "kind": "forcedMovement",
+            "verb": "slide",
+            "distance": 0,
+            "attribute": "Reason",
+            "multiplier": 1,
+            "upTo": true
+          }
+        ]
+      }
+    ]
+  },
+  "Grasp of Beyond": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [
+      {
+        "type": "target",
+        "name": "enemy",
+        "mode": "token",
+        "predicate": "creature",
+        "distance": {"form": "melee", "value": 1}
+      },
+      {
+        "type": "powerRoll",
+        "target": "enemy",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {
+            "effects": [{"kind": "damage", "amount": 3, "damageType": "corruption", "attribute": "Reason"}]
+          },
+          "tier2": {
+            "effects": [{"kind": "damage", "amount": 6, "damageType": "corruption", "attribute": "Reason"}]
+          },
+          "tier3": {
+            "effects": [{"kind": "damage", "amount": 9, "damageType": "corruption", "attribute": "Reason"}]
+          }
+        }
+      },
+      {
+        "type": "effect",
+        "target": "self",
+        "effects": [{"kind": "teleport", "distance": {"source": "attribute", "name": "Reason"}}]
+      }
+    ]
+  },
+  "Practical Magic": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [
+      {
+        "type": "choice",
+        "name": "practical",
+        "prompt": "Which effect?",
+        "options": [
+          {
+            "id": "knockback",
+            "label": "Knockback",
+            "cards": [
+              {
+                "type": "target",
+                "name": "subject",
+                "mode": "token",
+                "predicate": "creature",
+                "distance": {"form": "ranged", "value": {"source": "abilityRange", "name": "Hurl Element"}},
+                "eligible": [{"casterSizeOrSmaller": true}, {"maxSizeFrom": {"attribute": "Might", "minimum": 2}}]
+              },
+              {
+                "type": "powerRoll",
+                "target": "subject",
+                "attribute": "Reason",
+                "targetTiers": true,
+                "tiers": {
+                  "tier1": {"effects": [{"kind": "forcedMovement", "verb": "push", "distance": 1}]},
+                  "tier2": {"effects": [{"kind": "forcedMovement", "verb": "push", "distance": 2}]},
+                  "tier3": {"effects": [{"kind": "forcedMovement", "verb": "push", "distance": 3}]}
+                },
+                "allowCritical": false
+              }
+            ]
+          },
+          {
+            "id": "damage",
+            "label": "Elemental damage",
+            "cards": [
+              {
+                "type": "target",
+                "name": "subject",
+                "mode": "token",
+                "predicate": "creature",
+                "distance": {"form": "ranged", "value": {"source": "abilityRange", "name": "Hurl Element"}}
+              },
+              {
+                "type": "effect",
+                "target": "subject",
+                "effects": [
+                  {
+                    "kind": "damage",
+                    "amount": 0,
+                    "attribute": "Reason",
+                    "damageTypeOptions": ["acid", "cold", "corruption", "fire", "lightning", "poison", "sonic"]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "teleport",
+            "label": "Teleport",
+            "cards": [
+              {
+                "type": "effect",
+                "target": "self",
+                "effects": [
+                  {
+                    "kind": "teleport",
+                    "distance": {"source": "attribute", "name": "Reason"},
+                    "spend": {
+                      "resource": "Essence",
+                      "amount": 1,
+                      "maxAmount": "available",
+                      "perAmount": 1,
+                      "allowOverride": true
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Bifurcated Incineration": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [
+      {
+        "type": "target",
+        "name": "targets",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "distance": {"form": "ranged", "value": 10},
+        "count": {"mode": "exact", "value": 2}
+      },
+      {
+        "type": "powerRoll",
+        "target": "targets",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 2, "damageType": "fire"}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 4, "damageType": "fire"}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 6, "damageType": "fire"}]}
+        }
+      }
+    ]
+  },
+  "Behold the Mystery": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "maintenance": {"cost": 1, "mode": "repeat", "action": "maneuver", "breakOnTurnDamage": {"source": "attribute", "name": "Reason", "multiply": 5, "min": 1}},
+    "cards": [
+      {
+        "type": "target",
+        "name": "area",
+        "mode": "area",
+        "predicate": "enemy",
+        "shape": "cube",
+        "size": 3,
+        "distance": {"form": "cube", "value": 3, "within": 10}
+      },
+      {
+        "type": "powerRoll",
+        "target": "area",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 2, "damageType": "psychic"}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 4, "damageType": "psychic"}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 6, "damageType": "psychic"}]}
+        }
+      }
+    ]
+  },
+  "Conflagration": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "maintenance": {"cost": 2, "mode": "repeat", "action": "maneuver", "breakOnTurnDamage": {"source": "attribute", "name": "Reason", "multiply": 5, "min": 1}},
+    "cards": [
+      {
+        "type": "target",
+        "name": "area",
+        "mode": "area",
+        "predicate": "enemy",
+        "shape": "cube",
+        "size": 3,
+        "distance": {"form": "cube", "value": 3, "within": 10}
+      },
+      {
+        "type": "powerRoll",
+        "target": "area",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 4, "damageType": "fire"}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 6, "damageType": "fire"}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 10, "damageType": "fire"}]}
+        }
+      }
+    ]
+  },
+  "Earth Rejects You": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "maintenance": {"cost": 2, "mode": "repeat", "action": "maneuver", "breakOnTurnDamage": {"source": "attribute", "name": "Reason", "multiply": 5, "min": 1}},
+    "cards": [
+      {
+        "type": "target",
+        "name": "area",
+        "mode": "area",
+        "predicate": "creatureOrObject",
+        "shape": "cube",
+        "size": 5,
+        "distance": {"form": "cube", "value": 5, "within": 10},
+        "eligible": [{"relation": "enemy"}, {"kind": "object"}]
+      },
+      {
+        "type": "powerRoll",
+        "target": "area",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 6}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 9}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 13}]}
+        }
+      }
+    ]
+  },
+  "Translated Through Flame": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [
+      {
+        "type": "target",
+        "name": "friend",
+        "mode": "token",
+        "predicate": "selfOrAlly",
+        "distance": {"form": "ranged", "value": 10}
+      },
+      {
+        "type": "effect",
+        "target": "friend",
+        "effects": [
+          {
+            "kind": "teleport",
+            "distance": 10,
+            "rangeOrigin": "self",
+            "previewTargets": {"within": 1, "predicate": "enemy"}
+          }
+        ]
+      },
+      {
+        "type": "target",
+        "name": "splash",
+        "mode": "token",
+        "predicate": "enemy",
+        "near": {"teleport": "landing", "within": 1},
+        "count": "all"
+      },
+      {
+        "type": "powerRoll",
+        "target": "splash",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 3, "damageType": "fire"}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 5, "damageType": "fire"}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 8, "damageType": "fire"}]}
+        }
+      }
+    ]
+  },
+  "The Flesh, a Crucible": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "maintenance": {"cost": 1, "mode": "targets", "action": "free", "breakOnTurnDamage": {"source": "attribute", "name": "Reason", "multiply": 5, "min": 1}},
+    "cards": [
+      {
+        "type": "target",
+        "name": "burning",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "distance": {"form": "ranged", "value": 10}
+      },
+      {
+        "type": "powerRoll",
+        "target": "burning",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {"effects": [{"kind": "damage", "amount": 5, "damageType": "fire", "attribute": "Reason"}]},
+          "tier2": {"effects": [{"kind": "damage", "amount": 8, "damageType": "fire", "attribute": "Reason"}]},
+          "tier3": {"effects": [{"kind": "damage", "amount": 11, "damageType": "fire", "attribute": "Reason"}]}
+        }
+      }
+    ]
+  },
+  "Web of All That's Come Before": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "maintenance": {"cost": 1, "mode": "extend", "action": "free", "breakOnTurnDamage": {"source": "attribute", "name": "Reason", "multiply": 5, "min": 1}},
+    "cards": [
+      {
+        "type": "target",
+        "name": "area",
+        "mode": "area",
+        "predicate": "enemy",
+        "shape": "cube",
+        "size": 4,
+        "distance": {"form": "cube", "value": 4, "within": 10}
+      },
+      {
+        "type": "powerRoll",
+        "target": "area",
+        "attribute": "Reason",
+        "targetTiers": true,
+        "tiers": {
+          "tier1": {
+            "effects": [
+              {"kind": "damage", "amount": 2, "damageType": "corruption"},
+              {
+                "kind": "potency",
+                "attribute": "Agility",
+                "level": "weak",
+                "onFail": [{"kind": "condition", "name": "restrained", "duration": "saveEnds"}]
+              }
+            ]
+          },
+          "tier2": {
+            "effects": [
+              {"kind": "damage", "amount": 3, "damageType": "corruption"},
+              {
+                "kind": "potency",
+                "attribute": "Agility",
+                "level": "average",
+                "onFail": [{"kind": "condition", "name": "restrained", "duration": "saveEnds"}]
+              }
+            ]
+          },
+          "tier3": {
+            "effects": [
+              {"kind": "damage", "amount": 5, "damageType": "corruption"},
+              {
+                "kind": "potency",
+                "attribute": "Agility",
+                "level": "strong",
+                "onFail": [{"kind": "condition", "name": "restrained", "duration": "saveEnds"}]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "persistent",
+        "target": "area",
+        "label": "Web",
+        "cost": 0,
+        "tickAt": "never",
+        "expiresAt": "startOfTurn",
+        "difficultTerrain": 2,
+        "triggers": ["onOccupantTurnEnd"],
+        "effects": [{"kind": "condition", "name": "restrained", "duration": "saveEnds"}]
+      }
+    ]
+  }
+}

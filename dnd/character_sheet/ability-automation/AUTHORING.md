@@ -13,6 +13,17 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 
 ---
 
+## Values, targets, rolls and maintained casts
+
+A recipe uses these fields on ordinary v3 cards. The ten Elementalist examples can be copied individually into a test ability’s automation editor. [Example recipes](../../ai-reference/vtt-json/elementalist-shared-hooks.json)
+
+- **Read a value at use time.** Use `{"source":"attribute","name":"Reason"}` or `{"source":"abilityRange","name":"Hurl Element"}` wherever a target card accepts `distance.value`, `distance.within` or `count.value`. A teleport effect’s `distance` and a trigger filter’s `withinSquares` accept the same references. Other sources are `victories`, `rollTotal`, `rollTier` (1–3) and `triggerAmount`. Integer `multiply`, `add`, `min` and `max` adjust the source. A missing value prompts for a ruling for this use.
+- **Describe eligibility and origin.** On a target card, `"eligible":[{"relation":"enemy"},{"kind":"object"}]` accepts either an enemy or an object. Conditions in the same object must all match. An unknown fact prompts for a one-use ruling. An explicit token pick outside the rule offers an override. A teleport can specify `"rangeOrigin":"self"` or a named target or area, plus `"previewTargets":{"within":1,"predicate":"enemy"}`. Follow it with a target card using `"near":{"teleport":"landing","within":1}` to resolve from the actual landing. Skipping the teleport leaves the splash group empty.
+- **Roll once against several targets.** Add `"targetTiers":true` to a power roll. The roller sees each target’s board suggestions, can adjust each row, then applies all rows together. Each target receives the effects for its accepted tier. Keep target-specific effects in `tiers`. Place caster effects that happen once in `oncePerRoll.tier1`, `tier2` and/or `tier3`, keyed to the shared roll’s tier before per-target adjustments. When the rules explicitly call for a fresh roll for each target, use `"rollMode":"individual"`. Use `"allowCritical":false` for a roll that cannot grant a critical hit.
+- **Maintain a particular cast.** Give the automation a top-level `"maintenance":{"cost":1,"mode":"targets","action":"free"}`. Each use has its own identity, target markings and linked zones. At the turn-start resource gain, the player chooses which casts to keep and which to use again. Excess upkeep offers an override and a net gain of zero. The action for a reuse can be `free`, `maneuver` or `main`. Choose `extend` to keep an area, `repeat` to run the opening cards again, or `targets` to roll against the marked targets of the selected casts together. Choose `steps` with a list of opening card IDs in `steps` or a dedicated sequence in `cards` to run a different upkeep effect using the original named groups and areas.
+
+A cast can also specify `maintenance.breakOnTurnDamage` as a number or action-value reference. It records the threshold at cast time. Reaching it with cumulative damage in one turn asks the player whether to end the affected casts. Omit the field for a cast that continues through damage.
+
 ## Top-level shape
 
 ```json

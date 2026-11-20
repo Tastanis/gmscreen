@@ -127,7 +127,9 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       const otherDistanceId = payload.sourceId || payloadTokenId;
       const squares = env.getSquareDistance(casterId, otherDistanceId);
       if (Number.isFinite(squares)) {
-        if (filter.withinSquares != null && squares > Number(filter.withinSquares)) return false;
+        const ref = filter.withinSquares;
+        const range = ref && typeof ref === 'object' ? env.getTriggerRange?.(casterId, ref, payload) : ref;
+        if (range != null && squares > Number(range)) return false;
         if (filter.minSquares != null && squares < Number(filter.minSquares)) return false;
       }
     }

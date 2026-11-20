@@ -2,6 +2,8 @@
 
 The canonical hook registry is `../../character_sheet/ability-automation/REGISTRY.md`. This file maps the registry to the code that implements the hooks.
 
+JSON authors can reference current action values, filter targets, choose a teleport origin, apply one roll by target, and maintain separate casts. [Field registry](../../character_sheet/ability-automation/REGISTRY.md#shared-action-hooks) · [Runnable recipes](../vtt-json/elementalist-shared-hooks.json)
+
 ## Main Flow
 
 1. Ability JSON is normalized by `../../character_sheet/ability-automation/schema.js`.
