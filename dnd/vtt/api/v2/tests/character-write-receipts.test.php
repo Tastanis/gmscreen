@@ -38,5 +38,11 @@ try {
     receiptCheck($failed && file_get_contents($file)===$before,'Failed encoding preserves the previous complete document.');
     receiptCheck(glob($dir.'/.character-save-*')===[],'No abandoned temporary files.');
     receiptCheck(json_decode(file_get_contents($file),true)['sharon']['surges']===7,'Other character data preserved.');
+    $openings = [];
+    receiptCheck(CharacterWriteReceipts::claimResourceOpening($openings, 'cal', 'fight-1'), 'The first writer initializes the balance.');
+    receiptCheck(!CharacterWriteReceipts::claimResourceOpening($openings, 'cal', 'fight-1'), 'A second seat keeps the balance already initialized.');
+    receiptCheck(CharacterWriteReceipts::claimResourceOpening($openings, 'cal', 'fight-2'), 'The next encounter gets its own opening.');
+    receiptCheck(!CharacterWriteReceipts::claimResourceOpening($openings, 'cal', 'fight-1'), 'A late opening from the previous encounter cannot reset the hero.');
+    receiptCheck(CharacterWriteReceipts::claimResourceOpening($openings, 'sharon', 'fight-1'), 'Another hero initializes independently.');
     echo "Character atomic save and operation receipts passed.\n";
 } finally {foreach(glob($dir.'/*') as $entry) unlink($entry);rmdir($dir);}

@@ -395,7 +395,7 @@ export function createHeroicResourceBoundaryQueue() {
   const balances = new Map();
   return async function run(profileId, eventType, apply) {
     const previous = balances.get(profileId);
-    const work = previous ? previous.then(apply, apply) : Promise.resolve().then(apply);
+    const work = previous ? previous.then(apply, apply) : Promise.resolve(apply());
     if (eventType !== 'combatStart' && eventType !== 'combatEnd') return work;
     balances.set(profileId, work);
     try {
@@ -404,6 +404,19 @@ export function createHeroicResourceBoundaryQueue() {
       if (balances.get(profileId) === work) balances.delete(profileId);
     }
   };
+}
+
+// Only an unconditional, deterministic opening set can be shared with the first turn.
+// Interactive, filtered, rolled and multi-rule openings keep their authored sequence.
+export function heroicResourceOpeningBalance(automation, context) {
+  const openings = normalizeHeroicResourceAutomation(automation).rules.filter(rule => rule.enabled && rule.event === 'combatStart');
+  if (openings.length !== 1) return null;
+  const [rule] = openings;
+  const amount = rule.effect.amount;
+  if (!rule.autoApply || rule.effect.kind !== 'set' || rule.limit || Object.keys(rule.filter).length
+    || Object.keys(amount).some(key => !['amount', 'from', 'bonus'].includes(key))
+    || (amount.from && amount.from !== 'victories')) return null;
+  return Math.max(0, resolveHeroicResourceAmount(amount, context).amount);
 }
 
 // A limited offer belongs to the fight (and possibly the round or turn) that produced it.

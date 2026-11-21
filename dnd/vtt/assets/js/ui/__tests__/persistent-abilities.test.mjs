@@ -214,7 +214,7 @@ test('classes with rolled gains or no turn-start gain get one upkeep decision', 
     const deps = {
       heroicResourceTimingAllows, heroicResourceCombatTiming: () => timing,
       characterSummaryCache: new Map(), getAutomationSheetForPlacement: async () => ({hero:{resource:{value:1}}}),
-      noteResourceLevel() {}, getSheetHeroicResourceContext: () => ({}),
+      noteResourceLevel() {}, getSheetHeroicResourceContext: () => ({}), resourceOpeningEncounterId: null,
       previewHeroicResourceAmount: () => ({amount:0, hasDice, label:'1d3'}),
       resolveHeroicResourceAmount: () => ({amount:hasDice ? 3 : 0}),
       normalizeHeroicResourceChange: (_rule,_sheet,amount) => ({current:1, next:1+amount, resourceName:'Test resource'}),

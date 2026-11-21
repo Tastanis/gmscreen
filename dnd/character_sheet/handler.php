@@ -1018,6 +1018,16 @@ switch ($action) {
                 $resourceInput['expectedValue'] = $expected;
             }
         }
+        if (isset($requestData['openingEncounterId'])) {
+            $opening = SheetChanges::whole($requestData['openingValue'] ?? null);
+            if ($opening === null || abs($opening) > 1000000 || isset($resourceInput['spend']) || isset($resourceInput['expectedValue'])
+                || (isset($resourceInput['value']) && $opening !== $resourceInput['value'])) {
+                throw new InvalidArgumentException('Invalid resource opening balance.');
+            }
+            if (!is_string($requestData['openingEncounterId'])) throw new InvalidArgumentException('Invalid resource opening encounter.');
+            $resourceInput['openingEncounterId'] = $requestData['openingEncounterId'];
+            $resourceInput['openingValue'] = $opening;
+        }
         $replayed = CharacterWriteReceipts::lookup($allSheets, $resourceOperationId, $currentUser, $requestedCharacter, $action, $resourceInput);
         if ($replayed !== null) sendJsonResponse($replayed);
         $finishResource = function(array $response, bool $changed = false) use (&$allSheets, $resourceOperationId, $currentUser, $requestedCharacter, $action, $resourceInput, $dataDir, $dataFile): void {
@@ -1028,6 +1038,14 @@ switch ($action) {
         if (!isset($sheet['hero']) || !is_array($sheet['hero'])) $sheet['hero'] = [];
         if (!isset($sheet['hero']['resource']) || !is_array($sheet['hero']['resource'])) $sheet['hero']['resource'] = [];
         $current = (int)($sheet['hero']['resource']['value'] ?? 0);
+        if (isset($resourceInput['openingEncounterId'])) {
+            if (CharacterWriteReceipts::claimResourceOpening($allSheets, $requestedCharacter, $resourceInput['openingEncounterId'])) {
+                $sheet['hero']['resource']['value'] = $resourceInput['openingValue'];
+            } elseif (isset($resourceInput['value'])) {
+                // The player has already initialized this fight; preserve gains and manual edits made since.
+                $finishResource(['success'=>true, 'resource'=>$current]);
+            }
+        }
         if (isset($resourceInput['spend'])) {
             $title = trim((string)($sheet['hero']['resource']['title'] ?? $sheet['sidebar']['resource']['title'] ?? ''));
             if ($asked !== '' && strcasecmp($asked, $title) !== 0) $finishResource(['success'=>false, 'error'=>'Upkeep resource does not match the character resource.']);

@@ -4,6 +4,18 @@ declare(strict_types=1);
 /** Receipts live in the same atomic JSON replacement as their character mutation. */
 final class CharacterWriteReceipts
 {
+    // Called under the sheet write lock. Either the opening set or the first turn gain can arrive first.
+    public static function claimResourceOpening(array &$data, string $character, string $encounter): bool
+    {
+        if ($encounter === '' || strlen($encounter) > 160) {
+            throw new InvalidArgumentException('Invalid resource opening encounter.');
+        }
+        $recent = $data['_vttResourceOpenings'][$character] ?? [];
+        if (in_array($encounter, $recent, true)) return false;
+        $data['_vttResourceOpenings'][$character] = [...array_slice($recent, -7), $encounter];
+        return true;
+    }
+
     public static function operationId($value): ?string
     {
         if ($value === null) return null; // Existing callers remain compatible.

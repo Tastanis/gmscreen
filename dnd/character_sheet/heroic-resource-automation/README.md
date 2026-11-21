@@ -81,6 +81,8 @@ At turn start the Table checks who is connected. The hero’s player receives th
 
 ## Amount Examples
 
+When combat starts with one unconditional automatic `set` rule using a fixed amount or Victories, the Table records that opening balance once per hero and encounter. A first-turn gain accepted while the Director is still saving can initialize the balance and add the gain in the same write.
+
 ```json
 { "amount": 2 }
 { "amount": "1d3" }

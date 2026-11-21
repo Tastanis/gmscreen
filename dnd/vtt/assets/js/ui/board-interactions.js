@@ -82,6 +82,7 @@ import { getPowerRollSuggestions, collectRollPassives } from './power-roll-sugge
 import {
   createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
+  heroicResourceOpeningBalance,
   heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
@@ -1356,6 +1357,9 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTurnPrompt();
     }
     applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
+    // An encounter already in progress when the page opens keeps its existing balance.
+    if (transition?.type === 'combat.start') resourceOpeningEncounterId = combat.encounterId;
+    if (transition?.type === 'combat.end') resourceOpeningEncounterId = null;
     // Each page keeps its own marks for "already this round" and "already this fight" (heroic resource rules,
     // ability limits). Only the one Director's page that runs the fight's effects cleared them, so on every
     // other page they lasted into the next fight, where round 1's "first time this round" gain was never offered.
@@ -4232,6 +4236,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let endingTurnCombatantId = null;
 
   function fireCombatStartBoundaries(round) {
+    resourceOpeningEncounterId = combatEncounterId;
     // Establish each hero's starting balance before a turn gain can be offered.
     // Other combat-start triggers still see the reset Surges.
     processHeroicResourceAutomationEvent('combatStart', { round, activeCombatantId }).catch((err) => {
@@ -4449,6 +4454,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // again on this page (an area attack used to open one popup per creature hit).
   const pendingResourceLimitKeys = new Set();
   const runAfterResourceBalance = createHeroicResourceBoundaryQueue();
+  let resourceOpeningEncounterId = null;
   function heroicResourceLimitKey(rule, placementId, appliedTargetId = '') {
     if (!rule?.limit?.key || !placementId) return '';
     const scope = String(rule.limit.scope || 'round').toLowerCase();
@@ -4936,12 +4942,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
     const currentUserId = normalizeProfileId(getCurrentUserId());
+    const encounterBoundary = eventType === 'combatStart' || eventType === 'combatEnd';
     async function processPlacement(placement, profileId) {
       const linkedPlayer = getLinkedProfileUserIdForPlacement(placement.id);
       const turnRecipient = eventType === 'turnStart' ? normalizeProfileId(payload.resourceRecipientId) : null;
       const directorStartsDummyTurn = eventType === 'turnStart' && isGmUser() && isDummyId(profileId);
       const controllerId = turnRecipient || linkedPlayer || (directorStartsDummyTurn ? currentUserId : normalizeProfileId(profileId));
       const isController = Boolean(controllerId) && controllerId === currentUserId;
+      if (encounterBoundary) characterSummaryCache.delete(profileId);
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
@@ -4962,6 +4970,7 @@ export function mountBoardInteractions(store, routes = {}) {
             profileId,
             sheet,
             resource,
+            freshSheet: encounterBoundary && rule.autoApply && rule === matching[0],
             rule,
             eventTargetId,
             undoGroup,
@@ -4985,7 +4994,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const profileId = getAutomationProfileIdForPlacement(placement.id);
       if (profileId) return runAfterResourceBalance(profileId, eventType, () => processPlacement(placement, profileId));
     }
-    if (eventType === 'combatStart' || eventType === 'combatEnd') {
+    if (encounterBoundary) {
       await Promise.all(placements.map(run));
     } else {
       for (const placement of placements) await run(placement);
@@ -5147,7 +5156,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false, freshSheet = false }) {
     // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
     const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
     const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
@@ -5157,18 +5166,21 @@ export function mountBoardInteractions(store, routes = {}) {
     if (limitKey && !reservedBySender && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
     if (lockKey) pendingResourceLimitKeys.add(lockKey);
     try {
-      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing });
+      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed });
     } finally {
       if (lockKey) pendingResourceLimitKeys.delete(lockKey);
     }
   }
 
-  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing }) {
+  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed }) {
     // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
     // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
     // the gain itself was right, being an amount).
-    characterSummaryCache.delete(profileId);
-    const latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    let latest = sheet;
+    if (!freshSheet) {
+      characterSummaryCache.delete(profileId);
+      latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    }
     const isCurrent = () => heroicResourceTimingAllows(rule, eventType, timing, heroicResourceCombatTiming());
     if (!isCurrent()) return;
     if (latest?.hero?.resource && typeof latest.hero.resource === 'object') {
@@ -5177,6 +5189,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     noteResourceLevel(profileId, resource?.value);
     const context = getSheetHeroicResourceContext(sheet, resource);
+    const opensBalance = eventType === 'combatStart' || (eventType === 'turnStart' && timing.round === 1 && rule.effect.kind === 'gain');
+    const openingValue = opensBalance && timing.encounterId && timing.encounterId === resourceOpeningEncounterId
+      ? heroicResourceOpeningBalance(resource?.automation, context) : null;
+    const opening = openingValue == null ? null : { openingEncounterId: timing.encounterId, openingValue };
     const preview = previewHeroicResourceAmount(rule.effect.amount, context);
     let shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
     const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && rule.maintenanceOffer !== false
@@ -5236,26 +5252,29 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
     } else if (!rule.autoApply) {
+      // When the player opens the very first turn, the Director may still be saving the opening
+      // balance. The gain is a delta; show that amount until the server confirms the new total.
+      const firstTurnOnPlayer = eventType === 'turnStart' && opening && !routed && !isGmUser();
+      const offeredAmount = shouldRollAfterPrompt ? (preview.label || 'dice') : amount;
+      let detail = shouldRollAfterPrompt ? `${change.current} + ${offeredAmount}` : `${change.current} -> ${change.next}`;
+      if (firstTurnOnPlayer) detail = `+${offeredAmount} ${resourceName}`;
+      if (rule.effect.kind === 'damage') detail = `${tokenLabel(placement) || 'Hero'} will take ${offeredAmount} damage.`;
       // Saying Cancel leaves the once-per-round free (it is only used when the gain is taken).
       const promptResult = await queueHeroicResourcePrompt({
         title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
         message: question,
-        detail: rule.effect.kind === 'damage'
-          ? `${tokenLabel(placement) || 'Hero'} will take ${shouldRollAfterPrompt ? (preview.label || 'dice') : amount} damage.`
-          : shouldRollAfterPrompt
-            ? `${change.current} + ${preview.label || 'dice'}`
-            : `${change.current} -> ${change.next}`,
+        detail,
         applyLabel: rule.applyLabel || (rule.effect.kind === 'damage' ? 'Take the damage' : 'Yes'),
         dismissLabel: rule.cancelLabel || 'Cancel',
       }, isCurrent);
       if (!promptResult?.applied) return;
     }
     if (!isCurrent()) { updateStatus('That resource offer has expired.'); return; }
-    return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }));
+    return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName, opening }));
   }
 
   // The gain (or loss, or damage) taken: the limit used now, then the write, all under the causing action's undo.
-  async function takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }) {
+  async function takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName, opening }) {
     if (rule.limit) markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     if (shouldRollAfterPrompt) {
       const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
@@ -5272,7 +5291,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // that copy was behind: a turn's gain or the reset at the end of a fight was then simply lost. "Set to N"
     // (the start and the end of a fight) is a set whatever the number was.
     const saved = await syncHeroResourceValueForProfile(profileId,
-      rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet);
+      rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet, opening);
     if (!saved) {
       characterSummaryCache.delete(profileId);
       if (rule.limit) unmarkHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
@@ -5289,12 +5308,13 @@ export function mountBoardInteractions(store, routes = {}) {
   // refresh the same way.
   // `write` is {delta: n} (an amount the server adds to its own number) or {value: n} (a set). The answer is where
   // the sheet now stands, and that is what the copy kept here is given. Returns {resource} or false.
-  async function syncHeroResourceValueForProfile(profileId, write, sheetForCache = null) {
+  async function syncHeroResourceValueForProfile(profileId, write, sheetForCache = null, opening = null) {
     if (!profileId) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     try {
       const answer = await confirmResourceWrite(endpoint, {
         character: profileId,
+        ...opening,
         ...(write && write.value === undefined && Number.isFinite(Number(write.delta))
           ? { delta: String(Math.trunc(Number(write.delta))) }
           : { value: String(Math.trunc(Number(write?.value) || 0)) }),

@@ -4,12 +4,24 @@ import assert from 'node:assert/strict';
 import {
   createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
+  heroicResourceOpeningBalance,
   heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from '../heroic-resource-automation.js';
+
+test('only a single automatic opening with a known balance can accompany an early gain', () => {
+  const rule = { event: 'combatStart', effect: { kind: 'set', amount: { from: 'victories' } }, autoApply: true };
+  const opening = (...rules) => heroicResourceOpeningBalance({ rules }, { victories: 4 });
+  assert.equal(opening(rule), 4);
+  assert.equal(opening({ ...rule, effect: { kind: 'set', amount: 0 } }), 0);
+  assert.equal(opening({ ...rule, autoApply: false }), null);
+  assert.equal(opening({ ...rule, filter: { whose: 'enemy' } }), null);
+  assert.equal(opening({ ...rule, effect: { kind: 'set', amount: '1d3' } }), null);
+  assert.equal(opening(rule, rule), null);
+});
 
 test('a fast first turn gains Essence on top of the starting balance, independently for each hero', async () => {
   const run = createHeroicResourceBoundaryQueue();
