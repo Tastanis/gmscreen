@@ -4,6 +4,8 @@
 // wall-prototype.js, which owns the walls and saves them.
 import {isBreakable,isBroken,MATERIALS} from './wall-properties.mjs';
 import {intersectsFloor,resolveSupportSurfaces} from './floor-support.js';
+import {wallCubeBase,wallSquareKey} from './wall-cubes.js';
+import {wallRubble,wallStamina} from './wall-break.mjs';
 
 // ---- Breakable floor plates (plan part 4, Brandon, November 8 and 11, 2026; FloorSupport.php). A `kind: floor` plate
 // with a `material` breaks one grid square at a time; `broken` lists the broken squares "col,row". A square is named
@@ -70,7 +72,13 @@ export function syncHeldSquares(before,model){
  * of its own is one thing. Each: {key, edges, broken (every piece broken), material, box {left,top,right,bottom},
  * lines [[a,b],...] in squares}. Walls with no material are never listed.
  */
-export function breakableThings(model) {
+function squareThing(c, r, fields) {
+  const corners = [{ x: c, y: r }, { x: c + 1, y: r }, { x: c + 1, y: r + 1 }, { x: c, y: r + 1 }];
+  return { ...fields, closed: true, edges: [], box: { left: c, top: r, right: c + 1, bottom: r + 1 },
+    lines: corners.map((p, i) => [p, corners[(i + 1) % 4]]) };
+}
+
+export function breakableThings(model, templates = [], config = {}, groundAt) {
   const nodes = new Map((model?.nodes || []).map((n) => [n.id, n])), things = new Map();
   for (const edge of model?.segments || []) {
     if (!isBreakable(edge)) continue;
@@ -91,9 +99,18 @@ export function breakableThings(model) {
   for (const plate of breakablePlates(model)) {
     const broken = new Set(plate.broken);
     for (const [c, r] of plateSquares(plate)) {
-      const corners = [{ x: c, y: r }, { x: c + 1, y: r }, { x: c + 1, y: r + 1 }, { x: c, y: r + 1 }];
-      things.set('square:' + plateSquareId(plate.id, c, r), { key: 'square:' + plateSquareId(plate.id, c, r), plate: plate.id, square: `${c},${r}`, height: Number(plate.height) || 0,
-        edges: [], lines: corners.map((p, i) => [p, corners[(i + 1) % 4]]), material: plate.material, box: { left: c, top: r, right: c + 1, bottom: r + 1 }, broken: broken.has(`${c},${r}`), closed: true });
+      const key = 'square:' + plateSquareId(plate.id, c, r);
+      things.set(key, squareThing(c, r, { key, plate: plate.id, square: `${c},${r}`, height: Number(plate.height) || 0,
+        material: plate.material, broken: broken.has(`${c},${r}`) }));
+    }
+  }
+  for (const wall of Object.values(templates)) {
+    if (wall.type !== 'wall' || wallStamina(wall) === null) continue;
+    for (const square of wall.squares || []) {
+      const cubeKey = wallSquareKey(square), key = `template-cube:${wall.id}:${cubeKey}`;
+      const base = wallCubeBase(wall, square, config, groundAt), broken = square.broken === true;
+      things.set(key, squareThing(square.column, square.row, { key, templateId: wall.id, cubeKey,
+        base, height: broken ? base : base + 1, material: wallRubble(wall), broken }));
     }
   }
   return [...things.values()];
@@ -110,9 +127,9 @@ export function thingAt(things, p, reach = 0.4) {
   if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
   // A plate square only counts with the pointer inside it (squares touch), and where plates stack the one nearest the
   // height picked (`p.z`, the 3D board) wins.
-  const inside = things.filter((t) => t.closed && (t.plate ? p.x >= t.box.left && p.x < t.box.right && p.y >= t.box.top && p.y < t.box.bottom : p.x >= t.box.left - 0.05 && p.x <= t.box.right + 0.05 && p.y >= t.box.top - 0.05 && p.y <= t.box.bottom + 0.05));
+  const inside = things.filter((t) => t.closed && (t.plate || t.templateId ? p.x >= t.box.left && p.x < t.box.right && p.y >= t.box.top && p.y < t.box.bottom : p.x >= t.box.left - 0.05 && p.x <= t.box.right + 0.05 && p.y >= t.box.top - 0.05 && p.y <= t.box.bottom + 0.05));
   const area = (t) => (t.box.right - t.box.left) * (t.box.bottom - t.box.top);
-  const off = (t) => (Number.isFinite(p.z) && t.plate ? Math.abs(t.height - p.z) : 0);
+  const off = (t) => (Number.isFinite(p.z) && Number.isFinite(t.height) ? Math.abs(t.height - p.z) : 0);
   if (inside.length) return inside.sort((a, b) => (Number.isFinite(p.z) ? off(a) - off(b) : 0) || area(a) - area(b))[0];
   let best = null, nearest = reach;
   for (const thing of things) for (const [a, b] of thing.lines) { const d = distanceToLine(p, a, b); if (d < nearest) { nearest = d; best = thing; } }

@@ -208,7 +208,7 @@ function tick(){
    // Store snapshots retain references until a mutation; serialize large floor cutouts only then.
    if(!cubeInputs||cubeInputs.scene!==cubeScene||cubeInputs.templates!==cubeTemplates||cubeInputs.levels!==cubeLevels){
      cubeInputs={scene:cubeScene,templates:cubeTemplates,levels:cubeLevels};
-     const cubeKey=JSON.stringify([cubeScene,cubeTemplates||[],cubeLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;}
+     const cubeKey=JSON.stringify([cubeScene,cubeTemplates||[],cubeLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;if(breaking)drawBreak();}
    }
    // What the walls stand on (the grid, the map's size, the ground) against how they are looked at.
    const frame=JSON.stringify([c.isGM,c.view.gridSize,c.view.gridOffsets,c.view.mapPixelSize,terrainPrototype?.revision||0]),look=JSON.stringify([heightToShow(),c.view.scale]);
@@ -274,7 +274,14 @@ function pathFor(from,kind){return moverFor(from,kind).path;}
 const breakButton=document.createElement('button');breakButton.className='btn';breakButton.type='button';breakButton.textContent='Break';breakButton.dataset.action='map-break';breakButton.setAttribute('aria-pressed','false');breakButton.title='Show what can break. Click one to break it, or a broken one to mend it.';breakButton.hidden=true;document.body.append(breakButton);
 const breakColors={glass:'#9fd8e8',wood:'#d39a55',stone:'#d0d0d0',metal:'#8fb3e2'};
 let breaking=false,breakHoverKey=null,breakCache=null,breakCacheRevision=-1;
-function breakList(){if(breakCacheRevision!==revision||!breakCache){breakCache=breakableThings(model);breakCacheRevision=revision;}return breakCache;}
+function breakList(){
+ if(breakCacheRevision!==revision||!breakCache){
+  const state=context.state.boardState, scene=state.activeSceneId;
+  breakCache=breakableThings(model,state.templates?.[scene]||[],state.sceneState?.[scene],groundAt);
+  breakCacheRevision=revision;
+ }
+ return breakCache;
+}
 function setBreaking(on){
  if(on&&!context?.isGM)return;breaking=on;breakHoverKey=null;breakButton.setAttribute('aria-pressed',String(on));board.style.cursor='';
  if(on){claimActiveTool('break',()=>setBreaking(false));publishActiveTool('break','Break (Esc to stop)');}else publishActiveTool('break');
@@ -288,17 +295,37 @@ function drawBreak(){
  for(const thing of breakList()){
   const hot=thing.key===breakHoverKey,color=hot?'#ffffff':thing.broken?'#8a8a8a':(breakColors[thing.material]||'#d9b363');
   thing.lines.forEach(([a,b],i)=>{
-   const h=thing.plate?{base:thing.height,top:thing.height}:breakHeights(thing.edges[i],a,b);
+   const h=Number.isFinite(thing.height)?{base:thing.base??thing.height,top:thing.height}:breakHeights(thing.edges[i],a,b);
    for(const z of [h.top,h.base])list.push({kind:'line',points:[{x:a.x,y:a.y,z:z+.02},{x:b.x,y:b.y,z:z+.02}],color,opacity:1,dash:thing.broken?[.12,.12]:null});
   });
  }
  board3d()?.setOverlay?.('break',list);
 }
-function breakPoint(event){const hit=board3d()?.clientToMap(event.clientX,event.clientY);return hit?.squares?{...hit.squares,z:hit.height}:null;}
-board.addEventListener('pointermove',event=>{if(!breaking||!context?.isGM)return;const key=thingAt(breakList(),breakPoint(event))?.key??null;if(key!==breakHoverKey){breakHoverKey=key;board.style.cursor=key?'pointer':'';drawBreak();}},true);
+function breakThingAt(event){
+ const things=breakList(),{clientX,clientY}=event;
+ const cube=window.vtt3dLayers?.templates?.cubeAt?.(clientX,clientY);
+ if(cube)return things.find(t=>t.templateId===cube.templateId&&t.cubeKey===cube.key)??null;
+ const view=board3d(),hit=view?.clientToMap(clientX,clientY);
+ // Broken elevated squares have a visible outline but no solid surface for the ray to hit.
+ const planes=new Map();
+ let repair=null;
+ for(const t of things){
+  if(!t.broken||!Number.isFinite(t.height)||t.height<(hit?.height??-Infinity)-.05||(repair&&t.height<=repair.height))continue;
+  if(!planes.has(t.height))planes.set(t.height,view?.clientToMap(clientX,clientY,{plane:t.height})?.squares);
+  const p=planes.get(t.height);
+  if(p&&p.x>=t.box.left&&p.x<t.box.right&&p.y>=t.box.top&&p.y<t.box.bottom)repair=t;
+ }
+ // A miss on the cube mesh is empty space. Only authored walls use the nearby-line tolerance.
+ return repair??thingAt(things.filter(t=>!t.templateId),hit?.squares?{...hit.squares,z:hit.height}:null);
+}
+board.addEventListener('pointermove',event=>{if(!breaking||!context?.isGM)return;const key=breakThingAt(event)?.key??null;if(key!==breakHoverKey){breakHoverKey=key;board.style.cursor=key?'pointer':'';drawBreak();}},true);
 board.addEventListener('pointerdown',event=>{
  if(!breaking||!context?.isGM||storedError||event.button!==0)return;consume(event);
- const thing=thingAt(breakList(),breakPoint(event));if(!thing)return;
+ const thing=breakThingAt(event);if(!thing)return;
+ if(thing.templateId){
+  window.vtt3dTemplateTool?.setCubeBroken(context.state.boardState.activeSceneId,thing.templateId,thing.cubeKey,!thing.broken);
+  return;
+ }
  cancelDrag();const before=copyWalls(model);toggleBreak(model,thing);change(before);
 },true);
 for(const type of ['pointerup','click','dblclick'])board.addEventListener(type,event=>{if(breaking&&context?.isGM&&event.button===0)consume(event);},true);

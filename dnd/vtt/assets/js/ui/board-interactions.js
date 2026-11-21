@@ -64,7 +64,7 @@ import {
   addExternalMeasurementNode,
 } from './drag-ruler.js';
 import { slideLegs } from './forced-line.mjs';
-import { flashWall, blockedByWallText, blockedText, isWallRefusal, refusalKind } from './wall-flash.mjs';
+import { blockedByWallText, blockedText, isWallRefusal, refusalKind } from './wall-flash.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -1576,15 +1576,12 @@ export function mountBoardInteractions(store, routes = {}) {
   function markWallMet(move, canonical) {
     lastWallMet = null;
     try {
-      const origin = move ? canonical?.[move.placementId] : null, mapLayer = document.getElementById('vtt-map-transform');
+      const origin = move ? canonical?.[move.placementId] : null;
       const met = origin ? window.wallPrototype?.wallMet?.(origin, { column: move.column, row: move.row, path: (move.path || []).slice(1, -1) }) : null;
-      if (!met || !mapLayer) return false;
+      if (!met) return false;
       lastWallMet = met;
       // 3D board: the piece is outlined where it stands, from its base to its top.
-      if (window.vtt3d?.active) return Boolean(window.vtt3d.flashWall?.(met));
-      const grid = viewState.gridSize, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0, terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
-      const at = (q) => (terrain?.project ? terrain.project(left + q.x * grid, top + q.y * grid, met.base) : { x: left + q.x * grid, y: top + q.y * grid });
-      return Boolean(flashWall([at(met.a), at(met.b)], { layer: mapLayer, size: viewState.mapPixelSize, grid }));
+      return Boolean(window.vtt3d?.flashWall?.(met));
     } catch (error) {
       return false;
     }
@@ -2148,40 +2145,24 @@ export function mountBoardInteractions(store, routes = {}) {
   const enqueueBoardDomainSave = createSerialQueue();
 
   tokenMovementController = createTokenMovementController({
-    mapTransform,
+    // The 3D view draws its own movement guides. Only the ruler and movement accounting run here.
     routes,
     getViewState: () => coordinatePreview ? { ...viewState, dragState: { cursorSquare: coordinatePreview.positions } } : viewState,
-    getBoardState: () => boardApi.getState?.() ?? {},
     getCombatContext: () => ({
       active: combatActive,
       sceneId: getActiveSceneId(),
       round: combatRound,
       activeCombatantId,
     }),
-    getActiveScenePlacements: (state) => getActiveScenePlacements(state),
     getPlacementById: (placementId) => {
       const sceneId = getActiveSceneId();
       return sceneId ? resolvePlacementById(boardApi.getState?.() ?? {}, sceneId, placementId) : null;
     },
-    isActiveCombatantPlacement: (placementId) =>
-      Boolean(combatActive && activeCombatantId && getRepresentativeIdFor(placementId) === activeCombatantId),
-    getPlacementTeam: (placementId, placement) =>
-      placementId ? getCombatantTeam(placementId) : getPlacementCombatTeam(placement),
-    getPlacementLevelId: (placement) => {
-      const state = boardApi.getState?.() ?? {};
-      return placement ? resolveTokenLevelId(placement, getActiveSceneTokenLevelState(state)) : null;
-    },
     setRulerSupplement: (text) => setRulerSupplement(text),
     measureRoute: (move) => measureMovementRoute(move),
-    getCellInfo: (tokenId) => window.terrainZones?.cellInfoFor?.(tokenId) ?? null,
     // The captain's bonus, movement passives and speed buffs.
     getSpeedBonus: (tokenId) => (captainBonusFor(getPlacementsForActiveScene(), tokenId)?.speed ?? 0)
       + (movementRulesFor(getPlacementFromStore(tokenId))?.speedBonus || 0),
-    projectCorner: (column, row) => {
-      const terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
-      const x = (viewState.gridOffsets?.left || 0) + column * (viewState.gridSize || 64), y = (viewState.gridOffsets?.top || 0) + row * (viewState.gridSize || 64);
-      return terrain ? terrain.project(x, y, terrain.heightAt(x, y)) : { x, y };
-    },
     clearRulerSupplement: () => clearRulerSupplement(),
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {
@@ -28069,7 +28050,20 @@ function createTemplateTool() {
       commitShapes();
     },
   };
+  async function setCubeBroken(sceneId, templateId, cubeKey, broken) {
+    // A second click can arrive while another square is saving. Re-read the wall after that write.
+    while (pendingTemplateSave) await templateSaveQueue;
+    if (!isGmUser() || sceneId !== getActiveSceneId()) return;
+    const wall = shapes.find(shape => shape.id === templateId && shape.type === 'wall');
+    if (!wall || !canManageShape(wall) || wallStamina(wall) === null) return;
+    const square = wall.squares.find(s => wallSquareKey(s) === cubeKey);
+    if (!square || (square.broken === true) === broken) return;
+    wall.squares = markCubes(wall, [cubeKey], broken);
+    render(viewState);
+    return commitShapes();
+  }
   window.vtt3dTemplateTool = {
+    setCubeBroken,
     get shapes() { return shapes; },
     get preview() { return previewShape; },
     get selectedId() { return selectedId; },

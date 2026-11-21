@@ -35,9 +35,11 @@ test('the Break tool: each square of a breakable plate is its own thing, at the 
   assert.deepEqual(model.roofs[0].broken, ['4,1']);
   assert.equal(toggleBreak(model, breakableThings(model).find((t) => t.key === 'square:deck@4,1')), false, 'a second click mends it');
   assert.equal('broken' in model.roofs[0], false);
-  const page = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
-  assert.match(page, /const h=thing\.plate\?\{base:thing\.height,top:thing\.height\}:breakHeights/);
-  assert.match(page, /return hit\?\.squares\?\{\.\.\.hit\.squares,z:hit\.height\}:null;/, 'the 3D pick tells the height, so stacked decks pick right');
+  assert.ok(squares.every(s => s.height === 4));
+  model.roofs.push({ ...deck(), id: 'upper', height: 8 });
+  const stacked = breakableThings(model);
+  assert.equal(thingAt(stacked, {x: 4.5, y: 1.5, z: 8}).plate, 'upper');
+  assert.equal(thingAt(stacked, {x: 4.5, y: 1.5, z: 4}).plate, 'deck');
 });
 
 test('an object that breaks takes the squares it holds up; mended, it puts them back', () => {

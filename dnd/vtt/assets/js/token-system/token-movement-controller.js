@@ -262,7 +262,16 @@ export function createTokenMovementController({
     const spent = spentNow(dragSession.tokenId, context);
     dragSession.spentBeforeDrag = spent;
 
-    const remaining = Math.max(0, dragSession.speed - spent);
+    if (mapTransform) renderReachOutline(Math.max(0, dragSession.speed - spent));
+    setRulerSupplement(formatMovementSummary({
+      spent,
+      dragCost,
+      speed: dragSession.speed,
+      why: dragSession.why,
+    }));
+  }
+
+  function renderReachOutline(remaining) {
     const blockers = getOpposingSameLevelBlockers(dragSession.tokenId);
     const gridMetrics = getGridBoundsFromView(getViewState());
     // The reach outline is rebuilt only when something that shapes it changes, not on every pointer move.
@@ -289,12 +298,6 @@ export function createTokenMovementController({
     }
 
     overlay.render(dragSession.shape, projectCorner ? { ...gridMetrics, projectCorner } : gridMetrics);
-    setRulerSupplement(formatMovementSummary({
-      spent,
-      dragCost,
-      speed: dragSession.speed,
-      why: dragSession.why,
-    }));
   }
 
   function getOpposingSameLevelBlockers(tokenId) {
