@@ -68,7 +68,7 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | `filter.minAmount` / `maxAmount` | Damage amount band. |
 | `filter.minDistance` / `maxDistance` | Forced movement distance band. |
 | `filter.actionKind`, `costIncludes`, `keywordsAny`, `verb` | Additional event filters. |
-| `limit.scope` | `round`, `turn`, or `encounter` (one fight). Marks are kept on the hero's token (every page sees them, a reload keeps them) and belong to the fight they were made in. While a popup for the rule is open no second one opens for it. |
+| `limit.scope` | `round`, `turn`, or `encounter` (one fight). A limited rule needs active combat when its event happens. Its offer expires when that scope ends, including while waiting for the player. Explicit `combatStart` and `combatEnd` rules run at their respective boundaries. Marks are saved on the hero's token and shared across pages. |
 | `limit.key` | Scoped flag key. |
 | `limit.markOn` | `applied` by default: the limit is used when the gain is taken, so Cancel leaves it free (Brandon, November 2026). `offered` uses it when the popup shows. |
 | `limit` on `turnStart` / `turnEnd` | Left out, it is `{ "scope": "round", "key": <rule id>, "markOn": "offered" }`: the start (or end) of a hero's turn is offered once a round, even if the turn is cancelled and started again (Brandon, November 10, 2026). `"limit": false` offers it at every start. |

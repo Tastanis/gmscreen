@@ -81,6 +81,7 @@ import {
 import { getPowerRollSuggestions, collectRollPassives } from './power-roll-suggestions.js';
 import {
   formatHeroicResourcePrompt,
+  heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
@@ -4833,10 +4834,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function queueHeroicResourcePrompt(config) {
+  function queueHeroicResourcePrompt(config, isCurrent = () => true) {
     heroicResourcePromptQueue = heroicResourcePromptQueue
       .catch(() => {})
-      .then(() => showHeroicResourcePrompt(config));
+      .then(() => isCurrent() ? showHeroicResourcePrompt(config) : { applied: false });
     return heroicResourcePromptQueue;
   }
 
@@ -4929,8 +4930,13 @@ export function mountBoardInteractions(store, routes = {}) {
       filter: { whose: 'self' }, effect: { kind: 'gain', amount: 0 }, limit: { scope: 'round', key: 'maintained-casts-upkeep', markOn: 'offered' } }];
   }
 
+  function heroicResourceCombatTiming() {
+    return { active: combatActive, encounterId: combatEncounterId, round: combatRound, turnId: activeCombatantId };
+  }
+
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
     if (!eventType) return;
+    const timing = heroicResourceCombatTiming();
     // The action that caused this (read before anything waits): a gain it gives is undone with it.
     const undoGroup = globalThis.vttUndoGroup?.id || '';
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
@@ -4951,11 +4957,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const env = getHeroicResourceRuleEnv(placement.id);
       const matching = automation.rules.filter(rule => ruleMatchesHeroicResourceEvent(rule, eventType, payload, env));
       for (const rule of hasCasts ? attachTurnMaintenance(matching) : matching) {
+        if (!heroicResourceTimingAllows(rule, eventType, timing, heroicResourceCombatTiming())) continue;
         const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
         if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
         if (isController || (rule.autoApply && !rule.maintenanceOffer && isGmUser())) {
           await offerHeroicResourceRule({
             eventType,
+            timing,
             payload,
             placement,
             profileId,
@@ -4968,6 +4976,7 @@ export function mountBoardInteractions(store, routes = {}) {
         } else {
           routeHeroicResourcePromptToOwner({
             eventType,
+            timing,
             payload,
             placement,
             profileId,
@@ -5007,7 +5016,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return trimmed;
   }
 
-  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '' }) {
+  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
     const rulePayload = cloneJsonSafe(rule);
     if (!rulePayload) return false;
     pendingHeroResourcePromptCounter += 1;
@@ -5025,7 +5034,8 @@ export function mountBoardInteractions(store, routes = {}) {
       // What happened, worded on this page (the other page may not know the creatures' names yet).
       sentence: heroicResourceEventSentence(eventType, payload, placement),
       undoGroup: typeof undoGroup === 'string' ? undoGroup : '',
-      round: combatRound,
+      round: timing.round,
+      timing,
       createdAt: Date.now(),
     };
     // Mark offered-limits on the routing client — it is the only client that
@@ -5099,13 +5109,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const rule = record.rule && typeof record.rule === 'object' ? record.rule : null;
       if (!rule || !rule.effect || typeof rule.effect !== 'object') return;
-      // An offer from an earlier round (or after the fight) is not made any more.
-      if (rule.limit?.scope === 'round' && Number.isFinite(Number(record.round)) && Number(record.round) !== combatRound) return;
+      // Older saved prompts recorded only their round. Round zero was outside combat.
+      const timing = record.timing ?? { active: Number(record.round) > 0, round: Number(record.round) };
+      if (!heroicResourceTimingAllows(rule, record.eventType, timing, heroicResourceCombatTiming())) return;
       const sheet = await getAutomationSheetForPlacement(placementId);
       const resource = sheet?.hero?.resource;
       if (!sheet || (!resource && !rule.maintenanceOffer)) return;
       await offerHeroicResourceRule({
         eventType: record.eventType || 'event',
+        timing,
         payload: record.payload && typeof record.payload === 'object' ? record.payload : {},
         placement,
         profileId: normalizeProfileId(record.profileId),
@@ -5133,7 +5145,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup = '', sentence = '', routed = false }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false }) {
     // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
     const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
     const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
@@ -5142,20 +5154,21 @@ export function mountBoardInteractions(store, routes = {}) {
     const reservedBySender = routed && rule.limit?.markOn === 'offered';
     if (limitKey && !reservedBySender && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
     if (lockKey) pendingResourceLimitKeys.add(lockKey);
-    const roundAtOffer = combatRound;
     try {
-      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer });
+      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing });
     } finally {
       if (lockKey) pendingResourceLimitKeys.delete(lockKey);
     }
   }
 
-  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer }) {
+  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing }) {
     // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
     // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
     // the gain itself was right, being an amount).
     characterSummaryCache.delete(profileId);
     const latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    const isCurrent = () => heroicResourceTimingAllows(rule, eventType, timing, heroicResourceCombatTiming());
+    if (!isCurrent()) return;
     if (latest?.hero?.resource && typeof latest.hero.resource === 'object') {
       sheet = latest;
       resource = latest.hero.resource;
@@ -5201,7 +5214,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (maintained.length) {
       const sceneId = getActiveSceneId(), offeredRound = combatRound, offeredTurn = activeCombatantId;
       if (shouldRollAfterPrompt) {
-        const roll = await queueHeroicResourcePrompt({ title: resourceName, message: 'Roll ' + preview.label + ' for the gain available before upkeep?', applyLabel: 'Roll', dismissLabel: 'Cancel' });
+        const roll = await queueHeroicResourcePrompt({ title: resourceName, message: 'Roll ' + preview.label + ' for the gain available before upkeep?', applyLabel: 'Roll', dismissLabel: 'Cancel' }, isCurrent);
         if (!roll?.applied) return;
         amount = Math.max(0, Number(resolveHeroicResourceAmount(rule.effect.amount, context).amount) || 0);
         shouldRollAfterPrompt = false;
@@ -5232,12 +5245,10 @@ export function mountBoardInteractions(store, routes = {}) {
             : `${change.current} -> ${change.next}`,
         applyLabel: rule.applyLabel || (rule.effect.kind === 'damage' ? 'Take the damage' : 'Yes'),
         dismissLabel: rule.cancelLabel || 'Cancel',
-      });
+      }, isCurrent);
       if (!promptResult?.applied) return;
-      // Answered late: the round it was for is over, or the fight is.
-      if (rule.limit?.scope === 'round' && combatRound !== roundAtOffer) { updateStatus('That gain was for an earlier round.'); return; }
-      if (!['combatStart', 'combatEnd'].includes(eventType) && !combatActive && rule.limit) { updateStatus('That gain was for a fight that is over.'); return; }
     }
+    if (!isCurrent()) { updateStatus('That resource offer has expired.'); return; }
     return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }));
   }
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeHeroicResourceAutomation } from '../heroic-resource-automation.js';
+import { heroicResourceTimingAllows, normalizeHeroicResourceAutomation } from '../heroic-resource-automation.js';
 import { createAbilityAutomationHarness } from '../../../../../character_sheet/ability-automation/__tests__/support/automation-harness.mjs';
 
 // Zepha (Elementalist) and the start of his turn, November 10, 2026. Brandon: "Zepha was taking his turn, and it kept
@@ -209,8 +209,10 @@ test('classes with rolled gains or no turn-start gain get one upkeep decision', 
 
   for (const [rule, hasDice] of [[fallback,false], [rolled,true]]) {
     const placement = {id:'caster', maintainedAbilities:[{id:'test',value:1}]};
+    const timing = {active:true, encounterId:'practice', round:1, turnId:'caster'};
     const offers = [], applied = [];
     const deps = {
+      heroicResourceTimingAllows, heroicResourceCombatTiming: () => timing,
       characterSummaryCache: new Map(), getAutomationSheetForPlacement: async () => ({hero:{resource:{value:1}}}),
       noteResourceLevel() {}, getSheetHeroicResourceContext: () => ({}),
       previewHeroicResourceAmount: () => ({amount:0, hasDice, label:'1d3'}),
@@ -227,7 +229,7 @@ test('classes with rolled gains or no turn-start gain get one upkeep decision', 
     const offer = new Function('deps', `with(deps) { ${section('  function reconcileMaintenanceChoice(', '  function setMaintainedAbilities(')}
       ${section('  async function offerHeroicResourceRuleNow(', '  // The gain (or loss, or damage) taken:')}
       return offerHeroicResourceRuleNow; }`)(deps);
-    await offer({eventType:'turnStart',rule,placement,sheet:{hero:{}},resource:{value:1}});
+    await offer({eventType:'turnStart',rule,placement,timing,sheet:{hero:{}},resource:{value:1}});
     assert.deepEqual(offers, [hasDice ? 3 : 0]);
     assert.deepEqual(applied, hasDice ? [2] : []);
   }

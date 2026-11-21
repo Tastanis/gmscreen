@@ -146,6 +146,10 @@ reject. The client requires an explicit paid result, bounds HTTP/body waiting to
 manual review; they no longer grant free upkeep. Failed payment preserves the
 zone and stops its effects; only confirmed insufficient funds trigger removal.
 
+Round-, turn-, and encounter-limited heroic-resource rules require active combat when the
+event happens. The board rechecks the original scope when it delivers and applies a
+delayed offer. Explicit combat-start and combat-end rules still run at the boundary.
+
 Heroic-resource rule saves now use narrow sync-resource writes for GM, owner and
 other authorized VTT users. Rule writes include expectedValue; under the existing
 write lock the server rejects a stale balance before mutation. Successful resource

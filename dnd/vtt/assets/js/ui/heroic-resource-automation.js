@@ -390,6 +390,16 @@ function resolveDistanceTargetId(filter, event, payload) {
   return payload?.placementId || payload?.targetId || payload?.newTargetId || payload?.actorId || '';
 }
 
+// A limited offer belongs to the fight (and possibly the round or turn) that produced it.
+export function heroicResourceTimingAllows(rule, eventType, atEvent, now) {
+  if (!rule.limit || eventType === 'combatStart' || eventType === 'combatEnd') return true;
+  if (!atEvent.active || !now.active) return false;
+  if (atEvent.encounterId != null && atEvent.encounterId !== now.encounterId) return false;
+  const scope = rule.limit.scope;
+  if ((scope === 'round' || scope === 'turn') && atEvent.round !== now.round) return false;
+  return scope !== 'turn' || atEvent.turnId === undefined || atEvent.turnId === now.turnId;
+}
+
 export function ruleMatchesHeroicResourceEvent(rule, eventType, payload = {}, env = {}) {
   if (!rule?.enabled || rule.event !== eventType) return false;
   const filter = rule.filter || {};

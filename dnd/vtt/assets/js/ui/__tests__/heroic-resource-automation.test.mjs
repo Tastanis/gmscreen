@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   formatHeroicResourcePrompt,
+  heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
@@ -35,6 +36,28 @@ function env(overrides = {}) {
 }
 
 describe('heroic resource automation schema', () => {
+  test('a limited resource offer must still belong to its active combat, round or turn', () => {
+    const off = { active: false, round: 0 };
+    const fight = { active: true, encounterId: 'first', round: 1, turnId: 'hero' };
+    const nextTurn = { ...fight, turnId: 'guard' };
+    const nextRound = { ...fight, round: 2 };
+    const nextFight = { ...fight, encounterId: 'second' };
+    for (const scope of ['round', 'turn', 'encounter']) {
+      const rule = { limit: { scope } };
+      const allows = (atEvent, now) => heroicResourceTimingAllows(rule, 'damage', atEvent, now);
+      assert.equal(allows(off, off), false);
+      assert.equal(allows(off, fight), false);
+      assert.equal(allows(fight, off), false);
+      assert.equal(allows(fight, nextFight), false);
+      assert.equal(allows(fight, fight), true);
+      assert.equal(allows(fight, nextTurn), scope !== 'turn');
+      assert.equal(allows(fight, nextRound), scope === 'encounter');
+      assert.equal(heroicResourceTimingAllows(rule, 'combatEnd', fight, off), true);
+      assert.equal(heroicResourceTimingAllows(rule, 'combatStart', off, fight), true);
+    }
+    assert.equal(heroicResourceTimingAllows({ limit: null }, 'damage', off, off), true);
+  });
+
   test('normalizes rules with limits and amount specs', () => {
     const normalized = normalizeHeroicResourceAutomation({
       schema: 'heroic-resource/v1',
