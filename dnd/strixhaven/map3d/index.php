@@ -161,6 +161,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -1154,7 +1155,7 @@ const things = [], thingRoots = [], hexOwner = new Map(), spin = [], lanternPts 
 // box: the model's own centre x, lowest point, centre z and widest side as first made, so trimming hidden parts off it never moves or resizes it.
 // lo: a light copy (about a sixth of the triangles, small textures) that loads first and is drawn from afar; the full model is fetched only once the view comes near the hall,
 // and the two change places at about three times the hall's size. Every file is packed with meshoptimizer and its pictures are WebP; parts never seen from anywhere are left out
-const HALLS = { 'Biblioplex': { file: 'biblioplex.glb', lo: 'biblioplex-lo.glb', size: 295, lift: 0, turn: 0, box: [-.0004, -.60874, -.0005, 1.8998] }, 'Grandloft Hall': { file: 'grandloft.glb', lo: 'grandloft-lo.glb', size: 300, lift: 0, turn: 0, box: [.00075, -.4584, -.00225, 1.8955] },
+const HALLS = { 'Biblioplex': { file: 'biblioplex.glb', lo: 'biblioplex-lo.glb', size: 295, lift: 0, turn: 0, box: [-.0004, -.60874, -.0005, 1.8998] },
   'Conjurot Hall': { file: 'conjurot.glb', lo: 'conjurot-lo.glb', size: 330, lift: -8, turn: 0, box: [-.00085, -.7089, .00435, 1.8999] },
   'Torus Hall': { file: 'torus.glb', lo: 'torus-lo.glb', size: 380, lift: 0, turn: 0, box: [-.0002, -.9514, -.00385, 1.8554], fix: (m, first) => torusFix(m, first) },
   'Strixhaven Stadium': { file: 'arena.glb', lo: 'arena-lo.glb', size: 250, lift: 0, turn: Math.PI, box: [0, -.4292, 0, 1.903], fix: (m) => arenaFix(m) },   // Brandon's Meshy arena, reworked: a true ellipse of field, towers at its ends, the five college flags, the Quandrix core on the west tower
@@ -1254,45 +1255,9 @@ function torusFix(m, first = true) {
 // levels (lod0, 1, 3, 4) and have their windows lit, violet on the dark street and warm on the bright. Every house is one copy in a batch per model, kind and level, so the
 // whole city is a couple of dozen draws; each house takes the level its distance from the camera calls for, and houses out of the picture are not drawn.
 // Shadows come from a hidden batch of the lightest level on a layer only the sun's shadow camera sees, so they never flicker as the levels change and cost the picture nothing
-const SQ_HOUSES = [{ file: 'sq-violet.glb', dark: true, tall: true }, { file: 'sq-obsidian.glb', dark: true }, { file: 'sq-angel2.glb', dark: false, tall: true }, { file: 'sq-angel1.glb', dark: false }];
 const SQ_SIZE = { tower: 21, manor: 27.5 };   // a house's widest side (world): Violetspire and Angelic towers, Obsidian manors and Angelic cathedrals
 const SQ_LOT = { street: 10, block: 132, depth: 23, back: 0, gap: 2, towers: .55, yards: .02, named: 36, clear: 5 };   // the city's street grid: street width, block length, lot depth, gap between the back-to-back rows, gap between houses, share of towers, share of lots left as yards, clearance from the named streets' middles
 const SQ_KINDS = { city: { lods: [1, 2, 3, 4], cuts: [250, 560, 2000], size: 1, glow: 0 }, street: { lods: [0, 1, 2, 4], cuts: [150, 380, 2000], size: 1.15, glow: 2.2 } };   // cuts: camera distances (world) at which a house moves to its next level; the last, a few hundred triangles, only once it is a speck on the whole-map view
-function cityHouses(houses, boxes, GY) {
-  const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder), R = mulberry32(777), types = SQ_HOUSES.map(() => []);
-  for (const h of houses) { const tall = h.tall ?? R() < .5, k = SQ_HOUSES.findIndex(t => t.dark === h.dark && !!t.tall === tall); types[k].push({ ...h, js: .92 + .16 * R() }); }
-  let left = SQ_HOUSES.length; const batches = [], T4 = new THREE.Matrix4();
-  const mk = (geo, mat, n) => { const im = new THREE.InstancedMesh(geo, mat, n); im.count = 0; im.raycast = () => {}; im.receiveShadow = true; im.castShadow = false; scene.add(im); return im; };
-  SQ_HOUSES.forEach((t, ti) => { const all = types[ti]; if (!all.length) { left--; return; }
-    L.load('models/halls/' + t.file.replace('.glb', '-far.glb'), farG => L.load('models/halls/' + t.file, gltf => { const meshOf = o => { let m = null; if (o) o.traverse(c => { if (c.isMesh && !m) m = c; }); return m; }, ms = [0, 1, 2, 3, 4].map(i => meshOf(gltf.scene.getObjectByName('lod' + i)));
-      const fm = [3, 4].map(i => meshOf(farG.scene.getObjectByName('lod' + i))); if (fm[0] && fm[1]) { farG.scene.updateMatrixWorld(true); ms[3] = fm[0]; ms[4] = fm[1]; }   // the far levels: their own copy, slimmed hard with its colour and lit glass baked onto it, so it stays clean however small
-      if (ms.some(m => !m)) { console.warn('house model incomplete: ' + t.file); return; }
-      gltf.scene.updateMatrixWorld(true); const own = ms.map(m => m.matrixWorld.clone()), baked = ms[3].material !== ms[0].material;   // each level's own placing (the packer stores a scale and shift on it)
-      const box = new THREE.Box3().setFromObject(ms[1]), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-      const sc = (t.tall ? SQ_SIZE.tower : SQ_SIZE.manor) / Math.max(sz.x, sz.z), base = new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);
-      const mat = ms[0].material; mat.metalness = 0; mat.envMapIntensity = .8; const glowMap = mat.emissiveMap;
-      const plain = mat.clone(); plain.emissiveMap = null; plain.emissive.setRGB(0, 0, 0);                                                                     // the blocks' houses: unlit
-      const lit = mat.clone(); lit.emissive.setRGB(1, 1, 1); lit.emissiveMap = glowMap; lit.emissiveIntensity = SQ_KINDS.street.glow;                            // the streets' houses: glass lit
-      const farOf = (src, gm) => { const f = src.clone(); f.normalMap = null; f.roughnessMap = null; f.metalnessMap = null; f.metalness = 0; f.roughness = .7; f.emissiveMap = null; f.emissive.setRGB(0, 0, 0);   // far off the fine bumps and sheen cannot be seen
-        const fl = f.clone(); fl.emissive.setRGB(1, 1, 1); fl.emissiveMap = gm; fl.emissiveIntensity = SQ_KINDS.street.glow; return [f, fl]; };
-      const [far, farLit] = farOf(plain, glowMap), [bk, bkLit] = baked ? farOf(ms[3].material, ms[3].material.emissiveMap) : [far, farLit];   // the baked far levels carry their own pictures; the detailed levels keep the model's
-      for (const [kind, K] of Object.entries(SQ_KINDS)) { const list = all.filter(h => !!h.street === (kind === 'street')); if (!list.length) continue;
-        const mtx = list.map(h => new THREE.Matrix4().compose(new THREE.Vector3(h.x, GY - .3, h.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h.face), new THREE.Vector3().setScalar(sc * h.js * K.size * (h.k || 1))).multiply(base));
-        const lv = K.lods.map((li, j) => mk(ms[li].geometry, li >= 3 ? (K.glow ? bkLit : bk) : j >= 2 ? (K.glow ? farLit : far) : (K.glow ? lit : plain), list.length));
-        const sh = mk(ms[3].geometry, new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), list.length); sh.castShadow = true; sh.receiveShadow = false;
-        sh.layers.set(6); sun.shadow.camera.layers.enable(6);   // on a layer only the sun's shadow camera looks at, so the picture itself never pays for it
-        mtx.forEach((m, i) => sh.setMatrixAt(i, T4.multiplyMatrices(m, own[3]))); sh.count = list.length; sh.instanceMatrix.needsUpdate = true; sh.computeBoundingSphere();
-        batches.push({ K, list, mtx, lv, own: K.lods.map(li => own[li]), sh, pos: list.map(h => new THREE.Vector3(h.x, GY + 12, h.z)) }); }
-      if (--left === 0) { for (const b of boxes) { scene.remove(b); b.dispose(); } window.__sqHouses = batches.reduce((n, b) => n + b.list.length, 0); window.__sqBatches = batches; }
-      renderer.shadowMap.needsUpdate = true; last.set(1e9, 0, 0);
-    }, undefined, () => { console.warn('house model not loaded, keeping the plain houses: ' + t.file); left = -1; }), undefined, () => console.warn('house far copy not loaded: ' + t.file)); });
-  // which level each house shows: worked out again only when the camera has moved a little
-  const last = new THREE.Vector3(1e9, 0, 0), lastQ = new THREE.Quaternion(), fr = new THREE.Frustum(), PV = new THREE.Matrix4(), ball = new THREE.Sphere();
-  anim.push(() => { if (!batches.length || (camera.position.distanceToSquared(last) < 4 && camera.quaternion.angleTo(lastQ) < .01)) return; last.copy(camera.position); lastQ.copy(camera.quaternion);
-    camera.updateMatrixWorld(); fr.setFromProjectionMatrix(PV.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    for (const b of batches) { const n = [0, 0, 0, 0], r = 26 * b.K.size, cu = b.K.cuts;
-      for (let i = 0; i < b.list.length; i++) { ball.set(b.pos[i], r); if (!fr.intersectsSphere(ball)) continue; const d = camera.position.distanceTo(b.pos[i]), l = d < cu[0] ? 0 : d < cu[1] ? 1 : d < cu[2] ? 2 : 3; b.lv[l].setMatrixAt(n[l]++, T4.multiplyMatrices(b.mtx[i], b.own[l])); }
-      b.lv.forEach((im, l) => { im.count = n[l]; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }); } }); }
 const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
 const M = (g, geo, mat, x, y, z, o = {}) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(o.rx || 0, o.ry || 0, o.rz || 0); m.scale.set(o.sx || 1, o.sy || 1, o.sz || 1); g.add(m); return m; };
 function mergeKids(g) { const groups = new Map();
@@ -1786,43 +1751,7 @@ function buildProps() {
   // Grandloft Hall: the great church of the city, in courses of black and white marble, facing the gate. A long nave with aisles and a clerestory, buttressed and pinnacled down both sides; a transept with a rose window in each end;
   // a ribbed dome on a windowed drum over the crossing, carrying a lantern and a spire; an apse ringed with chapels; and a west front of three portals between twin towers with open belfries and spires. The city's roads start from its plaza
   { const CWp = Wp(CITY);
-    addThing('Grandloft Hall', '🖋️', CWp, 1.6, 150, g => {
-      const wm = sqWM, bm = sqBM, gd = sqGD, st = sqST, rf = solid(0x1a1c26, .35, { flatShading: true });
-      const lit = new THREE.MeshStandardMaterial({ color: 0x2a2010, emissive: 0xffd9a0, emissiveIntensity: 3.2, roughness: .5 });
-      const beam = new THREE.MeshBasicMaterial({ color: 0xfff0cc, transparent: true, opacity: .1, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
-      const B = (w, hh, d, m, x, y, z, o) => M(g, new THREE.BoxGeometry(w, hh, d), m, x, y, z, o), C = (r0, r1, hh, n, m, x, y, z, o) => M(g, new THREE.CylinderGeometry(r0, r1, hh, n), m, x, y, z, o), pin = (x, y, z, sz, m) => M(g, new THREE.ConeGeometry(sz, sz * 5, 4), m, x, y + sz * 2.5, z, { ry: Math.PI / 4 }), Y = 6;
-      // the plaza, longer than it is wide, ringed with obelisks and statues; and the podium the hall stands on
-      C(54, 55.5, 1.4, 64, bm, 0, .7, 0, { sz: 1.315 }); C(49, 50, 1.6, 64, wm, 0, 2.2, 0, { sz: 1.35 });
-      for (let i = 0; i < 20; i++) { const a = i / 20 * 6.283 + .157, x = Math.cos(a) * 45, z = Math.sin(a) * 61; if (Math.abs(x) < 16 && z > 0) continue; if (i % 2) pin(x, 3, z, 1.9, i % 4 === 1 ? bm : wm); else { B(4, 3, 4, bm, x, 4.5, z); statue(g, wm, x, 6, z, 9, Math.PI - a, i >> 1 & 3); } }
-      B(60, 3, 98, wm, 0, 4.5, 1); B(80, 3, 28, wm, 0, 4.5, -14); C(23, 23, 3, 28, wm, 0, 4.5, -46); for (let i = 0; i < 6; i++) B(54, .5 * (6 - i), 1.7, wm, 0, 3 + .25 * (6 - i), 50.85 + i * 1.7);
-      // nave, aisles, clerestory
-      B(22, 50, 82, st, 0, Y + 25, -3); M(g, gable(24.6, 14, 84), rf, 0, Y + 50, -3); B(.7, 1.6, 82, gd, 0, Y + 64.6, -3);
-      for (const sx of [-1, 1]) { B(11, 26, 78, st, sx * 16.5, Y + 13, -3); B(12.4, 1.2, 79, rf, sx * 16.6, Y + 28, -3, { rz: -sx * .36 });
-        for (let i = 0; i < 8; i++) { const z = 30 - i * 9.4; B(.5, 13, 3.6, lit, sx * 11.2, Y + 39, z); B(.5, 13, 3.6, lit, sx * 22.1, Y + 13, z); }
-        for (let i = 0; i < 9; i++) { const z = 34.7 - i * 9.4; B(2.6, 34, 3.2, bm, sx * 26.4, Y + 17, z); pin(sx * 26.4, Y + 34, z, 1.3, wm); B(17, 1.4, 1.6, bm, sx * 18.6, Y + 36, z, { rz: -sx * .5 }); pin(sx * 11.4, Y + 50, z, .9, bm); } }                                    // buttresses, flyers and pinnacles
-      // transept, with a rose in each end and a turret at each corner
-      B(72, 46, 20, st, 0, Y + 23, -14); M(g, gable(22.6, 13, 74), rf, 0, Y + 46, -14, { ry: Math.PI / 2 });
-      for (const sx of [-1, 1]) { M(g, new THREE.CircleGeometry(6.4, 28), lit, sx * 36.15, Y + 30, -14, { ry: sx * Math.PI / 2 }); M(g, new THREE.TorusGeometry(6.8, .8, 6, 28), gd, sx * 36.2, Y + 30, -14, { ry: Math.PI / 2 }); B(.5, 14, 4, lit, sx * 36.15, Y + 10, -14);
-        for (const sz of [-1, 1]) { C(2.6, 3, 58, 8, bm, sx * 34.6, Y + 29, -14 + sz * 10.6); M(g, new THREE.ConeGeometry(3.4, 17, 8), wm, sx * 34.6, Y + 66.5, -14 + sz * 10.6); } }
-      // apse and its ring of chapels
-      C(12.5, 12.5, 50, 18, st, 0, Y + 25, -46); M(g, new THREE.SphereGeometry(12.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), rf, 0, Y + 50, -46, { sy: .85 });
-      for (let i = 0; i < 5; i++) { const a = (i - 2) * .62, sn = Math.sin(a), cs = Math.cos(a); C(5.2, 5.2, 22, 10, st, sn * 15.5, Y + 11, -46 - cs * 15.5); M(g, new THREE.ConeGeometry(5.8, 9, 10), rf, sn * 15.5, Y + 26.5, -46 - cs * 15.5); B(1.6, 9, .5, lit, sn * 20.6, Y + 11, -46 - cs * 20.6, { ry: a }); B(1.8, 14, .5, lit, sn * 12.7, Y + 38, -46 - cs * 12.7, { ry: a }); }
-      // the crossing: drum, ribbed dome, lantern, spire
-      C(14.5, 15.5, 16, 16, bm, 0, Y + 58, -14); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283; B(1.7, 11, .5, lit, Math.cos(a) * 15.3, Y + 58, -14 + Math.sin(a) * 15.3, { ry: -a + Math.PI / 2 }); } C(16, 16, 1.4, 16, gd, 0, Y + 66.6, -14);
-      M(g, new THREE.SphereGeometry(15, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), wm, 0, Y + 67, -14, { sy: 1.3 }); for (let i = 0; i < 8; i++) M(g, new THREE.TorusGeometry(15.2, .5, 5, 16, Math.PI), gd, 0, Y + 67, -14, { ry: i * .3927, sy: 1.3 });
-      C(3.6, 4.2, 10, 10, bm, 0, Y + 91, -14); for (let i = 0; i < 6; i++) { const a = i * 1.047; B(1, 6, .4, lit, Math.cos(a) * 4, Y + 91, -14 + Math.sin(a) * 4, { ry: -a + Math.PI / 2 }); } M(g, new THREE.ConeGeometry(4.4, 48, 10), bm, 0, Y + 120, -14); M(g, new THREE.SphereGeometry(1.5, 10, 8), gd, 0, Y + 145, -14);
-      // the west front
-      for (const sx of [-1, 1]) { B(14, 62, 14, st, sx * 15.5, Y + 31, 41); B(15.6, 2, 15.6, gd, sx * 15.5, Y + 63, 41); B(12, 24, 12, bm, sx * 15.5, Y + 76, 41); B(13.6, 2, 13.6, gd, sx * 15.5, Y + 89, 41);
-        for (const [dx, dz, ry] of [[0, 6.1, 0], [0, -6.1, 0], [6.1, 0, Math.PI / 2], [-6.1, 0, Math.PI / 2]]) { B(3.4, 16, .5, lit, sx * 15.5 + dx, Y + 76, 41 + dz, { ry }); for (const of of [-4, 4]) B(1.6, 12, .5, lit, sx * 15.5 + dx * 1.16 + (ry ? 0 : of), Y + 40, 41 + dz * 1.16 + (ry ? of : 0), { ry }); }
-        M(g, new THREE.ConeGeometry(8.2, 50, 8), sx > 0 ? wm : bm, sx * 15.5, Y + 115, 41); for (const a of [-1, 1]) for (const b of [-1, 1]) pin(sx * 15.5 + a * 6, Y + 90, 41 + b * 6, 1.5, sx > 0 ? bm : wm); M(g, new THREE.SphereGeometry(1.3, 8, 6), gd, sx * 15.5, Y + 141, 41); }
-      B(17, 60, 7, st, 0, Y + 30, 42); M(g, gable(19, 11, 7), rf, 0, Y + 60, 42); pin(0, Y + 70, 42, 1.4, gd);
-      M(g, new THREE.CircleGeometry(7.6, 32), lit, 0, Y + 43, 45.7); M(g, new THREE.TorusGeometry(8, .9, 6, 32), gd, 0, Y + 43, 45.7); M(g, new THREE.TorusGeometry(4, .45, 5, 24), bm, 0, Y + 43, 45.9); for (let i = 0; i < 8; i++) B(.5, 15.4, .5, bm, 0, Y + 43, 45.9, { rz: i * .3927 });                              // the rose
-      for (const px of [-15.5, 0, 15.5]) { const w = px ? 7 : 9, hh = px ? 13 : 17, z = px ? 48.2 : 45.8; B(w, hh, 1.4, bm, px, Y + hh / 2, z); B(w - 2.6, hh - 3, .5, lit, px, Y + hh / 2 - 1, z + .8); M(g, gable(w + 2, w * .7, 2.4), bm, px, Y + hh, z + .1); }                                    // three portals
-      for (let i = 0; i < 9; i++) B(1.2, 5, 1, wm, -6.4 + i * 1.6, Y + 26, 45.9);                                                                                                                                              // a gallery of small figures over the door
-      for (const [x, z] of [[0, -14], [-15.5, 41], [15.5, 41]]) { const m = M(g, new THREE.CylinderGeometry(7, 2, 120, 16, 1, true), beam, x, Y + 205, z); m.userData.noShadow = true; m.raycast = () => {}; }
-      const ink = new THREE.Group(); for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283, d = 22 + (i % 4) * 4; M(ink, new THREE.SphereGeometry(1.5 + (i % 3) * .5, 8, 6), bm, Math.cos(a) * d, 90 + (i * 7) % 40, Math.sin(a) * d, { sx: 1.6 }); }
-      ink.traverse(m => { m.userData.noShadow = true; }); ink.position.z = -14; g.add(ink); spin.push({ o: ink, speed: .6, bolt: false });
-    }, { ry: Math.atan2(SQGATE[0] * S - CWp[0], SQGATE[1] * S - CWp[1]), hexes: [[29, 17]], top: 165, view: 1000 }); }
+    addThing('Grandloft Hall', '🖋️', CWp, 1.6, 150, g => markSilverquillLot(g, 'Grandloft Hall'), { ry: Math.atan2(SQGATE[0] * S - CWp[0], SQGATE[1] * S - CWp[1]), hexes: [[29, 17]], top: 165, view: 1000 }); }
   // Kollema Hall: Lorehold's seat, built into the Kollema mountain itself. Effigy Row runs straight on from the chasm into a great gate at the mountain's foot, flanked by colossal effigies;
   // above it the hall climbs the mountain in carved tiers - facades cut into each rise of rock with tall windows lit blue, towers standing out from them, stairs along the faces, statues and
   // pavilions on the terraces - to the summit, where the hall proper faces the bridge, a domed rotunda stands to one side and a tall tower lifts a colossal effigy holding up a golden orb
@@ -2072,29 +2001,10 @@ function buildProps() {
     }, { top: 70, view: 400 }); }
 
   // Rose Stage (Silverquill): 1 hex. A slowly turning circular stage before a curved wall of ink roses, with tiers of seats
-  addThing('Rose Stage', '🌹', Wp(ROSE), 1, 30, g => { const k = kit(g), wm = sqWM, bm = sqBM, ink = solid(0x2a0a14, .3), ink2 = solid(0x0c0a10, .25);
-    k.C(52, 54, 2, 40, bm, 0, 1, 0);
-    const stage = new THREE.Group(); M(stage, new THREE.CylinderGeometry(26, 27, 4, 40), wm, 0, 4, 0); M(stage, new THREE.TorusGeometry(19, .7, 6, 48), bm, 0, 6.1, 0, { rx: Math.PI / 2 }); M(stage, starGeo(12, 5, .5), bm, 0, 6.1, 0, { rx: -Math.PI / 2 });
-    M(stage, new THREE.BoxGeometry(3, 6, 2), bm, 0, 9, -6); g.add(stage); spin.push({ o: stage, speed: .12, bolt: false });
-    M(g, new THREE.CylinderGeometry(38, 38, 34, 40, 1, true, Math.PI * .55, Math.PI * .9), solid(0x131317, .2, { side: THREE.DoubleSide }), 0, 19, 0);          // backdrop wall, behind the stage
-    for (let i = 0; i < 80; i++) { const a = Math.PI * .55 + ((i * 7) % 40 + .5) / 40 * Math.PI * .9 + Math.PI / 2 * 0, y = 6 + ((i * 13) % 28), th = a, r = 36.6;             // the roses
-      const m = k.S(1.6 + (i % 3) * .5, i % 4 ? ink : ink2, Math.sin(th) * r, y, Math.cos(th) * r, { sy: .6 }); m.userData.noShadow = true; }
-    for (let j = 0; j < 3; j++) M(g, new THREE.CylinderGeometry(34 + j * 6, 34 + j * 6, 1.6 + j * 1.6, 40, 1, false, Math.PI * 1.6, Math.PI * .8), j % 2 ? wm : bm, 0, 2 + .8 + j * .8, 0);   // seats, facing the stage
-    for (const sx of [-1, 1]) { k.C(1.6, 2, 30, 8, wm, sx * 40, 17, 0); k.S(2.4, glowM(0xfff0d0, 2.5), sx * 40, 33, 0); }
-  }, { ry: -1.2, top: 48, view: 420 });
+  addThing('Rose Stage', '🌹', Wp(ROSE), 1, 30, g => markSilverquillLot(g, 'Rose Stage'), { ry: -1.2, top: 48, view: 420 });
 
   // Dramarium (Silverquill): 3 hexes. A domed training hall with two lesser domes, glass-walled studios and a colonnade
-  addThing('Dramatorium', '🎭', Wp(DRAMA), 2, 92, g => { const k = kit(g), wm = sqWM, bm = sqBM, st = sqST, gd = sqGD, lit = glowM(0xffe0a8, 2.6), mir = glassM(0xbcd0e0, .7), dome = solid(0x16161c, .25, { metalness: .4 }), drape = solid(0x4a1460, .7), gray = solid(0x8a8a90, .5);
-    // an opera house in courses of black and white marble: a round auditorium under a gold-ribbed dome, a fly tower behind it, the Gray Room behind that, a columned portico with two masks in its pediment, and a mirrored pavilion to each side
-    k.C(47, 48, 1.2, 40, bm, 0, .6, 0); k.C(43, 44, 1.2, 40, wm, 0, 1.8, 0);
-    k.C(22, 22, 26, 28, st, 0, 15.4, 0); k.C(23.4, 23.4, 1.6, 28, gd, 0, 29, 0); k.D(21.5, dome, 0, 29.6, 0, { sy: .8 }); for (let i = 0; i < 8; i++) M(g, new THREE.TorusGeometry(21.7, .45, 5, 16, Math.PI), gd, 0, 29.6, 0, { ry: i * .3927, sy: .8 }); k.C(2.4, 3, 6, 10, wm, 0, 49.5, 0); k.K(2.2, 9, 8, gd, 0, 57, 0);
-    for (let i = 0; i < 18; i++) { const a = i / 18 * 6.283, cs = Math.cos(a), sn = Math.sin(a); k.C(.9, .9, 20, 8, wm, cs * 23.2, 12.4, sn * 23.2); NS(k.B(2.4, 9, .5, lit, cs * 22.3, 17, sn * 22.3, { ry: -a + Math.PI / 2 })); }
-    k.B(30, 40, 16, st, 0, 22.4, -24); M(g, gable(32, 8, 17), dome, 0, 42.4, -24); k.B(30, 12, 12, gray, 0, 8.4, -38); M(g, gable(32, 5, 13), dome, 0, 14.4, -38);                                             // fly tower, and the Gray Room at the back
-    k.B(34, 20, 12, st, 0, 12.4, 25); for (let i = 0; i < 8; i++) k.C(1.2, 1.3, 18, 10, wm, -15.4 + i * 4.4, 11.4, 33); k.B(36, 2.4, 6, bm, 0, 21.6, 32); M(g, gable(36, 8, 6), wm, 0, 22.8, 32);              // the portico
-    NS(M(g, new THREE.CircleGeometry(2.3, 20), bm, -2.6, 25.3, 35.1)); NS(M(g, new THREE.CircleGeometry(2.3, 20), gd, 2.6, 25.3, 35.1)); for (const x of [-8, 0, 8]) NS(k.B(5, 9, .5, lit, x, 6.9, 31.2)); for (const sx of [-1, 1]) k.B(4, 14, .4, drape, sx * 13.4, 13, 31.3);
-    for (let i = 0; i < 5; i++) k.B(38, .5 * (5 - i), 1.6, wm, 0, 2.4 + .25 * (5 - i), 36.8 + i * 1.6);
-    for (const sx of [-1, 1]) { k.B(14, 12, 10, st, sx * 21, 8.4, 4); k.C(11, 12, 16, 18, sx > 0 ? bm : wm, sx * 32, 10.4, 4); k.D(11, sx > 0 ? wm : bm, sx * 32, 18.4, 4, { sy: .8 }); k.K(1, 6, 6, gd, sx * 32, 30, 4); NS(k.B(.6, 9, 12, mir, sx * 43.4, 9, 4)); statue(g, wm, sx * 22, 2.4, 38, 9, 0, sx > 0 ? 0 : 2); }
-  }, { ry: 1.3, top: 70, view: 560 });
+  addThing('Dramatorium', '🎭', Wp(DRAMA), 2, 92, g => markSilverquillLot(g, 'Dramatorium'), { ry: 1.3, top: 70, view: 560 });
 
   // Wiltroot Hall (Witherbloom): 1 hex. The colossal trunk of a long-dead tree, hollowed into halls, with doors and windows cut into the bark
   { const WL = Wp(WILT), wy = heightAt(WL[0], WL[1]), bark = [], lits = [], BK = 0x4a4038, BK2 = 0x3a322c;
@@ -3633,57 +3543,25 @@ function buildProps() {
     const inkSh = white => sh => { sh.uniforms.uNoise = U.uNoise; sh.uniforms.uTime = U.uTime; sh.uniforms.uNG = U.uNG; sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uNoise; uniform float uTime, uNG;')
       .replace('#include <color_fragment>', '#include <color_fragment>\n{ vec2 p = vSxW.xz / 44.0; vec2 w = texture2D(uNoise, p * 0.6 + uTime * 0.011).gb - 0.5; float c = texture2D(uNoise, p * 1.4 + w * 0.6 + uTime * vec2(0.021, 0.013)).r * texture2D(uNoise, p * 0.8 - w * 0.5 - uTime * vec2(0.015, 0.018)).r; ' + (white ? 'diffuseColor.rgb *= 0.7 + 0.7 * c;' : 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.05, 0.3), smoothstep(0.14, 0.42, c) * 0.85) + vec3(0.45, 0.4, 0.7) * pow(c, 3.0) * 1.2;') + ' }')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n{ vec2 p = vSxW.xz / 22.0; vec2 gr = (texture2D(uNoise, p + uTime * vec2(0.021, 0.014)).gb - 0.5) + (texture2D(uNoise, p * 2.7 - uTime * vec2(0.026, 0.033)).gb - 0.5) * 0.6; gr *= uNG * 0.012; normal = normalize(mat3(viewMatrix) * normalize(vec3(-gr.x, 1.0, -gr.y))); }'); };
-    const inkF = inkM.clone(); inkF.name = 'ink'; const inkFall = flowMat('#07060c', '#7a4ad0', 0x5a2ab0, .95, -.5);
+    const inkF = inkM.clone(); inkF.name = 'ink';
     const inkify = t => t.group.traverse(m => { if (m.isMesh && (m.material.name === 'ink' || m.material.name === 'inkw')) { const w = m.material.name === 'inkw'; m.material.onBeforeCompile = inkSh(w); m.material.customProgramCacheKey = () => w ? 'sxinkw' : 'sxink'; m.material.needsUpdate = true; } });
     const rod = (g, mat, a, b, r0, seg = 6) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r0, L, seg), mat); m.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); g.add(m); return m; };
-    const sr = mulberry32(777), GY = 16 * S, cenW = hx => { const p = hx.map(([q, r]) => hexW(q, r)); return [p.reduce((a, v) => a + v[0], 0) / p.length, p.reduce((a, v) => a + v[1], 0) / p.length]; };
-    const sbake = (g, sub) => { sub.updateMatrix(); for (const m of [...sub.children]) { m.applyMatrix4(sub.matrix); g.add(m); } };
-    // a gothic house: body, steep roof, lancet windows on both gable ends, and now and then a spire. Its gable ends face along its own z
-    const house = (g, x, y, z, ry, w, d, h, wall, roof, lit, spire) => { const hs = new THREE.Group(), nw = Math.max(1, Math.round(w / 6)), nr = Math.max(1, Math.floor(h / 11)); M(hs, new THREE.BoxGeometry(w, h, d), wall, 0, h / 2, 0); M(hs, gable(w + 1.2, w * .7, d + 1.2), roof, 0, h, 0);
-      for (let i = 0; i < nw; i++) for (const sd of [-1, 1]) for (let j = 0; j < nr; j++) M(hs, new THREE.BoxGeometry(1.6, 5, .4), lit, (i + .5) / nw * w - w / 2, 5 + j * 10, sd * (d / 2 + .1));
-      M(hs, new THREE.BoxGeometry(w + .7, 1.5, d + .7), wall, 0, .75, 0); M(hs, new THREE.BoxGeometry(w + 1, .7, d + 1), wall, 0, h - .35, 0);                                                              // a plinth to stand on and a cornice under the eaves
-      for (let i = 0; i < nw; i++) for (const sd of [-1, 1]) for (let j = 0; j < nr; j++) M(hs, new THREE.BoxGeometry(2.3, .35, .7), wall, (i + .5) / nw * w - w / 2, 2.3 + j * 10, sd * (d / 2 + .2));     // a sill under every window
-      for (const sd of [-1, 1]) { M(hs, new THREE.BoxGeometry(2.3, 4.3, .3), hDoor, 0, 3.6, sd * (d / 2 + .32)); M(hs, new THREE.BoxGeometry(3.1, .5, .6), wall, 0, 6, sd * (d / 2 + .3)); M(hs, new THREE.BoxGeometry(3.4, .5, 1.4), wall, 0, 1.2, sd * (d / 2 + .7)); }   // a door front and back, its lintel and its step
-      M(hs, new THREE.BoxGeometry(1.5, w * .42, 1.5), wall, w * .2, h + w * .5, -d * .24);                                                                                                                 // a chimney
-      for (const sx of [-1, 1]) { const dx = sx * w * .27, dy = h + w * .34; M(hs, new THREE.BoxGeometry(2.4, 2.2, 2.6), wall, dx, dy, d * .14); M(hs, new THREE.BoxGeometry(.3, 1.4, 1.5), lit, dx + sx * 1.25, dy + .1, d * .14); M(hs, new THREE.BoxGeometry(3, .35, 3.1), roof, dx, dy + 1.25, d * .14); }   // a lit dormer on each slope
-      if (spire) M(hs, new THREE.ConeGeometry(w * .22, h * .9, 4), roof, 0, h + w * .5 + h * .3, 0, { ry: Math.PI / 4 }); hs.position.set(x, y, z); hs.rotation.y = ry; sbake(g, hs); };
+    const GY = 16 * S, cenW = hx => { const p = hx.map(([q, r]) => hexW(q, r)); return [p.reduce((a, v) => a + v[0], 0) / p.length, p.reduce((a, v) => a + v[1], 0) / p.length]; };
     // lantern lights carried up and down a street by people we do not draw
     const walkers = (A, B, n, col, lat, yy, seed) => { const r = mulberry32(seed), a = new Float32Array(n * 4); for (let i = 0; i < n * 4; i++) a[i] = r(); const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); ge.setAttribute('aW', new THREE.BufferAttribute(a, 4));
       const m = new THREE.Points(ge, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, uniforms: { uTime: U.uTime, uScale: FXSCALE, uA: { value: new THREE.Vector3(A[0], yy, A[1]) }, uB: { value: new THREE.Vector3(B[0], yy, B[1]) }, uCol: { value: new THREE.Vector4(col[0], col[1], col[2], lat) } },
         vertexShader: 'attribute vec4 aW; uniform float uTime, uScale; uniform vec3 uA, uB; uniform vec4 uCol; void main(){ float ph = aW.x + uTime * (0.012 + 0.02 * aW.y) * (aW.z > 0.5 ? 1.0 : -1.0); float f = abs(fract(ph) * 2.0 - 1.0); vec3 d = normalize(uB - uA); vec3 p = mix(uA, uB, f) + vec3(-d.z, 0.0, d.x) * (aW.w - 0.5) * uCol.w; p.y += 0.6 * sin(uTime * 3.0 + aW.x * 40.0); vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = clamp(7.0 * uScale / -mv.z, 1.5, 60.0); }',
         fragmentShader: 'uniform vec4 uCol; void main(){ float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5)); gl_FragColor = vec4(uCol.rgb * a * a, 1.0); }' })); m.frustumCulled = false; m.raycast = () => {}; scene.add(m); };
-    // sagging strands strung between rooftops, like webs of settled ink or drifting vellum
-    const webs = (strands, col, op) => { const pos = []; for (const [a, b, w] of strands) { const dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l * w, nz = dx / l * w, sag = l * .12, P = f => [lerp(a[0], b[0], f), lerp(a[1], b[1], f) - sag * 4 * f * (1 - f), lerp(a[2], b[2], f)];
-        for (let i = 0; i < 6; i++) { const p0 = P(i / 6), p1 = P((i + 1) / 6); pos.push(p0[0] - nx, p0[1], p0[2] - nz, p0[0] + nx, p0[1], p0[2] + nz, p1[0] - nx, p1[1], p1[2] - nz, p1[0] - nx, p1[1], p1[2] - nz, p0[0] + nx, p0[1], p0[2] + nz, p1[0] + nx, p1[1], p1[2] + nz); } }
-      const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); const m = new THREE.Mesh(ge, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, side: THREE.DoubleSide, depthWrite: false })); m.raycast = () => {}; scene.add(m); };
-    const rndWebs = (c, R0, n, y0, y1, col, op, seed) => { const r = mulberry32(seed), st = []; for (let i = 0; i < n; i++) { const a = r() * 6.283, d = R0 * Math.sqrt(r()), a2 = a + (r() - .5) * 2, l = 14 + 30 * r(), x = c[0] + Math.cos(a) * d, z = c[1] + Math.sin(a) * d, ya = y0 + (y1 - y0) * r(), yb = y0 + (y1 - y0) * r(), wd = .35 + .9 * r() * r(); if (Math.hypot(x + Math.cos(a2) * l - c[0], z + Math.sin(a2) * l - c[1]) > R0 + 4) continue; st.push([[x, ya, z], [x + Math.cos(a2) * l, yb, z + Math.sin(a2) * l], wd]); } webs(st, col, op); };   // no strand may end outside the circle, so none trails over the place next door
-
-    // a street: paving, lamps and a row of houses down each side, laid along a line of world points, in the frame of the thing it belongs to
-    const sqStreet = [], sqSegs = [];   // the houses along the named streets: Meshy houses (see cityHouses), set out here and drawn with the rest of the city
-    const sqHouseAt = (g, lx, lz, fx, fz, dark, tall, k = 1) => { g.updateMatrixWorld(true); const p = new THREE.Vector3(lx, 0, lz).applyMatrix4(g.matrixWorld), f = new THREE.Vector3(fx, 0, fz).applyQuaternion(g.quaternion);   // a lit Meshy house inside a place, facing (fx, fz) in the place's own frame
-      sqStreet.push({ x: p.x, z: p.z, dark, tall, k, face: Math.atan2(f.x, f.z), street: true }); };
+    const sqSegs = []; // surveyed street segments used to lay out the neighborhood houses
     const street = (g, c, pts, o) => { for (let i = 0; i + 1 < pts.length; i++) { const A = pts[i], B = pts[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux, ry = -Math.atan2(uz, ux), mx = (A[0] + B[0]) / 2 - c[0], mz = (A[1] + B[1]) / 2 - c[1];
         M(g, new THREE.BoxGeometry(L + o.w * .4, .5, o.w), o.road, mx, .3, mz, { ry }); if (o.edge) for (const sd of [-1, 1]) M(g, new THREE.BoxGeometry(L + o.w * .4, .7, 1.4), o.edge, mx + nx * sd * (o.w / 2 + .3), .4, mz + nz * sd * (o.w / 2 + .3), { ry });
         if (o.h0 && o.models) sqSegs.push({ A, B, w: o.w, dark: o.models === 'dark' });   // Meshy houses go along it later, once the places' footprints are known (see the city below)
-        else if (o.h0) for (let d0 = 6, kk = 0; d0 < L - 6; kk++) { const d = 12 + 4 * sr(); for (const sd of [-1, 1]) { const w = 12 + 4 * sr(), h = o.h0 + o.h1 * sr() * sr(), sp = sr() < .18, lt = sr() < .75 ? o.lit : o.lit2; if ((kk + (sd > 0 ? 2 : 0)) % 5 === 4) continue; const x = A[0] + ux * (d0 + d / 2) + nx * sd * (o.w / 2 + 2 + w / 2), z = A[1] + uz * (d0 + d / 2) + nz * sd * (o.w / 2 + 2 + w / 2); if (o.skip && o.skip(x, z)) continue; if (o.models) { sqStreet.push({ x, z, dark: o.models === 'dark', face: Math.atan2(-sd * nx, -sd * nz), street: true }); continue; } house(g, x - c[0], 0, z - c[1], Math.atan2(nx, nz), d - 1, w, h, o.wall, o.roof, lt, sp); }
-          d0 += d + (kk % 5 === 4 ? 5 : .5); }
         for (let d0 = 10; d0 < L; d0 += o.gap || 24) for (const sd of [-1, 1]) { const x = A[0] + ux * d0 + nx * sd * (o.w / 2 - 1.4), z = A[1] + uz * d0 + nz * sd * (o.w / 2 - 1.4); M(g, new THREE.CylinderGeometry(.35, .5, 10, 6), o.post, x - c[0], 5, z - c[1]); NS(M(g, new THREE.SphereGeometry(1.05, 8, 6), o.lit, x - c[0], 10.6, z - c[1])); if (o.lamps) o.lamps.push([x, z]); } } };
 
     // Vellum Gargoyle Gate (28,18 27,19 28,19): the one way through the wall - two towers and a pointed arch - and beside it, crouched on a plinth and never leaving, a gargoyle of layered, rune-covered parchment
     { const GW = [SQGATE[0] * S, SQGATE[1] * S], out = [Math.cos(SQGATE[2]), Math.sin(SQGATE[2])], ry0 = -Math.atan2(out[1], out[0]);
       const parch = new THREE.MeshStandardMaterial({ roughness: .9, flatShading: true, map: canvasTex(256, 256, (c, w, hgt) => { const r = mulberry32(31); c.fillStyle = '#d8c9a0'; c.fillRect(0, 0, w, hgt); c.strokeStyle = '#5a4630'; for (let i = 0; i < 40; i++) { c.globalAlpha = .35 + .4 * r(); c.lineWidth = 1 + r(); c.beginPath(); let x = r() * w, y = r() * hgt; c.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (r() - .5) * 26; y += (r() - .5) * 14; c.lineTo(x, y); } c.stroke(); } c.globalAlpha = 1; }) });
-      const E = (grp, r, mat, x, y, z, sx, sy, sz) => M(grp, new THREE.SphereGeometry(r, 12, 9), mat, x, y, z, { sx, sy, sz }); let head = null, wings = [];
-      addThing('Vellum Gargoyle Gate', '🦇', GW, 1, 30, g => { const k = kit(g);
-        for (const sd of [-1, 1]) { k.B(24, 78, 24, bm, 0, 39, sd * 30); k.B(27, 4, 27, gd, 0, 79, sd * 30); M(g, new THREE.ConeGeometry(17, 30, 4), roofD, 0, 96, sd * 30, { ry: Math.PI / 4 }); for (const yy of [30, 54]) NS(k.B(.5, 9, 3, litP, 12.2, yy, sd * 30)); }   // gate towers
-        k.B(16, 16, 40, bm, 0, 62, 0); M(g, gable(40, 16, 16), bm, 0, 70, 0, { ry: Math.PI / 2 }); NS(M(g, new THREE.PlaneGeometry(36, 50), new THREE.MeshBasicMaterial({ color: 0x7a40d0, transparent: true, opacity: .18, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 27, 0, { ry: Math.PI / 2 }));       // the arch, and the shimmer of the ward across it
-        // (the old hand-built gargoyle, kept only if the model cannot load: see Vellum Gargoyle below)
-        const gp = new THREE.Group(); gp.userData.oldGargoyle = true; gp.position.set(46, 0, 62); gp.rotation.y = -.5; gp.scale.setScalar(2.1); g.add(gp); M(gp, new THREE.BoxGeometry(26, 7, 20), bm, 0, 3.5, 0); const bd = new THREE.Group(); gp.add(bd);
-        E(bd, 9, parch, -3, 15, 0, 1.3, 1, 1.05); E(bd, 7.5, parch, 6, 19, 0, 1, 1.15, 1); for (const sd of [-1, 1]) { E(bd, 5.4, parch, -5, 11, sd * 7, 1.3, 1, .8); M(bd, new THREE.CylinderGeometry(1.9, 1.6, 15, 7), parch, 9, 13, sd * 4.2); E(bd, 2.2, parch, 10.4, 7.6, sd * 4.2, 1.6, .6, 1); E(bd, 2.4, parch, 1, 7.6, sd * 8, 1.7, .6, 1); }
-        for (let i = 0; i < 7; i++) { const a = i * .5; M(bd, new THREE.CylinderGeometry(1.5 - i * .15, 1.6 - i * .15, 5, 6), parch, -14 - Math.sin(a) * 9, 9 + (1 - Math.cos(a)) * 5, Math.cos(a) * 5 - 5, { rz: Math.PI / 2, ry: a }); }                                                                 // tail, curled round
-        mergeKids(bd); head = new THREE.Group(); head.position.set(11, 27, 0); gp.add(head); E(head, 5.6, parch, 0, 0, 0, 1.15, .9, 1); M(head, new THREE.BoxGeometry(7, 3.4, 4.6), parch, 5.5, -1.6, 0); for (const sd of [-1, 1]) { M(head, new THREE.ConeGeometry(1.2, 8, 5), parch, -2.5, 5.5, sd * 3, { rz: .7, rx: sd * .4 }); M(head, new THREE.SphereGeometry(.9, 8, 6), litP, 3.6, 1.2, sd * 3.2); }
-        wings = [-1, 1].map(sd => { const w = new THREE.Group(); w.position.set(2, 23, sd * 5); for (let i = 0; i < 9; i++) M(w, new THREE.BoxGeometry(22 - i * 1.2, .5, 7), parch, -8 - i * 1.2, 4 + i * 2.2, sd * (3 + i * 1.5), { rz: -.5 - i * .06, rx: sd * (.5 - i * .03) }); mergeKids(w); gp.add(w); return w; });
-        { const pave = tx(solid(0xd9d3c7, .82), 'masonry'); k.B(44, .7, 52, pave, -30, .35, 0); for (const sd of [-1, 1]) k.B(44, 1, 1.4, gd, -30, .5, sd * 26.7); k.B(1.4, 1, 54.8, gd, -52.7, .5, 0); }   // a paved forecourt just inside, as wide as the arch, where the road to the hall begins                                                                                                                         // a white forecourt just inside, where the Ray Promenade begins
-      }, { y: GY, ry: ry0, hexes: [[28, 18], [28, 19]], top: 120, view: 560 });
+      addThing('Vellum Gargoyle Gate', '🦇', GW, 1, 30, g => markSilverquillLot(g, 'Vellum Gargoyle Gate'), { y: GY, ry: ry0 + Math.PI / 2, hexes: [[28, 18], [28, 19]], top: 120, view: 560 });
       // the Vellum Gargoyle: Brandon's Meshy model (Oct 2026), crouched on a great plinth outside the gate, facing the road in; three hexes of its own. Its painting shows in its panel
       { const gH = [[27, 19], [26, 19], [27, 20]].map(([q, r]) => hexAt(q, r)), gx = gH.reduce((a, h) => a + h.x, 0) / 3, gz = gH.reduce((a, h) => a + h.z, 0) / 3, gy = heightAt(gx, gz);
         const gT = addThing('Vellum Gargoyle', '🦇', [gx, gz], 1, 30, g2 => { const k2 = kit(g2), stoneP = tx(solid(0x2a2830, .7), 'masonry');
@@ -3694,308 +3572,86 @@ function buildProps() {
           const mount = (gl, isLo) => { const m = gl.scene, box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), piv = new THREE.Group(), sc = SZ / Math.max(sz.x, sz.z);
             m.position.set(-c.x, -box.min.y, -c.z); piv.add(m); piv.scale.setScalar(sc); piv.position.y = 11; piv.rotation.y = face;   // the model faces +z: turned to look out from the gate, guarding the way in
             m.traverse(o => { if (!o.isMesh) return; o.castShadow = o.receiveShadow = true; o.material.metalness = 0; o.material.envMapIntensity = .8; o.material.userData.e0 = o.material.emissive ? o.material.emissive.clone() : null; gT.mats.push(o.material); });
-            if (!st.lo && !st.hi) { const oldG = things.find(t => t.name === 'Vellum Gargoyle Gate'); if (oldG) oldG.group.traverse(o => { if (o.userData.oldGargoyle) o.visible = false; }); head = null; }
             g2.add(piv); g2.updateMatrixWorld(true); renderer.shadowMap.needsUpdate = true; return piv; };
           const getHi = () => { st.asked = true; L.load('models/halls/gargoyle.glb', gl => { st.hi = mount(gl, false); if (st.lo) { st.lo.visible = false; st.near = true; } }); };
           L.load('models/halls/gargoyle-lo.glb', gl => { st.lo = mount(gl, true); if (st.hi) st.lo.visible = false; }, undefined, () => getHi());
           anim.push(() => { if (!st.lo && !st.hi) return; const d = camera.position.distanceTo(g2.position); if (!st.asked && d < 900) getHi();
             if (st.hi && st.lo) { const near = d < (st.near ? 560 : 480); if (near !== st.near) { st.near = near; st.hi.visible = near; st.lo.visible = !near; renderer.shadowMap.needsUpdate = true; } } }); } }
-      anim.push(t => { if (head) { head.rotation.y = .5 * Math.sin(t * .17) + .12 * Math.sin(t * .6); head.rotation.z = .08 * Math.sin(t * .23); wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * .06 * Math.sin(t * .5 + i); }); } }); }
+    }
 
     // Inkfall Streets (27,16): a knot of streets where black-purple ink dust gathers in every crevice and hangs between the roofs like cobweb
-    { const bm = bmL, roofD = roofL, c = hexW(27, 16);
-      addThing('Inkfall Streets', '🕸️', c, 1, 30, g => { const k = kit(g); k.B(100, .6, 12, solid(0x0c0c10, .5), 0, .3, 0); k.B(12, .6, 100, solid(0x0c0c10, .5), 0, .3, 0);
-        for (const qx of [-1, 1]) for (const qz of [-1, 1]) { sqHouseAt(g, qx * 20, qz * 18, 0, -qz, true, true); sqHouseAt(g, qx * 42, qz * 18, 0, -qz, true, (qx + qz) % 4 === 0); sqHouseAt(g, qx * 18, qz * 42, -qx, 0, true, true, .9); }   // Meshy houses round the crossing, each facing its street
-        if (false) for (const qx of [-1, 1]) for (const qz of [-1, 1]) for (let i = 0; i < 3; i++) { house(g, qx * (15 + i * 15), 0, qz * 15, 0, 13, 14 + 4 * sr(), 20 + 24 * sr(), bm, roofD, litP, i === 1 && sr() < .6); if (i) house(g, qx * 15, 0, qz * (15 + i * 15), Math.PI / 2, 13, 14, 18 + 20 * sr(), bm, roofD, sr() < .5 ? litP : litW, false); }
-      }, { y: GY, hexes: [[27, 16]], top: 64, view: 420 });
-      rndWebs(c, 54, 170, GY + 6, GY + 44, 0x2a0f3e, .62, 53); rndWebs(c, 54, 66, GY + 10, GY + 40, 0x7a3ac0, .3, 54);
-      const pm = mist({ n: 90, seed: 55, r0: 6, r1: 60, y0: 3, y1: 16, spin: .06, rise: 0, size: 20, alpha: .12, col: [.4, .14, .6] }); pm.position.set(c[0], GY, c[1]); scene.add(pm);
-      walkers([c[0] - 50, c[1]], [c[0] + 50, c[1]], 12, [1.8, .5, 2.2], 6, GY + 4, 56); walkers([c[0], c[1] - 50], [c[0], c[1] + 50], 12, [1.8, .5, 2.2], 6, GY + 4, 57); }
+    { const c = hexW(27, 16);
+      addThing('Inkfall Streets', '🕸️', c, 1, 30, g => markSilverquillLot(g, 'Inkfall Streets'), { y: GY, hexes: [[27, 16]], top: 64, view: 420 }); }
 
     // Hecklebox Balcony (27,15): shown open to the sky and cut away at the front - one figure at a lectern on a dais in the middle, under a shaft of light; three rings of boxes rising round them, each box with its own bench and lamp;
     // roof ribs meeting at a gilded oculus; and the hexes thrown from the boxes streaming in
-    { const bm = bmL, c = hexW(27, 15), TS = Math.PI / 6, TL = Math.PI * 5 / 3;   // the rings leave a sixth of the circle open, towards the viewer
-      addThing('Hecklebox Balcony', '🎭', c, 1, 30, g => { const k = kit(g), bmD = bm.clone(), wmD = wm.clone(), hexP = glowM(0xa860ff, 2.4), hexG = glowM(0x58e890, 2.2); bmD.side = wmD.side = THREE.DoubleSide;
-        k.C(41, 42, 1.4, 40, bm, 0, .7, 0); k.C(15.5, 15.5, .4, 32, wm, 0, 1.6, 0); for (const r of [15.6, 10.5]) k.T(r, .32, gd, 0, 1.8, 0, { rx: Math.PI / 2 }); for (let i = 0; i < 12; i++) k.B(.4, .3, 5, gd, Math.sin(i * .5236) * 13, 1.75, Math.cos(i * .5236) * 13, { ry: i * .5236 });
-        k.C(7, 7.6, 1.2, 20, wm, 0, 2.2, 0); k.C(5, 5.4, 1.2, 20, bm, 0, 3.4, 0); statue(g, wm, 0, 4, 0, 9, 0, 2); k.B(2.6, 3.2, 1.2, gd, 0, 5.6, 3.2); k.B(3.2, .4, 1.8, gd, 0, 7.3, 3.2, { rx: .35 });                                              // the dais, the speaker and their lectern
-        NS(M(g, new THREE.CylinderGeometry(1.2, 6.5, 40, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: .13, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), 0, 24, 0)).raycast = () => {};   // the light they stand in
-        for (let j = 0; j < 3; j++) { const Rr = 17 + j * 7.5, yy = 7 + j * 8.5, A = j % 2 ? wm : bm, AD = j % 2 ? wmD : bmD, Bm = j % 2 ? bm : wm;
-          M(g, new THREE.RingGeometry(Rr, Rr + 7, 44, 1, -Math.PI / 3, TL), A, 0, yy, 0, { rx: -Math.PI / 2 }); M(g, new THREE.CylinderGeometry(Rr, Rr, 3.2, 44, 1, true, TS, TL), AD, 0, yy + .4, 0); M(g, new THREE.CylinderGeometry(Rr + 7, Rr + 7, 9.5, 44, 1, true, TS, TL), AD, 0, yy + 3.5, 0);     // the floor of the ring, its parapet and its back wall
-          M(g, new THREE.TorusGeometry(Rr, .34, 5, 44, TL), gd, 0, yy + 2.1, 0, { rx: Math.PI / 2, rz: Math.PI * 2 / 3 }); M(g, new THREE.TorusGeometry(Rr + 7, .4, 5, 44, TL), gd, 0, yy + 8.4, 0, { rx: Math.PI / 2, rz: Math.PI * 2 / 3 });
-          const nb = 9 + j * 3; for (let i = 0; i <= nb; i++) { const th = TS + TL * i / nb, sn = Math.sin(th), cs = Math.cos(th); k.B(.5, 5.5, 7, Bm, sn * (Rr + 3.5), yy + 2.7, cs * (Rr + 3.5), { ry: th }); k.C(.7, .8, yy, 6, Bm, sn * (Rr + .6), yy / 2, cs * (Rr + .6));
-            if (i < nb) { const tm = th + TL / nb / 2; NS(k.S(.75, (i + j) % 2 ? hexP : hexG, Math.sin(tm) * (Rr + 5.6), yy + 5.6, Math.cos(tm) * (Rr + 5.6))); k.B(3.4, .9, 1.4, Bm, Math.sin(tm) * (Rr + 4.4), yy + .5, Math.cos(tm) * (Rr + 4.4), { ry: tm }); } } }                                    // partitions between the boxes, the columns under them, a lamp and a bench in each
-        for (let i = 0; i < 8; i++) { const th = TS + TL * (i + .5) / 8, sn = Math.sin(th), cs = Math.cos(th); rod(g, bm, [sn * 39, 33.5, cs * 39], [sn * 7, 47, cs * 7], .55); rod(g, wm, [sn * 17, 9, cs * 17], [sn * 6.5, 2.4, cs * 6.5], .4); }                                                  // roof ribs up to the oculus, and the white speaking tubes running down to the floor
-        k.T(7, .7, gd, 0, 47, 0, { rx: Math.PI / 2 }); rod(g, gd, [0, 47, -7], [0, 47, 7], .3); rod(g, gd, [-7, 47, 0], [7, 47, 0], .3); rod(g, gd, [0, 47, 0], [0, 41, 0], .2); NS(k.S(1.8, litW, 0, 40, 0));
-        for (const sd of [-1, 1]) { const th = sd * TS, sn = Math.sin(th), cs = Math.cos(th); k.B(4, 32, 4, bm, sn * 38, 16, cs * 38, { ry: th }); k.B(5, 1.2, 5, gd, sn * 38, 32.6, cs * 38, { ry: th }); M(g, new THREE.ConeGeometry(3, 8, 4), bm, sn * 38, 37, cs * 38, { ry: th + .785 }); }                 // the two piers where the rings are cut
-      }, { y: GY, hexes: [[27, 15]], top: 58, view: 380 });
-      for (const [col, sd] of [[[1.6, .5, 2.4], 61], [[.5, 2, .9], 62]]) { const m = mist({ n: 110, seed: sd, arms: 6, jit: .3, r0: 36, r1: 2, y0: 24, y1: 9, spin: .25, rise: .3, twist: 1.5, size: 4.5, alpha: .85, col, add: true }); m.position.set(c[0], GY, c[1]); scene.add(m); }
-      lanternPts.push([c[0], GY + 16, c[1], { c: [2.4, 2, 1.6], size: 16, drift: .1, speed: .4 }]); }
+    { const c = hexW(27, 15);
+      addThing('Hecklebox Balcony', '🎭', c, 1, 30, g => markSilverquillLot(g, 'Hecklebox Balcony'), { y: GY, hexes: [[27, 15]], top: 58, view: 380 }); }
 
     // Annex of Addenda (28,14 28,13 29,13): where devils keep their contracts - a long black archive with four spires, red light in its windows, and on its doors a seal as tall as a house
-    { const bm = bmL, roofD = roofL, HX = [[28, 14], [28, 13], [29, 13]], c = cenW(HX);
-      const sealTex = canvasTex(256, 256, (cx, w, hgt) => { cx.fillStyle = '#000'; cx.fillRect(0, 0, w, hgt); cx.strokeStyle = '#fff'; cx.lineWidth = 7; for (const r of [116, 96]) { cx.beginPath(); cx.arc(128, 128, r, 0, 6.283); cx.stroke(); } cx.lineWidth = 6; cx.beginPath(); for (let i = 0; i <= 5; i++) { const a = -Math.PI / 2 + i * 2.5133; cx.lineTo(128 + Math.cos(a) * 92, 128 - Math.sin(a) * 92); } cx.stroke(); cx.lineWidth = 3; for (let i = 0; i < 18; i++) { const a = i * .349; cx.beginPath(); cx.moveTo(128 + Math.cos(a) * 99, 128 + Math.sin(a) * 99); cx.lineTo(128 + Math.cos(a + .1) * 113, 128 + Math.sin(a + .1) * 113); cx.stroke(); } });
-      const sealM = new THREE.MeshStandardMaterial({ color: 0x3a0806, roughness: .35, emissive: 0xff2a14, emissiveMap: sealTex, emissiveIntensity: 2.6 });
-      addThing('Annex of Addenda', '📜', c, 1, 30, g => { const k = kit(g); k.B(104, 3, 70, bm, 0, 1.5, 0); for (let i = 0; i < 5; i++) k.B(40 - i * 3, .7, 5, wm, 0, .4 + i * .6, 40 + (4 - i) * 3);                    // podium and steps
-        k.B(84, 50, 44, bm, 0, 28, -4); M(g, gable(48, 22, 86), roofD, 0, 53, -4, { ry: Math.PI / 2 }); for (const sx of [-1, 1]) { k.B(26, 36, 56, bm, sx * 50, 21, -4); M(g, gable(28, 14, 58), roofD, sx * 50, 39, -4); }
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) { k.B(11, 78, 11, bm, sx * 39, 42, -4 + sz * 22); M(g, new THREE.ConeGeometry(8, 34, 4), roofD, sx * 39, 98, -4 + sz * 22, { ry: Math.PI / 4 }); NS(k.S(1.4, litR, sx * 39, 116, -4 + sz * 22)); }
-        for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) { NS(k.B(3, 16, .5, litR, sx * (10 + i * 5.6), 30, 18.2)); if (i < 4) NS(k.B(.5, 14, 3, litR, sx * 63.2, 22, -22 + i * 12)); }
-        k.B(22, 34, 2, solid(0x1a0606, .5), 0, 20, 18.6); NS(M(g, new THREE.CircleGeometry(13, 40), sealM, 0, 22, 19.8)); k.T(13.4, 1.2, gd, 0, 22, 19.8); for (const sd of [-1, 1]) k.B(30, 1.4, 1.4, solid(0x202024, .4, { metalness: .7 }), 0, 22 + sd * 9, 20.4, { rz: sd * .3 });           // the doors, the seal, and chains across it
-        for (const sx of [-1, 1]) { k.C(2.4, 3.2, 10, 8, bm, sx * 24, 8, 34); NS(k.S(2.4, litR, sx * 24, 14.6, 34)); }
-      }, { y: GY, hexes: HX, top: 130, view: 620 });
-      lanternPts.push([c[0], GY + 24, c[1] + 22, { c: [2.6, .4, .2], size: 26, drift: .1, speed: .5 }]); for (const sx of [-1, 1]) lanternPts.push([c[0] + sx * 24, GY + 15, c[1] + 34, { c: [2.6, .5, .2], size: 10, drift: .5, speed: 1.4 }]); }
+    { const HX = [[28, 14], [28, 13], [29, 13]], c = cenW(HX);
+      addThing('Annex of Addenda', '📜', c, 1, 30, g => markSilverquillLot(g, 'Annex of Addenda'), { y: GY, hexes: HX, top: 130, view: 620 }); }
 
     // Umbral Blade Loom (29,14): a black loom as tall as a tower. Its warp of ten thousand threads spreads down from the beam like a skirt; heddle frames rise and fall in it and a gold shuttle flies across; the cloth of woven shadow comes off the front
     // and runs out over the steps; great wheels turn on its sides, bobbins as tall as a man feed it from all round, and the blades it has made stand point-down in a ring about its foot
-    { const bm = bmL, roofD = roofL, c = hexW(29, 14), thread = canvasTex(256, 16, (cx, w, hgt) => { cx.fillStyle = '#000'; cx.fillRect(0, 0, w, hgt); const r = mulberry32(9); for (let i = 0; i < 70; i++) { cx.fillStyle = r() < .2 ? '#fff' : '#9a9a9a'; cx.fillRect(r() * w, 0, 1 + (r() < .15 ? 1 : 0), hgt); } }, 5, 1);
-      const skirt = new THREE.MeshStandardMaterial({ color: 0x0c0a12, emissive: 0x6a2ad0, emissiveIntensity: .7, alphaMap: thread, emissiveMap: thread, transparent: true, side: THREE.DoubleSide, depthWrite: false, roughness: .6 }), cloth = flowMat('#0b0916', '#8a4ae0', 0x6a2ad0, .96, -.06), hed = [], wheels = []; let shut = null;
-      addThing('Umbral Blade Loom', '🧵', c, 1, 30, g => { const k = kit(g), iron = solid(0x3a3a48, .35, { metalness: .6 }), blade = new THREE.MeshStandardMaterial({ color: 0x0c0a16, roughness: .15, metalness: .7, emissive: 0x7a3ae0, emissiveIntensity: .55 }), spool = solid(0x4a3470, .7), hexThread = glowM(0x7a3ae0, 1.2);
-        M(g, new THREE.CylinderGeometry(62, 64, 2, 8), bm, 0, 1, 0, { ry: .3927 }); M(g, new THREE.CylinderGeometry(52, 54, 2, 8), sqBM, 0, 3, 0, { ry: .3927 }); M(g, new THREE.CylinderGeometry(42, 44, 2, 8), bm, 0, 5, 0, { ry: .3927 }); k.T(47, .5, gd, 0, 4.2, 0, { rx: Math.PI / 2 });
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) { k.B(5, 164, 5, bm, sx * 17, 88, sz * 17); k.B(10, 12, 10, bm, sx * 17, 12, sz * 17); k.B(11.4, 1.4, 11.4, gd, sx * 17, 18.6, sz * 17); rod(g, bm, [sx * 34, 6, sz * 34], [sx * 18, 58, sz * 18], 1.6); }                  // the four posts, their feet and their raking shores
-        for (const yy of [56, 112, 166]) { for (const sz of [-1, 1]) k.B(38, 3.4, 3.4, bm, 0, yy, sz * 17); for (const sx of [-1, 1]) k.B(3.4, 3.4, 38, bm, sx * 17, yy, 0); }
-        for (const sx of [-1, 1]) for (const [ya, yb] of [[58, 110], [114, 164]]) { rod(g, iron, [sx * 17, ya, -17], [sx * 17, yb, 17], .8); rod(g, iron, [sx * 17, ya, 17], [sx * 17, yb, -17], .8); }                                                                                // cross-bracing up the sides
-        k.B(46, 9, 46, bm, 0, 174, 0); k.B(48, 1.4, 48, gd, 0, 179.2, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) M(g, new THREE.ConeGeometry(4, 16, 4), roofD, sx * 19, 188, sz * 19, { ry: Math.PI / 4 }); M(g, new THREE.ConeGeometry(11, 40, 4), roofD, 0, 200, 0, { ry: Math.PI / 4 }); NS(k.S(2.2, litP, 0, 222, 0));   // the castle at its head
-        k.C(6, 6, 44, 14, gd, 0, 150, 0, { rz: Math.PI / 2 }); for (const sx of [-1, 1]) k.C(8.5, 8.5, 1.6, 16, gd, sx * 21.5, 150, 0, { rz: Math.PI / 2 });                                                                                                                         // the warp beam
-        NS(M(g, new THREE.CylinderGeometry(7, 56, 140, 64, 1, true), skirt, 0, 78, 0)); NS(M(g, new THREE.CylinderGeometry(5, 40, 130, 48, 1, true), skirt, 0, 80, 0, { ry: .4 }));
-        k.C(4.6, 4.6, 40, 14, gd, 0, 14, 25, { rz: Math.PI / 2 }); NS(M(g, new THREE.PlaneGeometry(30, 50), cloth, 0, 37, 13.5, { rx: -.42 })); NS(M(g, new THREE.PlaneGeometry(30, 15), cloth, 0, 6.25, 33.5, { rx: -Math.PI / 2 })); NS(M(g, new THREE.PlaneGeometry(30, 21.4), cloth, 0, 4.3, 51.5, { rx: -1.383 }));   // the cloth: off the fell, round the cloth beam, and out across the steps
-        for (let i = 0; i < 2; i++) { const h = new THREE.Group(); M(h, new THREE.BoxGeometry(30, 1.2, 1.2), gd, 0, 8, 0); M(h, new THREE.BoxGeometry(30, 1.2, 1.2), gd, 0, -8, 0); for (let w = 0; w < 13; w++) M(h, new THREE.BoxGeometry(.3, 16, .3), iron, -13.2 + w * 2.2, 0, 0); mergeKids(h); h.position.set(0, 104, i ? 4 : -4); g.add(h); hed.push(h); }   // heddle frames
-        shut = new THREE.Group(); M(shut, new THREE.OctahedronGeometry(1.6, 0), gd, 0, 0, 0, { sx: 3.4 }); NS(M(shut, new THREE.SphereGeometry(.8, 8, 6), litP, 0, 0, 0)); shut.position.set(0, 88, 0); g.add(shut);                                                                           // the shuttle
-        for (const sx of [-1, 1]) { const w = new THREE.Group(); M(w, new THREE.TorusGeometry(13, 1.3, 6, 28), iron, 0, 0, 0); for (let i = 0; i < 4; i++) M(w, new THREE.BoxGeometry(26, 1.2, 1.2), iron, 0, 0, 0, { rz: i * .785 }); M(w, new THREE.CylinderGeometry(2.4, 2.4, 3, 12), gd, 0, 0, 0, { rx: Math.PI / 2 }); mergeKids(w);
-          const hold = new THREE.Group(); hold.position.set(sx * 22.5, 36, 0); hold.rotation.y = Math.PI / 2; hold.add(w); g.add(hold); wheels.push(w); }                                                                                                                           // the wheels on its sides
-        for (let i = 0; i < 8; i++) { const a = i * .785 + .39, x = Math.cos(a) * 47, z = Math.sin(a) * 47; if (z > 35) continue; k.C(5, 5, .8, 14, gd, x, 4.6, z); k.C(3.8, 3.8, 10, 14, spool, x, 10, z); k.C(5, 5, .8, 14, gd, x, 15.4, z); NS(rod(g, hexThread, [x, 15.8, z], [Math.cos(a) * 6, 150, Math.sin(a) * 6], .22, 4)); }   // bobbins, each with its thread running up to the beam
-        for (let i = 0; i < 16; i++) { const a = i * .3927 + .196, x = Math.cos(a) * 57, z = Math.sin(a) * 57; if (Math.abs(x) < 18 && z > 0) continue; M(g, new THREE.ConeGeometry(1.4, 18, 4), blade, x, 11, z, { rx: Math.PI, ry: a, sz: .3 }); k.B(5, .8, 1.2, gd, x, 20.4, z, { ry: -a + Math.PI / 2 }); k.C(.45, .45, 4, 6, bm, x, 22.8, z); k.S(.8, gd, x, 25.2, z); }   // the blades
-        for (let i = 0; i < 12; i++) { const a = i * .5236; NS(k.S(1.3, litP, Math.cos(a) * 20, 30 + (i * 37) % 130, Math.sin(a) * 20)); }
-      }, { y: GY, hexes: [[29, 14]], top: 232, view: 560 });
-      anim.push(t => { hed.forEach((h, i) => { h.position.y = 104 + (i ? -7 : 7) * Math.sin(t * 1.1); }); if (shut) shut.position.x = 13 * Math.sin(t * 1.9); wheels.forEach((w, i) => { w.rotation.z = t * (i ? -.5 : .5); }); });
-      const sh = mist({ n: 80, seed: 71, r0: 8, r1: 50, y0: 146, y1: 12, spin: .5, rise: .12, twist: 3, size: 4, alpha: .8, col: [1.4, .6, 2.6], add: true }); sh.position.set(c[0], GY, c[1]); scene.add(sh); }
+    { const c = hexW(29, 14);
+      addThing('Umbral Blade Loom', '🧵', c, 1, 30, g => markSilverquillLot(g, 'Umbral Blade Loom'), { y: GY, hexes: [[29, 14]], top: 232, view: 560 }); }
 
     // Whispertube Tenements (29,15): a tenement block built round a court, and filling the court's back wall, floor to roof, the brass horns people speak their mail into
-    { const bm = bmL, roofD = roofL, c = hexW(29, 15), brass = new THREE.MeshStandardMaterial({ color: 0xb8923c, roughness: .3, metalness: .8 });
-      addThing('Whispertube Tenements', '📯', c, 1, 30, g => { const k = kit(g), win = wallMat(10, 4, '#585868', '#0a0a10', '#c890ff', .3);
-        k.B(70, 46, 16, win, 0, 23, -22); for (const sx of [-1, 1]) { k.B(16, 46, 44, win, sx * 27, 23, 8); M(g, gable(18, 9, 46), roofD, sx * 27, 46, 8); } M(g, gable(18, 9, 72), roofD, 0, 46, -22, { ry: Math.PI / 2 });
-        k.B(38, 44, 2, bm, 0, 22, -13); for (let i = 0; i < 11; i++) for (let j = 0; j < 12; j++) M(g, new THREE.ConeGeometry(1.25, 2.8, 8, 1, true), brass, -16.5 + i * 3.3, 3.6 + j * 3.5, -10.6, { rx: -Math.PI / 2 });                                 // the wall of horns
-        for (let i = 0; i < 6; i++) k.C(.5, .5, 44, 6, brass, -18 + i * 7.2, 22, -11.6); for (const yy of [15, 30]) k.B(38, .6, 5, bm, 0, yy, -9);
-      }, { y: GY, hexes: [[29, 15]], top: 70, view: 420 }); }
+    { const c = hexW(29, 15);
+      addThing('Whispertube Tenements', '📯', c, 1, 30, g => markSilverquillLot(g, 'Whispertube Tenements'), { y: GY, hexes: [[29, 15]], top: 70, view: 420 }); }
 
     // Spotlight Lance Plaza (31,15): a round plaza with a spire at its middle throwing a lance of white light straight up, to be seen from anywhere on the map
-    { const c = hexW(31, 15), beamM = (op) => new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.55, 1.4), transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false });
-      addThing('Spotlight Lance Plaza', '🔦', c, 1, 30, g => { const k = kit(g); k.C(44, 45, 1.2, 36, wm, 0, .6, 0); for (const r of [14, 28, 42]) k.T(r, .5, gd, 0, 1.3, 0, { rx: Math.PI / 2 }); k.C(8, 11, 8, 12, wm, 0, 5, 0); M(g, new THREE.ConeGeometry(6, 62, 8), wm, 0, 40, 0); k.T(4.4, .8, gd, 0, 44, 0, { rx: Math.PI / 2 }); NS(k.S(3, litW, 0, 72, 0));
-        for (let i = 0; i < 8; i++) { const a = i * .785; k.C(1, 1.3, 12, 6, gd, Math.cos(a) * 36, 6, Math.sin(a) * 36); NS(k.S(1.6, litW, Math.cos(a) * 36, 13, Math.sin(a) * 36)); }
-        // more to it: a lower step round the rim, gold rays inlaid from the spire to the edge and a dark ring among them
-        k.C(48.5, 49.5, .6, 36, wm, 0, .3, 0); k.T(21, .8, bm, 0, 1.05, 0, { rx: Math.PI / 2 }); for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; k.B(30, .16, .6, gd, Math.cos(a) * 27, 1.28, Math.sin(a) * 27, { ry: -a }); }
-        // the spire: stepped drums under it, eight struts leaning on it each with a gilded foot, gold collars up its length, and a cage of prongs round the light
-        k.C(13, 14, 2, 16, wm, 0, 2.2, 0); k.C(10.4, 11.4, 2, 16, wm, 0, 4.2, 0); k.T(9.3, .5, gd, 0, 9.3, 0, { rx: Math.PI / 2 });
-        for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + Math.PI / 8, ca = Math.cos(a), sa = Math.sin(a); rod(g, wm, [ca * 11.5, 3, sa * 11.5], [ca * 3.4, 31, sa * 3.4], 1.0, 4); k.K(1.3, 4.6, 6, gd, ca * 11.5, 6.6, sa * 11.5); }
-        for (const y of [22, 34, 54, 64]) k.T(6 * (71 - y) / 62 + .55, .42, gd, 0, y, 0, { rx: Math.PI / 2 });
-        for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; rod(g, gd, [Math.cos(a) * 1.3, 66, Math.sin(a) * 1.3], [Math.cos(a) * 4.4, 75, Math.sin(a) * 4.4], .28, 5); } k.T(4.4, .34, gd, 0, 75, 0, { rx: Math.PI / 2 });
-        // a ring of gold-framed mirrors turned up at the point of the spire, statues at the four quarters, curved benches between them
-        { const mir = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: .03, metalness: 1, envMapIntensity: 2.4 });
-          for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + Math.PI / 8, x = Math.cos(a) * 23, z = Math.sin(a) * 23; k.C(.5, .8, 4.4, 6, gd, x, 3.4, z); k.B(.7, 8.6, 6.6, gd, x, 8.6, z, { ry: -a, rz: -.5 }); k.B(.5, 7.6, 5.6, mir, x - Math.cos(a) * .3, 8.75, z - Math.sin(a) * .3, { ry: -a, rz: -.5 }); } }
-        for (let i = 0; i < 24; i++) { const a = i * Math.PI / 12 + .13; NS(k.C(.6, .6, .2, 8, litW, Math.cos(a) * 45.4, 1.3, Math.sin(a) * 45.4)); if (i % 3 === 0) NS(k.C(.5, .5, .2, 8, litW, Math.cos(a) * 17.6, 1.3, Math.sin(a) * 17.6)); }   // lights let into the paving round the rim and round the spire
-        for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; NS(k.C(4.4, 4.4, .16, 20, waterGlass(0xbfe6f2, .85), Math.cos(a) * 33, 1.32, Math.sin(a) * 33)); k.T(4.5, .35, gd, Math.cos(a) * 33, 1.4, Math.sin(a) * 33, { rx: Math.PI / 2 }); }      // four shallow mirror pools between the statues
-        for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; k.B(.7, 5.6, 1.1, wm, Math.cos(a) * 9.6, 6.2, Math.sin(a) * 9.6, { ry: -a }); }                                                                                                                 // flutes round the drum the spire stands on
-        for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, x = Math.cos(a) * 38, z = Math.sin(a) * 38; k.B(5.4, 4, 5.4, wm, x, 3.2, z, { ry: -a }); k.B(6.2, .7, 6.2, gd, x, 5.5, z, { ry: -a }); statue(g, wm, x, 5.8, z, 13, -a, i);
-          M(g, new THREE.TorusGeometry(31, 1.1, 4, 10, .62), wm, 0, 2.3, 0, { rx: Math.PI / 2, rz: a + .46 }); }
-      }, { y: GY, hexes: [[31, 15]], top: 100, view: 460 });
-      for (const [r0, r1, op] of [[3, 6, .34], [9, 30, .07]]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, 1700, 20, 1, true), beamM(op)); m.position.set(c[0], GY + 72 + 850, c[1]); m.raycast = () => {}; m.frustumCulled = false; scene.add(m); }
-      lanternPts.push([c[0], GY + 72, c[1], { c: [2.8, 2.7, 2.4], size: 40, drift: .1, speed: .4 }]); }
+    { const c = hexW(31, 15);
+      addThing('Spotlight Lance Plaza', '🔦', c, 1, 30, g => markSilverquillLot(g, 'Spotlight Lance Plaza'), { y: GY, hexes: [[31, 15]], top: 100, view: 460 }); }
 
     // Illumination Hall (33,15): a white cathedral, light pouring out of every tall window and up through its roof
-    { const c = hexW(33, 15), shaft = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.4, 1.1), transparent: true, opacity: .1, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false });
-      addThing('Illumination Hall', '⛪', c, 1, 30, g => { const k = kit(g); k.B(34, 3, 78, wm, 0, 1.5, 0); k.B(26, 44, 62, wm, 0, 24, -4); M(g, gable(29, 16, 64), roofG, 0, 46, -4); k.B(50, 34, 16, wm, 0, 19, -10); M(g, gable(18, 10, 52), roofG, 0, 36, -10, { ry: Math.PI / 2 });
-        for (const sx of [-1, 1]) { k.B(10, 70, 10, wm, sx * 11, 37, 28); M(g, new THREE.ConeGeometry(7.4, 30, 4), roofG, sx * 11, 87, 28, { ry: Math.PI / 4 }); for (let i = 0; i < 5; i++) NS(k.B(.5, 26, 5, litW, sx * 13.2, 26, 16 - i * 10)); }
-        NS(M(g, new THREE.CircleGeometry(6.5, 24), litW, 0, 34, 33.2)); k.T(6.8, .8, gd, 0, 34, 33.2); NS(k.B(7, 14, .5, litW, 0, 10, 33.2));
-        for (const [x, z, r] of [[0, 46, 7], [-14, 52, 4.5], [14, 52, 4.5]]) NS(k.T(r, .5, litW, x, 1, z, { rx: Math.PI / 2 }));                                                                              // circles of light on the paving before the doors
-        for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) { const m = M(g, new THREE.PlaneGeometry(9, 60), shaft, sx * 30, 24, 10 - i * 14, { rz: sx * .9 }); m.userData.noShadow = true; m.raycast = () => {}; }
-        // a front between the towers for the door and the rose to sit in, gabled, a light on its point; a row of small lit niches over the door; gold string courses across it
-        k.B(12.4, 56, 2, wm, 0, 30, 32); M(g, gable(12.4, 8, 2), wm, 0, 58, 32); k.K(.9, 4, 6, gd, 0, 68, 32); NS(k.S(.9, litW, 0, 70.6, 32)); for (const y of [20, 44]) k.B(12.6, .5, .5, gd, 0, y, 33.2);
-        for (let i = 0; i < 5; i++) { NS(k.B(1.1, 4.2, .4, litW, -4.6 + i * 2.3, 23.2, 33.15)); k.B(1.5, .4, .5, gd, -4.6 + i * 2.3, 25.6, 33.2); }
-        for (const sx of [-1, 1]) { for (const cx of [-5.2, 5.2]) for (const cz of [-5.2, 5.2]) k.B(1.5, 70, 1.5, wm, sx * 11 + cx, 37, 28 + cz);                                    // the towers: a buttress up each corner,
-          for (const y of [16, 42]) { k.B(11.2, .5, 11.2, gd, sx * 11, y, 28); NS(k.B(1.7, 12, .4, litW, sx * 11, y + 8, 33.15)); NS(k.B(.4, 12, 1.7, litW, sx * 16.15, y + 8, 28)); k.B(2.5, .5, .6, gd, sx * 11, y + 14.4, 33.2); }   // string courses, and a lancet in front and at the side on two levels
-          for (let i = 0; i < 5; i++) { const z = 16 - i * 10; NS(M(g, new THREE.CylinderGeometry(1.5, 1.5, .4, 12), litW, sx * 13.2, 42.6, z, { rz: Math.PI / 2 })); M(g, new THREE.TorusGeometry(1.7, .25, 4, 12), gd, sx * 13.4, 42.6, z, { ry: Math.PI / 2 }); }   // a round clerestory window over each tall one
-          for (const dz of [-4.4, 0, 4.4]) NS(k.B(.4, 16, 2.2, litW, sx * 25.15, 19, -10 + dz)); NS(M(g, new THREE.CylinderGeometry(2.4, 2.4, .4, 14), litW, sx * 25.15, 31.5, -10, { rz: Math.PI / 2 })); for (const dz of [-7.2, 7.2]) k.K(1.2, 6, 4, gd, sx * 24.2, 39, -10 + dz, { ry: Math.PI / 4 });   // three lancets and a rose in each transept end
-          for (const z of [39, 46]) { k.C(.4, .6, 9, 6, gd, sx * 17, 4.5, z); NS(k.S(1.1, litW, sx * 17, 9.7, z)); } k.B(1, 2.2, 12, wm, sx * 18.5, 1.1, 42); }                                                                                               // lamps and a low wall either side of the steps
-        // more to it. Buttresses down both sides, each with a gilded pinnacle; gold frames to the tall windows; a gold crest along the ridge
-        for (const sx of [-1, 1]) { for (let i = 0; i < 6; i++) { const z = 21 - i * 10; if (Math.abs(z + 10) < 9) continue; k.B(3, 30, 2.4, wm, sx * 15.3, 17, z); k.B(2.2, 6, 2, wm, sx * 14.9, 35, z); k.K(1.5, 6, 4, gd, sx * 15.3, 41, z, { ry: Math.PI / 4 }); }
-          for (let i = 0; i < 5; i++) { const z = 16 - i * 10; for (const dz of [-2.9, 2.9]) k.B(.5, 27, .5, gd, sx * 13.4, 26, z + dz); for (const y of [12.6, 39.6]) k.B(.5, .5, 6.3, gd, sx * 13.4, y, z); } }
-        k.B(.5, 1.6, 62, gd, 0, 62.6, -4);
-        // the towers: gold bands, a lit belfry, a pinnacle at each corner, a light at the very top
-        for (const sx of [-1, 1]) { for (const y of [30, 52, 71.4]) k.B(10.9, 1, 10.9, gd, sx * 11, y, 28); NS(k.B(10.3, 9, 4, litW, sx * 11, 61, 28)); NS(k.B(4, 9, 10.3, litW, sx * 11, 61, 28)); NS(k.S(1.1, litW, sx * 11, 102.8, 28));
-          for (const cx of [-4.4, 4.4]) for (const cz of [-4.4, 4.4]) k.K(1.1, 7, 4, gd, sx * 11 + cx, 75.4, 28 + cz, { ry: Math.PI / 4 }); }
-        // the west front: steps, a gilded arch and jambs to the door, a statue either side, spokes to the rose window
-        k.B(26, 1, 3, wm, 0, 2.5, 40.5); k.B(30, 1, 3, wm, 0, 1.5, 43.5); k.B(34, 1, 3, wm, 0, .5, 46.5); M(g, new THREE.TorusGeometry(4.6, .7, 5, 12, Math.PI), gd, 0, 16.8, 33.5); for (const sx of [-1, 1]) { k.B(.9, 14, .9, gd, sx * 4.6, 10, 33.5); statue(g, wm, sx * 8.6, 3, 36, 11, -Math.PI / 2, sx > 0 ? 0 : 2); }
-        for (let i = 0; i < 6; i++) k.B(13, .35, .3, gd, 0, 34, 33.6, { rz: i * Math.PI / 6 });
-        // over the crossing a lantern - an eight-sided drum with lit slits, a gilded dome on it - and at the east end a round apse with its own windows
-        k.C(6, 6.4, 8, 8, wm, 0, 62, -10); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + Math.PI / 8; NS(k.B(.4, 5, 1.6, litW, Math.cos(a) * 5.95, 62, -10 + Math.sin(a) * 5.95, { ry: -a })); } k.T(6.5, .5, gd, 0, 66.2, -10, { rx: Math.PI / 2 }); k.D(6.2, roofG, 0, 66.3, -10); NS(k.S(1, litW, 0, 73.4, -10));
-        M(g, new THREE.CylinderGeometry(11, 11, 34, 14, 1, false, 0, Math.PI), wm, 0, 19, -35, { ry: Math.PI / 2 }); M(g, new THREE.SphereGeometry(11, 14, 8, 0, Math.PI, 0, Math.PI / 2), roofG, 0, 36, -35, { ry: Math.PI }); k.T(11.2, .5, gd, 0, 36, -35, { rx: Math.PI / 2 });
-        for (const a of [-.75, 0, .75]) NS(k.B(1.6, 18, .5, litW, Math.sin(a) * 11.15, 20, -35 - Math.cos(a) * 11.15, { ry: a }));
-      }, { y: GY, ry: -1.2, hexes: [[33, 15]], top: 110, view: 460 });
-      { const m = new THREE.Mesh(new THREE.CylinderGeometry(11, 4, 520, 16, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.4, 1.1), transparent: true, opacity: .09, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false })); m.position.set(c[0] + 9.3, GY + 74 + 260, c[1] - 3.6); m.raycast = () => {}; m.frustumCulled = false; scene.add(m); }   // the light going up through the roof, out of the lantern
-      lanternPts.push([c[0], GY + 30, c[1], { c: [2.6, 2.4, 1.8], size: 34, drift: .1, speed: .3 }]); }
+    { const c = hexW(33, 15);
+      addThing('Illumination Hall', '⛪', c, 1, 30, g => markSilverquillLot(g, 'Illumination Hall'), { y: GY, ry: -1.2, hexes: [[33, 15]], top: 110, view: 460 }); }
 
     // Vainglory (32,14): a glasshouse trimmed in gold; through the roof you can see the garden - a pool, silver flowers, and a tree whose leaves are mirrors
-    { const c = hexW(32, 14), glass = new THREE.MeshStandardMaterial({ color: 0xe8f4f0, roughness: .05, transparent: true, opacity: .2, envMapIntensity: 2, side: THREE.DoubleSide, depthWrite: false }), mirror = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: .03, metalness: 1, envMapIntensity: 2.4, flatShading: true }), silver = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: .25, metalness: .8 });
-      addThing('Vainglory', '🪞', c, 1, 30, g => { const k = kit(g); k.B(64, 2, 44, wm, 0, 1, 0); for (const sz of [-1, 1]) { k.B(60, 7, 1.6, wm, 0, 5.5, sz * 20); NS(k.B(60, 18, .5, glass, 0, 18, sz * 20)); } for (const sx of [-1, 1]) { k.B(1.6, 7, 40, wm, sx * 30, 5.5, 0); NS(k.B(.5, 18, 40, glass, sx * 30, 18, 0)); }
-        NS(M(g, new THREE.CylinderGeometry(20, 20, 60, 18, 1, true, 0, Math.PI), glass, 0, 27, 0, { rz: Math.PI / 2 })); for (let i = 0; i < 7; i++) M(g, new THREE.TorusGeometry(20.2, .6, 5, 16, Math.PI), gd, -30 + i * 10, 27, 0, { ry: Math.PI / 2 }); k.B(60.6, .8, .8, gd, 0, 47, 0); for (const sz of [-1, 1]) k.B(60.6, .8, .8, gd, 0, 27, sz * 20.2);
-        NS(k.C(9, 9, .5, 20, waterGlass(0x9fd8e8, .8), 12, 2.4, 0)); k.C(1.6, 2.6, 16, 7, silver, -10, 10, 0); for (let i = 0; i < 26; i++) { const a = i * 2.4, r = 3 + (i % 4) * 2.4; M(g, new THREE.OctahedronGeometry(2.4, 0), mirror, -10 + Math.cos(a) * r, 18 + (i % 5) * 2, Math.sin(a) * r, { sy: .35, rx: sr() * 1.2, rz: sr() * 1.2 }); }
-        for (let i = 0; i < 40; i++) { const x = -27 + sr() * 54, z = -17 + sr() * 34; k.S(.7 + .4 * sr(), i % 3 ? silver : wm, x, 2.6, z); }
-        // more to it. A wider step under the whole house; gold glazing bars up every wall and a rail where the vault springs; a pier at each corner with a light on it
-        k.B(70, 1, 50, wm, 0, .5, 0); for (let i = 0; i <= 12; i++) for (const sz of [-1, 1]) k.B(.5, 18, .7, gd, -30 + i * 5, 18, sz * 20.3); for (let i = 0; i <= 8; i++) for (const sx of [-1, 1]) k.B(.7, 18, .5, gd, sx * 30.3, 18, -20 + i * 5);
-        for (const sz of [-1, 1]) k.B(60.6, .6, .8, gd, 0, 9.2, sz * 20.3); for (const sx of [-1, 1]) { k.B(.8, .6, 40.6, gd, sx * 30.3, 9.2, 0); k.B(.8, .8, 40.6, gd, sx * 30.3, 27, 0); }
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) { k.B(2.6, 25, 2.6, wm, sx * 30.3, 14.5, sz * 20.3); k.B(3.4, 1, 3.4, gd, sx * 30.3, 27.5, sz * 20.3); NS(k.S(1.3, litW, sx * 30.3, 29.4, sz * 20.3)); }
-        // the two glass ends under the vault, each a fan of gold bars
-        for (const sx of [-1, 1]) { NS(M(g, new THREE.CircleGeometry(20, 20, 0, Math.PI), glass, sx * 30.2, 27, 0, { ry: Math.PI / 2 })); for (let i = 1; i < 6; i++) { const a = i * Math.PI / 6; rod(g, gd, [sx * 30.45, 27, 0], [sx * 30.45, 27 + Math.sin(a) * 20, Math.cos(a) * 20], .28, 5); } M(g, new THREE.TorusGeometry(10, .3, 4, 14, Math.PI), gd, sx * 30.45, 27, 0, { ry: Math.PI / 2 }); }
-        // a lantern on the ridge with a light in it, finials along the ridge
-        k.C(5, 5, .7, 8, gd, 0, 47.8, 0); NS(k.C(4.4, 4.4, 5, 8, glass, 0, 50.6, 0)); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + Math.PI / 8; k.B(.4, 5, .4, gd, Math.cos(a) * 4.5, 50.6, Math.sin(a) * 4.5); } k.K(5.4, 5, 8, gd, 0, 55.6, 0); NS(k.S(.9, litW, 0, 58.7, 0)); for (const x of [-25, -12.5, 12.5, 25]) k.K(.7, 3.2, 6, gd, x, 49, 0);
-        // the door in the south wall: gold posts, lintel and pediment, steps down, an urn of silver either side
-        for (const sx of [-1, 1]) { k.B(.9, 14, 1.2, gd, sx * 4.4, 9, 20.7); k.C(1.8, 1.2, 3.2, 10, wm, sx * 8.4, 3.6, 24); k.S(1.7, silver, sx * 8.4, 6, 24, { sy: .7 }); } k.B(9.8, 1, 1.4, gd, 0, 16.4, 20.7); M(g, gable(11, 3.4, 1.6), gd, 0, 16.9, 20.7); k.B(16, 1, 5, wm, 0, 1.5, 24.5); k.B(20, 1, 4, wm, 0, .5, 28.5);
-        // inside: marble walks crossing, a gold rim and a jet to the pool, four beds of silver flowers on their stems, two benches, and more limbs and mirror leaves to the tree
-        k.B(56, .2, 4, wm, 0, 2.1, 0); k.B(4, .2, 36, wm, 0, 2.1, 0); k.T(9.3, .6, gd, 12, 2.5, 0, { rx: Math.PI / 2 }); k.C(.5, .8, 5, 8, silver, 12, 4.8, 0); NS(k.S(.9, litW, 12, 7.7, 0)); for (const sz of [-1, 1]) k.B(7, 1.1, 2.2, wm, 12, 2.9, sz * 13);
-        { const soil = solid(0x2a2622, 1); for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const bx = sx * 19 - 1, bz = sz * 12; if (sx > 0) continue; k.B(16, .8, 9, soil, bx, 2.4, bz); for (let i = 0; i < 12; i++) { const x = bx - 7 + sr() * 14, z = bz - 3.6 + sr() * 7.2, hh = 2 + sr() * 1.6; k.C(.09, .09, hh, 4, silver, x, 2.8 + hh / 2, z); M(g, new THREE.OctahedronGeometry(.75, 0), i % 3 ? silver : mirror, x, 3 + hh, z, { sy: .6, ry: sr() * 3 }); } }
-          for (const sz of [-1, 1]) { k.B(13, .8, 6, soil, 23, 2.4, sz * 15.5); for (let i = 0; i < 9; i++) { const x = 17.5 + sr() * 11, z = sz * 15.5 - 2.4 + sr() * 4.8, hh = 2 + sr() * 1.6; k.C(.09, .09, hh, 4, silver, x, 2.8 + hh / 2, z); M(g, new THREE.OctahedronGeometry(.75, 0), i % 3 ? silver : mirror, x, 3 + hh, z, { sy: .6, ry: sr() * 3 }); } } }
-        for (let i = 0; i < 5; i++) { const a = i * 1.257 + .3, ex = -10 + Math.cos(a) * 7, ez = Math.sin(a) * 7; rod(g, silver, [-10, 13 + i, 0], [ex, 21 + (i % 2) * 2, ez], .55, 5); for (let j = 0; j < 5; j++) M(g, new THREE.OctahedronGeometry(1.7, 0), mirror, ex + (sr() - .5) * 5, 17 + sr() * 7, ez + (sr() - .5) * 5, { sy: .32, rx: sr() * 1.2, rz: sr() * 1.2 }); }
-        for (const sz of [-1, 1]) for (let i = 0; i < 6; i++) { const x = -27.5 + i * 11; if (sz > 0 && Math.abs(x) < 9) continue; k.C(1.5, 1, 2.6, 8, wm, x, 2.3, sz * 23.4); k.C(.25, .25, 3, 5, silver, x, 5, sz * 23.4); M(g, new THREE.IcosahedronGeometry(1.9, 0), silver, x, 7.6, sz * 23.4); M(g, new THREE.IcosahedronGeometry(1.2, 0), mirror, x, 10.2, sz * 23.4); }   // silver topiary in urns along both long sides
-        for (const sx of [-1, 1]) { k.B(.4, 1.6, 48, gd, sx * 34.4, 1.9, 0); for (let i = 0; i < 7; i++) k.B(.5, 2.2, .5, gd, sx * 34.4, 2.1, -24 + i * 8); } for (const sz of [-1, 1]) for (const sx of [-1, 1]) k.B(22, .4, .4, gd, sx * 23.2, 2.7, sz * 24.6);                                                         // a low gilded rail round the terrace
-        k.C(.14, .14, 4, 5, gd, 0, 60.6, 0); k.B(3.4, .16, .16, gd, 0, 61.6, 0); k.K(.5, 1.4, 4, gd, 1.9, 61.6, 0, { rz: -Math.PI / 2 }); k.B(.16, .16, 2.4, gd, 0, 60.4, 0);                                                                                                                              // a weathervane on the lantern
-      }, { y: GY, ry: .3, hexes: [[32, 14]], top: 64, view: 420 }); }
+    { const c = hexW(32, 14);
+      addThing('Vainglory', '🪞', c, 1, 30, g => markSilverquillLot(g, 'Vainglory'), { y: GY, ry: .3, hexes: [[32, 14]], top: 64, view: 420 }); }
 
     // Clause Net Driftways (32,16): white streets and a bridge between the houses, all hung with drifting threads of vellum, and brightly lit
     { const c = hexW(32, 16);
-      addThing('Clause Net Driftways', '🕸️', c, 1, 30, g => { const k = kit(g); k.B(104, .6, 12, wm, 0, .3, 0);
-        for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) sqHouseAt(g, -42 + i * 21, sd * 18, 0, -sd, false, true, .85);   // Meshy towers down both sides of the street, facing across it
-        k.B(10, 2, 40, wm, 10, 22, 0); M(g, new THREE.TorusGeometry(6, 1.4, 5, 12, Math.PI), wm, 10, 15.5, 0, { ry: Math.PI / 2 }); for (const sd of [-1, 1]) k.B(10, 3, 1, gd, 10, 24, sd * 5);                           // a bridge from roof to roof across the street
-        // more to it. Gold kerbs and lamps down the street, a gilded awning over every door, two more bridges overhead
-        for (const sd of [-1, 1]) { k.B(104, .5, .8, gd, 0, .55, sd * 6.2); for (let i = 0; i < 6; i++) { const x = -50 + i * 20; k.C(.35, .5, 9, 6, gd, x, 4.5, sd * 7.6); NS(k.S(1.1, litW, x, 9.7, sd * 7.6)); } for (let i = 0; i < 5; i++) k.B(5.4, .4, 2.6, gd, -40 + i * 20, 6.2, sd * 9, { rx: sd * .32 }); }
-        k.B(8, 1.6, 40, wm, -30, 16.4, 0); M(g, new THREE.TorusGeometry(5, 1.1, 5, 12, Math.PI), wm, -30, 10.6, 0, { ry: Math.PI / 2 }); k.B(6, 1.2, 40, wm, 31, 28, 0); for (const sd of [-1, 1]) { k.B(8, 2.4, .8, gd, -30, 18.2, sd * 4); k.B(6, 2.2, .7, gd, 31, 29.6, sd * 3); }
-        // and what the place is named for: lines strung from house to house across the street, a row of written vellum sheets pegged along each, and loose sheets drifting above
-        { const vel = new THREE.MeshStandardMaterial({ map: canvasTex(64, 96, (cx, w, hh) => { cx.fillStyle = '#f6f0dc'; cx.fillRect(0, 0, w, hh); cx.fillStyle = '#3a3340'; for (let j = 0; j < 11; j++) cx.fillRect(7, 9 + j * 7.4, 30 + ((j * 37) % 20), 1.6); }), roughness: .9, side: THREE.DoubleSide });
-          for (let i = 0; i < 8; i++) { const x = -45 + i * 12.6, y = 12.5 + (i % 3) * 4.5; rod(g, gd, [x, y, -10.2], [x, y, 10.2], .12, 4); for (let j = 0; j < 5; j++) NS(M(g, new THREE.PlaneGeometry(2.6, 4.2), vel, x, y - 2.3, -8 + j * 4, { ry: Math.PI / 2 + (sr() - .5) * .6, rz: (sr() - .5) * .16 })); }
-          for (let i = 0; i < 9; i++) { const m = NS(M(g, new THREE.PlaneGeometry(2.8, 4.4), vel, -44 + i * 11 + sr() * 4, 0, (sr() - .5) * 9, { rx: -1.1 })), y0 = 24 + sr() * 16, ph = sr() * 6.283; m.userData.keepSep = 1; anim.push(t => { m.position.y = y0 + 2.4 * Math.sin(t * .45 + ph); m.rotation.y = .6 * Math.sin(t * .31 + ph); m.rotation.z = .35 * Math.sin(t * .52 + ph * 2); }); } }
-        for (const sx of [-1, 1]) { k.C(1.7, 2, 8, 8, wm, sx * 55, 4, 0); k.C(2.3, 2.3, .7, 8, gd, sx * 55, 8.3, 0); NS(k.S(1.4, litW, sx * 55, 10, 0)); }   // a lit pillar at each end of the street
-      }, { y: GY, ry: -.4, hexes: [[32, 16]], top: 60, view: 420 });
-      rndWebs(c, 56, 80, GY + 9, GY + 44, 0xf4f1e6, .45, 63); walkers([c[0] - 46, c[1] + 18], [c[0] + 46, c[1] - 18], 12, [2.6, 2.4, 2], 6, GY + 4, 64);
-      for (let i = 0; i < 6; i++) lanternPts.push([c[0] + Math.cos(i * 1.05) * 30, GY + 20, c[1] + Math.sin(i * 1.05) * 30, { c: [2.6, 2.4, 1.9], size: 9, drift: 2, speed: .4 }]); }
+      addThing('Clause Net Driftways', '🕸️', c, 1, 30, g => markSilverquillLot(g, 'Clause Net Driftways'), { y: GY, ry: -.4, hexes: [[32, 16]], top: 60, view: 420 }); }
 
     // ---------------- outside the wall ----------------
     // Strixhaven Star (26,19): the newspaper. A three-storey office in pale stone with a slated roof and dormers, its name in gold across the front over an arcade of lit shop windows; a clock tower on the corner with a gilt cupola and a gold star turning on top;
     // behind it the press hall under a saw-tooth roof of skylights, with its chimney; and at the side a loading dock stacked with bundled papers, reels of newsprint and ink casks, and a cart waiting
-    { const c = Wp(STAR2), y0 = 15 * S, K = 1.4, starTop = new THREE.Group();
-      const sign = canvasTex(1024, 128, (cx, w, hgt) => { cx.fillStyle = '#16161c'; cx.fillRect(0, 0, w, hgt); cx.strokeStyle = '#d8b25a'; cx.lineWidth = 5; cx.strokeRect(8, 8, w - 16, hgt - 16); cx.fillStyle = '#ffd97a'; cx.font = 'bold 74px Georgia, serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('THE STRIXHAVEN STAR', w / 2, hgt / 2 + 4); });
-      addThing('Strixhaven Star', '⭐', c, K, 30, g => { const k = kit(g), win = wallMat(8, 3, '#e9e6dc', '#20222a', '#ffdf9a', .5), brick = wallMat(7, 1, '#5a4038', '#1a1616', '#ffb060', .8), slate = solid(0x33343e, .5, { flatShading: true }), paper = solid(0xf2efe4, .9), star = glowM(0xffd86a, 2.6), signM = new THREE.MeshStandardMaterial({ map: sign, emissive: 0xffffff, emissiveMap: sign, emissiveIntensity: .9, roughness: .5 }), glassL = glowM(0xffe2a8, 1.6);
-        k.B(48, 1.2, 40, wm, 0, .6, 0); for (let i = 0; i < 3; i++) k.B(14 - i * 1.6, .5, 1.6, wm, -2, 1 - i * .4, 20.6 + i * 1.5);
-        // the office
-        k.B(30, 26, 18, win, -2, 14.2, 3); k.B(31.4, 1.2, 19.4, wm, -2, 9.8, 3); k.B(31.4, 1.4, 19.4, gd, -2, 27.6, 3); M(g, gable(20.4, 7, 31.4), slate, -2, 28.2, 3, { ry: Math.PI / 2 }); k.B(31.6, .6, .8, gd, -2, 35.2, 3);
-        for (const x of [-11, -2, 7]) { k.B(4, 3.6, 3.6, wm, x, 30.6, 10.4); M(g, gable(4.8, 2.2, 4.2), slate, x, 32.4, 10.4); NS(k.B(2.2, 2.4, .3, glassL, x, 30.6, 12.3)); }                                                                  // dormers
-        for (let i = 0; i < 6; i++) { const x = -15.5 + i * 5.4; k.B(1.5, 8.6, 1.5, wm, x, 5.5, 12.6); if (i < 5) { M(g, new THREE.TorusGeometry(2.1, .5, 5, 10, Math.PI), wm, x + 2.7, 7.6, 12.6); if (i !== 2) NS(k.B(3.6, 5.6, .3, glassL, x + 2.7, 4.4, 12.1)); } }             // the arcade
-        k.B(4, 7, .5, bm, -2, 4.7, 12.2); NS(M(g, starGeo(2.6, 1.1, .6), star, -2, 11.4, 13.4)); NS(k.B(26, 3.2, .5, signM, -2, 19.6, 12.3)); k.B(27, .5, .9, gd, -2, 21.5, 12.3); k.B(27, .5, .9, gd, -2, 17.7, 12.3);                                              // the door, the star over it, and the name
-        // the clock tower on the corner
-        k.B(10, 42, 10, wm, 16.5, 21.6, 8); k.B(11.4, 1.4, 11.4, gd, 16.5, 31, 8); for (const [dx, dz, ry] of [[0, 5.1, 0], [5.1, 0, Math.PI / 2], [0, -5.1, Math.PI], [-5.1, 0, -Math.PI / 2]]) { NS(M(g, new THREE.CircleGeometry(3.2, 24), glassL, 16.5 + dx, 37, 8 + dz, { ry })); M(g, new THREE.TorusGeometry(3.4, .4, 5, 24), gd, 16.5 + dx, 37, 8 + dz, { ry }); k.B(.4, 2.6, .3, bm, 16.5 + dx * 1.03, 38, 8 + dz * 1.03, { ry }); k.B(1.9, .4, .3, bm, 16.5 + dx * 1.03 + (ry % Math.PI ? 0 : .8), 37, 8 + dz * 1.03 + (ry % Math.PI ? .8 : 0), { ry }); NS(k.B(1.6, 6, .3, glassL, 16.5 + dx, 12 + 8, 8 + dz, { ry })); }
-        k.B(11.6, 1.4, 11.6, gd, 16.5, 43.2, 8); for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.C(.7, .7, 7, 8, wm, 16.5 + sx * 4, 47.4, 8 + sz * 4); k.B(10.4, 1, 10.4, wm, 16.5, 51.4, 8); k.D(5.4, gd, 16.5, 51.8, 8, { sy: 1.1 }); k.C(.3, .3, 6, 6, gd, 16.5, 60.6, 8); NS(k.S(1, glassL, 16.5, 47.6, 8));
-        M(starTop, starGeo(3.4, 1.4, .8), star, 0, 0, -.4); starTop.position.set(16.5, 66, 8); starTop.traverse(m => { m.userData.noShadow = true; }); g.add(starTop); spin.push({ o: starTop, speed: .8, bolt: false });
-        // the press hall, and its chimney
-        k.B(26, 13, 18, brick, -9, 7.7, -14); for (let i = 0; i < 4; i++) { M(g, gable(6.5, 4.4, 18), slate, -18.75 + i * 6.5, 14.2, -14, { sx: 1 }); NS(k.B(.3, 3, 16, glassL, -18.75 + i * 6.5 + 1.75, 16.2, -14, { rz: .98 })); } k.C(1.9, 2.6, 34, 10, brick, 7.4, 18.2, -17); k.C(2.5, 2.5, 1.4, 10, gd, 7.4, 33, -17); k.C(2.2, 2.2, 1, 10, bm, 7.4, 35.4, -17);
-        k.B(7, 9, .5, bm, -9, 5.7, -4.8); for (const x of [-18, 0]) NS(k.B(5, 5, .4, glowM(0xffb060, 1.4), x, 7, -4.9));
-        // the loading dock at the side: papers in bundles, reels of newsprint, ink, a cart
-        k.B(12, 2.4, 16, wm, -23.6, 1.8, 4); for (let i = 0; i < 9; i++) { const x = -27 + (i % 3) * 3.2, z = -1 + Math.floor(i / 3) * 3.4, n = 1 + (i * 7) % 3; for (let q = 0; q < n; q++) { k.B(2.6, 1.3, 2, paper, x, 3.7 + q * 1.35, z, { ry: (i + q) * .2 }); k.B(2.7, .2, .3, bm, x, 4.4 + q * 1.35, z, { ry: (i + q) * .2 }); } }
-        for (let i = 0; i < 3; i++) k.C(2, 2, 4.4, 14, paper, -21 - i * 4.3, 5, 9.6, { rz: Math.PI / 2 }); k.C(2, 2, 4.4, 14, paper, -23.2, 8.6, 9.6, { rz: Math.PI / 2 }); for (let i = 0; i < 3; i++) { k.C(1.5, 1.3, 3.4, 10, bm, -19.4, 4.7, -1 + i * 3.4); k.T(1.5, .14, gd, -19.4, 5.2, -1 + i * 3.4, { rx: Math.PI / 2 }); }
-        k.B(9, .7, 5.4, solid(0x5a3d28, .85), -25, 3, 17.6); k.B(9, 2.2, .5, solid(0x5a3d28, .85), -25, 4.4, 15); k.B(9, 2.2, .5, solid(0x5a3d28, .85), -25, 4.4, 20.2); for (const sx of [-1, 1]) for (const sz of [-1, 1]) M(g, new THREE.TorusGeometry(1.7, .35, 5, 14), bm, -25 + sx * 2.8, 2.2, 17.6 + sz * 3, {}); for (let i = 0; i < 4; i++) k.B(2.4, 1.2, 1.9, paper, -27.4 + i * 1.7, 4 + (i % 2) * 1.2, 17.6, { ry: i * .3 }); rod(g, solid(0x5a3d28, .85), [-20.4, 3, 16.4], [-14, 2, 15.6], .25, 4); rod(g, solid(0x5a3d28, .85), [-20.4, 3, 18.8], [-14, 2, 19.6], .25, 4);
-        // out front: lamps, a notice board with the day's pages pinned up, a flag
-        for (const x of [-13, 9]) { k.C(.35, .5, 9, 6, bm, x, 5.6, 17); k.B(1.6, 2, 1.6, bm, x, 10.6, 17); NS(k.S(.9, glassL, x, 10.6, 17)); } k.B(.5, 6, .5, bm, 6, 4, 19.4); k.B(.5, 6, .5, bm, 12, 4, 19.4); k.B(7, 4.4, .4, solid(0x5a3d28, .85), 9, 5.4, 19.4); for (let i = 0; i < 6; i++) k.B(1.5, 1.9, .1, paper, 6.8 + (i % 3) * 2.1, 4.5 + Math.floor(i / 3) * 2, 19.7, { rz: (i % 2 ? .08 : -.06) });
-        rod(g, gd, [-16.6, 27, 11.8], [-19.6, 37, 13.4], .2, 5); k.B(.2, 4.4, 6, solid(0x4a1460, .8, { side: THREE.DoubleSide }), -19.4, 33.4, 16.4, { rz: -.28, ry: .25 });
-      }, { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); chimneys.push([c[0] + 7.4 * K, y0 + 37 * K, c[1] - 17 * K]);
-      for (const x of [-13, 9]) lanternPts.push([c[0] + x * K, y0 + 10.8 * K, c[1] + 17 * K, { c: [2.6, 2, 1.2], size: 8, drift: .1, speed: .5 }]); lanternPts.push([c[0] + 16.5 * K, y0 + 66 * K, c[1] + 8 * K, { c: [2.8, 2.2, .8], size: 16, drift: .1, speed: .6 }]); }
+    { const c = Wp(STAR2), y0 = 15 * S, K = 1.4;
+      addThing('Strixhaven Star', '⭐', c, K, 30, g => markSilverquillLot(g, 'Strixhaven Star'), { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); }
 
     // Arbitration Steps (three hexes): outside the city, where devils do their business - ten tiers of black marble with a white stair up the front, horned figures down both sides of it, red fire burning on the tiers, and a canopied seat under a crescent at the top
-    { const HX = [[26, 21], [26, 22], [27, 21]], c = Wp(ARBIT), y0 = 16 * S, ry0 = 2.62, dev = solid(0x2a0a0c, .4), fires = [];
-      addThing('Arbitration Steps', '⚖️', c, 1, 30, g => { const k = kit(g), bm2 = solid(0x1c1c22, .25);
-        for (let i = 0; i < 10; i++) M(g, new THREE.CylinderGeometry(92 - i * 7.4, 96 - i * 7.4, 6.4, 8), i % 2 ? bm : bm2, 0, 3.2 + i * 6.4, 0, { ry: .3927 });
-        for (let i = 0; i < 22; i++) k.B(26, 1.6, 4.6, wm, 0, 1.4 + i * 2.9, 96 - i * 3.3);
-        for (const sd of [-1, 1]) for (let i = 0; i < 5; i++) { const z = 86 - i * 14.6, y = 4 + (96 - z) / 3.3 * 2.9; k.B(6, 5, 6, bm2, sd * 18, y, z); statue(g, dev, sd * 18, y + 2.5, z, 15, -Math.PI / 2, 3); for (const hx of [-1, 1]) M(g, new THREE.ConeGeometry(.7, 4, 5), dev, sd * 18 + hx * 1.4, y + 18.6, z, { rz: -hx * .5 }); }   // horned figures flanking the stair
-        for (let j = 0; j < 3; j++) for (let i = 0; i < 8; i++) { const a = i * .785 + .39, Rr = 88 - (1 + j * 3) * 7.4, y = 6.4 * (2 + j * 3); if (Math.abs(Math.sin(a)) > .9 && Math.cos(a) < .5 && Math.sin(a) > 0) continue; k.C(2.4, 3.2, 6, 8, bm2, Math.cos(a) * Rr, y + 3, Math.sin(a) * Rr); NS(k.S(2.4, litR, Math.cos(a) * Rr, y + 7.4, Math.sin(a) * Rr)); fires.push([Math.cos(a) * Rr, y + 8, Math.sin(a) * Rr]); }
-        k.C(22, 24, 3, 8, wm, 0, 65.5, 0, { ry: .3927 }); for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.C(1.6, 1.9, 22, 8, bm, sx * 13, 78, sz * 13); k.B(32, 2.6, 32, bm, 0, 90.3, 0); M(g, new THREE.TorusGeometry(9, 1.4, 6, 22, 4.4), gd, 0, 103, 0, { rz: -.65 });
-        k.B(9, 16, 7, bm, 0, 75, -6); k.B(12, 3, 9, bm2, 0, 68.5, -4); NS(k.S(2.6, litR, 0, 86, 0)); for (let i = 0; i < 6; i++) k.B(4, 2.4, 3, wm, -30 + i * 12, 34, 54, { ry: .2 * i });                                                             // the seat of judgement, and desks where the contracts are signed
-      }, { y: y0, ry: ry0, hexes: HX, top: 130, view: 680 });
-      fires.forEach((p, i) => { if (i % 2 === 0) { const cs = Math.cos(ry0), sn = Math.sin(ry0); lanternPts.push([c[0] + p[0] * cs + p[2] * sn, y0 + p[1], c[1] - p[0] * sn + p[2] * cs, { c: [2.8, .5, .2], size: 12, drift: .8, speed: 1.6 }]); } }); }
+    { const HX = [[26, 21], [26, 22], [27, 21]], c = Wp(ARBIT), y0 = 16 * S;
+      addThing('Arbitration Steps', '⚖️', c, 1, 30, g => markSilverquillLot(g, 'Arbitration Steps'), { y: y0, ry: Math.PI, hexes: HX, top: 130, view: 1080 }); }
 
     // Sealwright Foundry (30,19): a massive black works, four stacks smoking, red banners down its front and above the doors a red wax seal the height of three storeys
     { const c = Wp(SEALW), y0 = 16 * S;
-      addThing('Sealwright Foundry', '🔴', c, 1, 30, g => { const k = kit(g), wax = new THREE.MeshStandardMaterial({ color: 0xa01812, roughness: .22, emissive: 0x4a0806, emissiveIntensity: .7 }), cloth = solid(0x8a1410, .8);
-        k.B(92, 44, 50, bm, 0, 22, -6); M(g, gable(54, 20, 94), roofD, 0, 44, -6, { ry: Math.PI / 2 }); k.B(36, 22, 18, bm, 0, 11, 26); M(g, gable(38, 9, 19), roofD, 0, 22, 26);
-        for (const [x, z, hh] of [[-34, -20, 82], [-12, -24, 92], [12, -24, 88], [34, -20, 78]]) { k.C(3.4, 5.2, hh, 8, bm, x, hh / 2, z); k.C(4.4, 4.4, 2.4, 8, gd, x, hh - 5, z); chimneys.push([c[0] + x, y0 + hh + 4, c[1] + z]); }
-        M(g, new THREE.CylinderGeometry(15, 15, 3, 36), wax, 0, 46, 19.6, { rx: Math.PI / 2 }); k.T(11.6, 1.2, wax, 0, 46, 21.2); k.B(1.4, 16, 1, gd, 0, 46, 21.6, { rz: .6 }); k.S(2, gd, -4.4, 52.4, 21.4, { sz: .5 });                                                    // the seal, with a gilt quill pressed into it
-        for (const sx of [-1, 1]) for (const xx of [26, 38]) { k.B(7, 28, .6, cloth, sx * xx, 26, 19.6); k.B(7, 1.4, .8, gd, sx * xx, 40.4, 19.7); } NS(k.B(14, 15, .5, glowM(0xff8a2a, 2.6), 0, 7.5, 35.2));
-        for (let i = 0; i < 5; i++) { k.B(8, 6, 8, bm, -54 + i * 4, 3, 30 + i * 9, { ry: i * .4 }); k.C(3, 3, 1.4, 16, wax, -54 + i * 4, 6.7, 30 + i * 9); }                                                                                             // seal presses and fresh seals in the yard
-      }, { y: y0, hexes: [[31, 19]], top: 110, view: 520 });
-      lanternPts.push([c[0], y0 + 8, c[1] + 37, { c: [2.6, 1.1, .3], size: 18, drift: .2, speed: .9 }]); }
+      addThing('Sealwright Foundry', '🔴', c, 1, 30, g => markSilverquillLot(g, 'Sealwright Foundry'), { y: y0, hexes: [[31, 19]], top: 110, view: 520 }); }
 
     // Meterworks Stage (34,16): an open-air stage outside the city - a glowing glass-tiled runway thrust out among the seats, a gilded arch behind it carrying a winged emblem, purple and gold lamps
-    { const c = Wp(METER), y0 = 14 * S, tiles = canvasTex(128, 512, (cx, w, hgt) => { const r = mulberry32(44); for (let j = 0; j < 16; j++) for (let i = 0; i < 4; i++) { cx.fillStyle = r() < .5 ? '#b070ff' : r() < .6 ? '#ffd070' : '#5a3a90'; cx.fillRect(i * 32 + 2, j * 32 + 2, 28, 28); } });
-      addThing('Meterworks Stage', '🎼', c, 1, 30, g => { const k = kit(g), runM = new THREE.MeshStandardMaterial({ color: 0x1a1024, roughness: .15, emissive: 0xffffff, emissiveMap: tiles, emissiveIntensity: 1.5 });
-        k.C(48, 50, 2, 32, bm, 0, 1, 0); k.B(48, 5, 22, wm, 0, 4.5, -22); k.B(13, 5, 46, bm, 0, 4.5, 10); NS(k.B(10.6, .5, 44, runM, 0, 7.2, 10));
-        for (const sd of [-1, 1]) { k.B(5, 36, 5, bm, sd * 21, 20, -31); k.B(7, 2, 7, gd, sd * 21, 38.6, -31); for (let i = 0; i < 6; i++) k.B(15 - i * 1.4, .6, 3.4, wm, sd * (9 + i * 2.2), 56 + i * 1.6, -31, { rz: sd * (.5 + i * .09) }); }                           // pillars, and the wings of the emblem
-        M(g, new THREE.TorusGeometry(21, 2.4, 6, 22, Math.PI), gd, 0, 38, -31); k.C(4.6, 4.6, 1.4, 20, gd, 0, 58, -31, { rx: Math.PI / 2 }); k.B(44, 26, 1.4, solid(0x3a1050, .6), 0, 20, -33);
-        for (let j = 0; j < 4; j++) M(g, new THREE.TorusGeometry(30 + j * 5.6, 2.2, 5, 26, Math.PI), j % 2 ? wm : bm, 0, 2.4 + j * 2.2, 12, { rx: Math.PI / 2 });                                                                                          // seats curving round the runway
-        for (let i = 0; i < 8; i++) { const a = i * .45 - .25, col = i % 2 ? litP : litW; k.C(.5, .7, 13, 6, bm, Math.cos(a) * 46, 8, 12 + Math.sin(a) * 46); NS(k.S(1.4, col, Math.cos(a) * 46, 15, 12 + Math.sin(a) * 46)); }
-      }, { y: y0, hexes: [[34, 17]], top: 84, view: 440 });
-      lanternPts.push([c[0], y0 + 12, c[1], { c: [1.8, .8, 2.6], size: 26, drift: .2, speed: .6 }]); }
+    { const c = Wp(METER), y0 = 14 * S;
+      addThing('Meterworks Stage', '🎼', c, 1, 30, g => markSilverquillLot(g, 'Meterworks Stage'), { y: y0, hexes: [[34, 17]], top: 84, view: 440 }); }
 
     // Ashgrave Mannor (three hexes): a devil's house - black, many-towered, every roof horned, sick green light in the windows, gargoyles down the drive, iron railings round the grounds and a storm that never leaves it
-    { const HX = [[28, 21], [28, 22], [29, 21]], c = Wp(ASHG), y0 = 15 * S, tips = [];
-      addThing('Ashgrave Mannor', '🏚️', c, 1, 30, g => { const k = kit(g), win = wallMat(9, 3, '#101014', '#060608', '#c8ff70', .3), iron = solid(0x0a0a0c, .4, { metalness: .6 });
-        k.B(66, 38, 34, win, 0, 19, 10); M(g, gable(38, 18, 68), roofD, 0, 38, 10, { ry: Math.PI / 2 }); for (const sx of [-1, 1]) { k.B(28, 30, 30, win, sx * 46, 15, -4); M(g, gable(30, 13, 32), roofD, sx * 46, 30, -4); }
-        for (const [x, z, hh] of [[-22, 10, 80], [22, 10, 80], [0, 24, 100], [-58, -10, 58], [58, -10, 58]]) { k.B(11, hh, 11, bm, x, hh / 2, z); M(g, new THREE.ConeGeometry(8, 26, 4), roofD, x, hh + 13, z, { ry: Math.PI / 4 }); for (const sd of [-1, 1]) M(g, new THREE.ConeGeometry(1.4, 13, 5), roofD, x + sd * 6.5, hh + 20, z, { rz: -sd * .6 }); NS(k.B(.5, 8, 3, glowM(0xc8ff70, 2.2), x, hh - 8, z - 5.7, { ry: Math.PI / 2 })); tips.push([x, hh + 26, z]); }
-        k.B(12, 16, 2, bm, 0, 8, -7.6); for (let i = 0; i < 4; i++) k.B(18 - i * 1.5, 1, 3, bm, 0, .5 + i, -16 + i * 2.4);
-        for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) { const z = -26 - i * 16; k.B(5, 6, 5, bm, sx * 11, 3, z); M(g, new THREE.SphereGeometry(2.8, 8, 6), bm, sx * 11, 8, z, { sx: 1.2 }); for (const w of [-1, 1]) M(g, new THREE.ConeGeometry(1.6, 6, 3), bm, sx * 11 + w * 2.6, 11, z + 1, { rz: -w * .7 }); }                 // gargoyles down the drive
-        for (let i = 0; i < 62; i++) { const t = i / 62, px = t < .25 ? -80 + t * 4 * 160 : t < .5 ? 80 : t < .75 ? 80 - (t - .5) * 4 * 160 : -80, pz = t < .25 ? -92 : t < .5 ? -92 + (t - .25) * 4 * 142 : t < .75 ? 50 : 50 - (t - .75) * 4 * 142; if (Math.abs(px) < 9 && pz < -90) continue; k.B(.7, 9, .7, iron, px, 4.5, pz); }
-        for (const [x, z, w, d] of [[0, -92, 160, .5], [0, 50, 160, .5], [-80, -21, .5, 142], [80, -21, .5, 142]]) k.B(w, .5, d, iron, x, 7, z); for (const sx of [-1, 1]) { k.B(3, 13, 3, bm, sx * 9, 6.5, -92); M(g, new THREE.ConeGeometry(2.2, 5, 4), roofD, sx * 9, 15.5, -92, { ry: .785 }); }
-      }, { y: y0, ry: Math.PI, hexes: HX, top: 140, view: 620 });
-      lightning(tips.map(p => [c[0] - p[0], y0 + p[1], c[1] - p[2]]), 6.5, 2.4, 300);
-      const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.6, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
-      const ct = new THREE.CanvasTexture(cv); for (let i = 0; i < 14; i++) { const a = i * 2.39996, d = 16 + (i * 37) % 120, spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: ct, color: i % 3 ? 0x4e525e : 0x646a78, transparent: true, opacity: .38, depthWrite: false, fog: false })); spr.position.set(c[0] + Math.cos(a) * d, y0 + 400 + (i % 4) * 18, c[1] + Math.sin(a) * d * .8); spr.scale.set(200 + (i % 5) * 34, 100 + (i % 3) * 26, 1); scene.add(spr); } }
+    { const HX = [[28, 21], [28, 22], [29, 21]], c = Wp(ASHG), y0 = 15 * S;
+      addThing('Ashgrave Mannor', '🏚️', c, 1, 30, g => markSilverquillLot(g, 'Ashgrave Mannor'), { y: y0, ry: Math.PI, hexes: HX, top: 140, view: 620 }); }
 
     // Clarentine's House (24,16): a small stone cottage with a steep slate roof, out on its own in a garden of flowers behind a white fence
     { const c = Wp(CLAR), y0 = 15 * S;
-      addThing("Clarentine's House", '🏡', c, 1, 30, g => { const k = kit(g), wl = solid(0xd8d2c4, .8), rf = solid(0x4a3a5e, .6, { flatShading: true }), fl = [solid(0xe86a8a, .8), solid(0xf2d05a, .8), solid(0xb07af0, .8)], wd = solid(0x5a3d28, .85);
-        k.B(16, 9, 12, wl, 0, 4.5, 0); M(g, gable(18, 12, 14), rf, 0, 9, 0); M(g, new THREE.ConeGeometry(2.4, 9, 6), rf, 5, 21, 0); k.C(1.1, 1.3, 8, 6, wl, -4.5, 16, -2); k.B(3.2, 5.6, .4, wd, 0, 2.8, 6.1); for (const sx of [-1, 1]) NS(k.B(2.6, 2.8, .3, litW, sx * 5, 5, 6.1));
-        for (let i = 0; i < 44; i++) { const a = sr() * 6.283, r = 9 + sr() * 12, x = Math.cos(a) * r * 1.2, z = Math.sin(a) * r; if (Math.abs(x) < 9 && Math.abs(z) < 7) continue; M(g, new THREE.SphereGeometry(.7 + .5 * sr(), 6, 5), fl[i % 3], x, .9, z); }
-        for (let i = 0; i < 40; i++) { const a = i / 40 * 6.283; if (Math.abs(a - 1.571) < .14) continue; k.B(.5, 3, .5, wm, Math.cos(a) * 26, 1.5, Math.sin(a) * 22); } for (let i = 0; i < 6; i++) k.C(1.3, 1.3, .3, 8, wl, Math.sin(i * .8) * 2.4, .2, 8 + i * 2.6);
-        for (const sx of [-1, 1]) { k.C(.3, .4, 6, 6, wd, sx * 4, 3, 21); NS(k.S(.8, litW, sx * 4, 6.4, 21)); }
-      }, { y: y0, ry: .6, hexes: [[24, 16]], top: 30, view: 260 }); chimneys.push([c[0] - 4, y0 + 22, c[1] - 4]); }
+      addThing("Clarentine's House", '🏡', c, 1, 30, g => markSilverquillLot(g, "Clarentine's House"), { y: y0, ry: .6, hexes: [[24, 16]], top: 30, view: 260 }); }
 
     // Ewfall Guardens (three hexes): a formal garden - four rings of clipped hedge on white gravel, cut by two crossing walks, dark topiary cones at every opening, flower borders, statues on the walks and a fountain at the middle
     { const HX = [[25, 17], [24, 17], [25, 16]], c = Wp(EWF), y0 = 15 * S;
-      addThing('Ewfall Guardens', '🌳', c, 1, 30, g => { const k = kit(g), hg = solid(0x16381f, 1, { flatShading: true }), gravel = solid(0xe6e0d0, .95), fl = [solid(0xe86a8a, .8), solid(0xf2f0e6, .8), solid(0xb07af0, .8)];
-        k.C(94, 94, .6, 56, gravel, 0, .3, 0);
-        for (let j = 0; j < 4; j++) { const Rr = 24 + j * 20, n = Math.round(Rr * 6.283 / 8); for (let i = 0; i < n; i++) { const a = i / n * 6.283, da = Math.abs(((a + .785) % 1.5708) - .785); if (da < 7 / Rr) continue; k.B(3, 4.6, Rr * 6.283 / n + .5, hg, Math.cos(a) * Rr, 2.6, Math.sin(a) * Rr, { ry: -a }); if (i % 3 === 0) M(g, new THREE.SphereGeometry(.9, 6, 5), fl[(i + j) % 3], Math.cos(a) * (Rr - 3.4), 1, Math.sin(a) * (Rr - 3.4)); }
-          for (let q = 0; q < 4; q++) for (const sd of [-1, 1]) { const a = q * 1.5708 + sd * 10.5 / Rr; M(g, new THREE.ConeGeometry(2.6, 10, 6), hg, Math.cos(a) * Rr, 5.4, Math.sin(a) * Rr); } }
-        k.C(12, 13, 2.4, 20, wm, 0, 1.2, 0); NS(k.C(10.6, 10.6, .4, 20, waterGlass(0x8fd0e8, .8), 0, 2.5, 0)); k.C(1.6, 2.4, 9, 8, wm, 0, 6, 0); k.C(5, 2, 1.4, 12, wm, 0, 11, 0); NS(k.K(1.2, 8, 8, waterGlass(0xd8f2ff, .5), 0, 15.6, 0));
-        for (let q = 0; q < 4; q++) { const a = q * 1.5708; k.B(5, 4, 5, wm, Math.cos(a) * 54, 2, Math.sin(a) * 54); statue(g, wm, Math.cos(a) * 54, 4, Math.sin(a) * 54, 13, Math.PI - a, q); }
-      }, { y: y0, hexes: HX, top: 40, view: 560 }); }
+      addThing('Ewfall Guardens', '🌳', c, 1, 30, g => markSilverquillLot(g, 'Ewfall Guardens'), { y: y0, hexes: HX, top: 40, view: 560 }); }
 
     // ---------------- the ink quarter, north of the wall ----------------
     // Inkling Hatchery Vats (three hexes): shown without its roof and with the front of its wall cut low, so that you look in. A round hall, buttressed and lit with violet slits; a gallery running round inside the wall;
     // sixteen vats of warm, moving black ink with pale cocoons at their rims and more hung on hoops above them; a brass alembic over the middle vat feeding the rest through pipes; steam rising; and inklings hopping from vat to vat
-    { const HX = [[31, 7], [32, 7], [32, 6]], c = Wp(HATCH), y0 = 16 * S, vats = [[0, 0]], blobs = [], pups = []; for (let i = 0; i < 6; i++) vats.push([Math.cos(i * 1.047) * 34, Math.sin(i * 1.047) * 34]); for (let i = 0; i < 9; i++) vats.push([Math.cos(i * .698 + .3) * 62, Math.sin(i * .698 + .3) * 62]);
-      addThing('Inkling Hatchery Vats', '🥚', c, 1, 30, g => { const k = kit(g), cocoon = solid(0xe6e2d6, .6), brass = new THREE.MeshStandardMaterial({ color: 0xb8923c, roughness: .3, metalness: .8 }), wallM = solid(0x26262e, .3, { side: THREE.DoubleSide }), TS = Math.PI / 3, TL = Math.PI * 4 / 3;
-        k.C(88, 88, .6, 48, solid(0x1a1a20, .5), 0, .3, 0); for (const r of [22, 48, 76]) k.T(r, .3, gd, 0, .7, 0, { rx: Math.PI / 2 });
-        M(g, new THREE.CylinderGeometry(89, 89, 32, 48, 1, true, TS, TL), wallM, 0, 16, 0); M(g, new THREE.CylinderGeometry(89, 89, 7, 24, 1, true, -TS, TS * 2), wallM, 0, 3.5, 0); M(g, new THREE.TorusGeometry(89, 1.2, 5, 48, TL), wm, 0, 32, 0, { rx: Math.PI / 2, rz: Math.PI * 5 / 6 }); M(g, new THREE.TorusGeometry(89, 1, 5, 24, TS * 2), wm, 0, 7, 0, { rx: Math.PI / 2, rz: Math.PI / 6 });   // the wall: full height round the back, low at the front
-        for (let i = 0; i <= 12; i++) { const th = TS + TL * i / 12, sn = Math.sin(th), cs = Math.cos(th); k.B(5, 36, 6, bm, sn * 91, 18, cs * 91, { ry: th }); M(g, new THREE.ConeGeometry(3.2, 9, 4), roofD, sn * 91, 40.5, cs * 91, { ry: th + .785 }); if (i < 12) { const tm = th + TL / 24; NS(k.B(3, 11, .5, litP, Math.sin(tm) * 88.3, 21, Math.cos(tm) * 88.3, { ry: tm })); } }     // buttresses with pinnacles, and a lit slit between each pair
-        M(g, new THREE.RingGeometry(77, 88.5, 48, 1, -Math.PI / 6, TL), bm, 0, 15, 0, { rx: -Math.PI / 2 }); M(g, new THREE.TorusGeometry(77, .35, 5, 48, TL), gd, 0, 18, 0, { rx: Math.PI / 2, rz: Math.PI * 5 / 6 });
-        for (let i = 0; i <= 16; i++) { const th = TS + TL * i / 16, sn = Math.sin(th), cs = Math.cos(th); k.C(.8, 1, 15, 6, wm, sn * 78, 7.5, cs * 78); k.C(.3, .3, 3, 5, gd, sn * 77, 16.5, cs * 77); if (i % 2) { const p = new THREE.Group(); M(p, new THREE.SphereGeometry(1.5, 8, 6), inkM, 0, 1.5, 0, { sy: 1.15 }); for (const sd of [-1, 1]) M(p, new THREE.SphereGeometry(.4, 5, 4), solid(0xffffff, .3), -1.1, 2, sd * .6); p.rotation.y = th + Math.PI / 2; p.position.set(sn * 83, 15, cs * 83); p.traverse(m => { m.userData.noShadow = true; }); g.add(p); pups.push(p); } }   // the gallery: floor, rail, posts - and young inklings watching from it
-        for (let i = 0; i < 3; i++) { const a = i * 2.094 + .5; rod(g, brass, [Math.cos(a) * 17, .6, Math.sin(a) * 17], [Math.cos(a) * 5, 30, Math.sin(a) * 5], .9); } k.S(9, brass, 0, 34, 0); k.T(9.2, .5, gd, 0, 34, 0, { rx: Math.PI / 2 }); k.C(3, 5, 6, 12, brass, 0, 44, 0); k.C(1, 1, 8, 8, brass, 0, 50, 0); NS(M(g, new THREE.CylinderGeometry(.7, .7, 21, 8), inkFall, 0, 14.6, 0));   // the alembic, and the ink running out of it
-        k.T(46, .7, brass, 0, 1.3, 0, { rx: Math.PI / 2 });
-        vats.forEach(([x, z], i) => { const r = i ? 11 : 15, d = Math.hypot(x, z) || 1, a = Math.atan2(z, x); k.C(r, r + 1, 4, 22, i % 2 ? wm : bm, x, 2, z); k.T(r - .3, .45, gd, x, 4.1, z, { rx: Math.PI / 2 }); NS(k.C(r - 1.4, r - 1.4, .5, 22, inkF, x, 4.1, z));
-          for (let q = 0; q < 4; q++) { const b = q * 1.7 + i; M(g, new THREE.SphereGeometry(1.5, 8, 6), cocoon, x + Math.cos(b) * (r - 2.6), 4.8, z + Math.sin(b) * (r - 2.6), { sy: 1.7, rz: .3 * Math.cos(b) }); }
-          if (i > 0 && i < 7) rod(g, brass, [x * .2, 29, z * .2], [x * .74, 5, z * .74], .6);
-          if (i > 6) { rod(g, brass, [x / d * 46, 1.3, z / d * 46], [x / d * 51, 1.3, z / d * 51], .7); k.T(1.7, .3, gd, x / d * 48.5, 3, z / d * 48.5, { rx: Math.PI / 2 }); k.C(.3, .3, 1.8, 5, gd, x / d * 48.5, 2.1, z / d * 48.5);
-            M(g, new THREE.TorusGeometry(10, .4, 5, 16, Math.PI), brass, x, 4, z, { ry: -a }); for (const al of [.9, 1.571, 2.24]) { const px = x + Math.cos(a) * 10 * Math.cos(al), pz = z + Math.sin(a) * 10 * Math.cos(al), py = 4 + 10 * Math.sin(al); rod(g, wm, [px, py, pz], [px, py - 2.4, pz], .12, 4); M(g, new THREE.SphereGeometry(1.2, 8, 6), cocoon, px, py - 4, pz, { sy: 1.7 }); } } });   // pipes and valves; cocoons hung on a hoop over each outer vat
-        for (let i = 0; i < 8; i++) { const a = i * .785 + .2; k.C(.4, .6, 9, 6, bm, Math.cos(a) * 48, 4.5, Math.sin(a) * 48); NS(k.S(1.1, litP, Math.cos(a) * 48, 9.6, Math.sin(a) * 48)); }
-        for (const sd of [-1, 1]) { const th = sd * TS, sn = Math.sin(th), cs = Math.cos(th); k.B(6, 40, 6, bm, sn * 89, 20, cs * 89, { ry: th }); M(g, new THREE.ConeGeometry(4.4, 12, 4), roofD, sn * 89, 46, cs * 89, { ry: th + .785 }); }
-        for (let i = 0; i < 10; i++) { const b = new THREE.Group(); M(b, new THREE.SphereGeometry(2.2, 10, 8), inkM, 0, 2, 0, { sy: 1.15 }); for (const sd of [-1, 1]) M(b, new THREE.SphereGeometry(.55, 6, 5), solid(0xffffff, .3), 1.6, 2.8, sd * .9); b.traverse(m => { m.userData.noShadow = true; }); g.add(b); blobs.push(b); }
-      }, { y: y0, hexes: HX, top: 60, view: 520 });
-      for (const i of [0, 3, 8, 12]) chimneys.push([c[0] + vats[i][0], y0 + 6, c[1] + vats[i][1], 0xd8d8e0]);
-      for (let i = 0; i < 6; i++) lanternPts.push([c[0] + Math.cos(i * 1.047 + .5) * 48, y0 + 10, c[1] + Math.sin(i * 1.047 + .5) * 48, { c: [1.5, .6, 2.6], size: 9, drift: .4, speed: .5 }]);
-      anim.push(t => { blobs.forEach((b, i) => { const cyc = t * (.22 + .05 * (i % 3)) + i * .37, kk = Math.floor(cyc), f = cyc - kk, A = vats[(kk * 5 + i * 3) % vats.length], B2 = vats[((kk + 1) * 5 + i * 3) % vats.length], e = Math.min(f / .6, 1); b.position.set(lerp(A[0], B2[0], e), 4 + 16 * Math.sin(Math.PI * e), lerp(A[1], B2[1], e)); b.rotation.y = -Math.atan2(B2[1] - A[1], B2[0] - A[0]); b.scale.set(1, 1 - .25 * Math.sin(Math.PI * Math.max(0, (f - .6) / .4)), 1); });
-        pups.forEach((p, i) => { p.position.y = 15 + 1.8 * Math.abs(Math.sin(t * (1.6 + .3 * (i % 3)) + i * 1.3)); }); }); }
+    { const HX = [[31, 7], [32, 7], [32, 6]], c = Wp(HATCH), y0 = 16 * S;
+      addThing('Inkling Hatchery Vats', '🥚', c, 1, 30, g => markSilverquillLot(g, 'Inkling Hatchery Vats'), { y: y0, hexes: HX, top: 60, view: 520 }); }
 
     // Damatha Inkfountains (five hexes): a great round plaza of white marble on the black, a kerb about it, and on it five tiered fountains playing - black ink in the white ones, white in the black. Each throws one jet high into the air, a ring of jets arching out from its top bowl down into the basin, a second ring from its middle bowl, and a curtain falling from each bowl
     { const HX = [[30, 9], [31, 8], [31, 9], [30, 10], [30, 8]], c = Wp(FOUNT), y0 = 16 * S, whiteInk = solid(0xf4f2ea, .12), jets = []; whiteInk.name = 'inkw';
@@ -4023,28 +3679,7 @@ function buildProps() {
     // a blind buttressed wall outside, ink running from gilt spouts in that wall down channels to the pools, a colonnade and gallery to each side with bridges across between the pools, lamps at the corners of every pool, and only the ribs of its roof left on so that you can see in.
     // A fourth pool lies open in the court, with obelisks at its corners and cypresses down both sides
     { const HX = [[29, 9], [28, 10], [29, 10], [28, 9], [27, 10], [27, 11], [28, 11]], P = INKLAKE.map(Wp), c = [P.reduce((a, p) => a + p[0], 0) / 7 - 41, P.reduce((a, p) => a + p[1], 0) / 7];
-      addThing('Inkwell Lake', '🖋️', c, 1, 30, g => { const k = kit(g), yew = solid(0x10201a, 1, { flatShading: true });
-        const range = (x, z, ry, Lr, Wr, np) => { const rg = new THREE.Group(), Q = (geo, mat, px, py, pz, o) => M(rg, geo, mat, px, py, pz, o), pl = (Lr - 24) / np - 8, pw = Wr * .46, zw = Wr / 2 - 1.2;
-          Q(new THREE.BoxGeometry(Lr, 1, Wr), wm, 0, .5, 0); Q(new THREE.BoxGeometry(Lr, 24, 2.4), bm, 0, 12, -zw); Q(new THREE.BoxGeometry(Lr + 1, 1.2, 3.4), gd, 0, 24.6, -zw); for (let i = 0; i < Math.floor(Lr / 12); i++) NS(Q(new THREE.BoxGeometry(3, 10, .5), litP, -Lr / 2 + 8 + i * 12, 14, -(Wr / 2 + .1))); for (const sd of [-1, 1]) Q(new THREE.BoxGeometry(2.4, 24, Wr), bm, sd * (Lr / 2 - 1.2), 12, 0);
-          for (let i = 0; i <= Math.floor((Lr - 4) / 24); i++) { Q(new THREE.BoxGeometry(3.4, 27, 4.4), bm, -Lr / 2 + 2 + i * 24, 13.5, -(Wr / 2 + 1.8)); Q(new THREE.ConeGeometry(2.4, 7, 4), bm, -Lr / 2 + 2 + i * 24, 30.5, -(Wr / 2 + 1.8), { ry: Math.PI / 4 }); }                                                                 // buttresses along the blind wall
-          for (let i = 0; i <= Math.floor((Lr - 8) / 13); i++) Q(new THREE.CylinderGeometry(1.3, 1.5, 23, 10), bm, -Lr / 2 + 4 + i * 13, 12.5, Wr / 2 - 1.6); Q(new THREE.BoxGeometry(Lr, 2, 3.4), bm, 0, 25, Wr / 2 - 1.6);                                                                                                // the court side is an open colonnade
-          for (let i = 0; i < np; i++) { const px = -Lr / 2 + 16 + pl / 2 + i * (pl + 8); NS(Q(new THREE.BoxGeometry(pl, .5, pw), inkF, px, 1.15, 0)); for (const sd of [-1, 1]) { Q(new THREE.BoxGeometry(pl + 2.4, 1.4, 1.2), bm, px, 1.2, sd * (pw / 2 + .6)); Q(new THREE.BoxGeometry(1.2, 1.4, pw), bm, px + sd * (pl / 2 + .6), 1.2, 0);
-              for (const se of [-1, 1]) { Q(new THREE.CylinderGeometry(.3, .4, 7, 6), gd, px + se * (pl / 2 + .6), 5, sd * (pw / 2 + .6)); NS(Q(new THREE.SphereGeometry(.9, 8, 6), litP, px + se * (pl / 2 + .6), 8.9, sd * (pw / 2 + .6))); } }                                                                              // a pool in its kerb, a lamp at each corner
-            Q(new THREE.BoxGeometry(2.4, .9, pw * .5), wm, px - pl / 2 + 1.2, 1.2, 0); Q(new THREE.BoxGeometry(2.4, .5, pw * .5), wm, px - pl / 2 + 3.6, 1.2, 0);                                                                                                                                                      // steps down into it
-            for (const sp of [-.28, .28]) { const sxp = px + sp * pl, zc = -(zw + pw / 2) / 2, lc = zw - pw / 2 - 1.2; Q(new THREE.BoxGeometry(2.4, .5, lc), gd, sxp, 1.2, zc); NS(Q(new THREE.BoxGeometry(1.3, .3, lc), inkF, sxp, 1.4, zc)); Q(new THREE.BoxGeometry(3.2, 3.2, 2.2), gd, sxp, 11, -(zw - 2.2)); NS(Q(new THREE.PlaneGeometry(1.5, 9), inkFall, sxp, 5.6, -(zw - 2.4))); }   // spouts in the wall and the channels they feed
-            Q(new THREE.BoxGeometry(4.4, 1, pw + 12), bm, px + pl / 2 + 4, 15, 0); for (const sd of [-1, 1]) Q(new THREE.BoxGeometry(4.4, .4, .4), gd, px + pl / 2 + 4 + sd * 2, 17.4, 0, { ry: Math.PI / 2, sx: (pw + 12) / 4.4 }); for (let j = 0; j < 4; j++) Q(new THREE.BoxGeometry(3.2, .2, 2.4), wm, px + (sr() - .5) * pl * .8, 1.5, (sr() - .5) * pw * .8, { ry: sr() * 3 }); }   // a bridge between the galleries past its end, and pages adrift on the ink
-          for (const sd of [-1, 1]) { Q(new THREE.BoxGeometry(Lr - 8, 1, 5.4), bm, 0, 15, sd * (pw / 2 + 6)); Q(new THREE.BoxGeometry(Lr - 8, .5, .5), gd, 0, 18, sd * (pw / 2 + 3.6)); for (let i = 0; i <= Math.floor((Lr - 16) / 11); i++) Q(new THREE.CylinderGeometry(.8, .95, 14, 8), wm, -Lr / 2 + 8 + i * 11, 8, sd * (pw / 2 + 4)); }                     // colonnades carrying the galleries
-          for (let i = 0; i <= Math.floor((Lr - 12) / 20); i++) for (const sd of [-1, 1]) Q(new THREE.BoxGeometry(1.2, 1.2, Wr * .6), bm, -Lr / 2 + 6 + i * 20, 26 + Wr * .15, sd * Wr * .25, { rx: sd * .56 }); Q(new THREE.BoxGeometry(Lr, 1.4, 1.4), gd, 0, 26 + Wr * .31, 0);                                 // the ribs of the roof, and its ridge
-          rg.position.set(x, 0, z); rg.rotation.y = ry; sbake(g, rg); };
-        range(0, -112, 0, 256, 72, 3); range(-92, 26, Math.PI / 2, 204, 72, 2); range(92, 26, -Math.PI / 2, 204, 72, 2);
-        for (const [x, z] of [[-128, -148], [128, -148], [-128, 128], [128, 128]]) { k.B(18, 52, 18, bm, x, 26, z); k.B(20, 1.6, 20, gd, x, 52.8, z); M(g, new THREE.ConeGeometry(12.5, 34, 4), roofD, x, 70.6, z, { ry: Math.PI / 4 }); NS(k.S(1.4, litP, x, 89, z)); for (const sd of [-1, 1]) { NS(k.B(2.4, 12, .5, litP, x, 34, z + sd * 9.1)); NS(k.B(.5, 12, 2.4, litP, x + sd * 9.1, 34, z)); } }   // the corner towers
-        k.B(112, 1, 204, wm, 0, .5, 26); NS(k.B(64, .5, 120, inkF, 0, 1.15, 22)); for (const sd of [-1, 1]) { k.B(66.4, 1.4, 1.2, bm, 0, 1.2, 22 + sd * 60.6); k.B(1.2, 1.4, 120, bm, sd * 32.6, 1.2, 22); }                                                                             // the court pool
-        for (const sx of [-1, 1]) { for (const sz of [-1, 1]) { k.B(4, 3, 4, bm, sx * 38, 2.5, 22 + sz * 66); M(g, new THREE.ConeGeometry(2, 22, 4), bm, sx * 38, 15, 22 + sz * 66, { ry: Math.PI / 4 }); k.S(.9, gd, sx * 38, 26.4, 22 + sz * 66); }
-          for (let i = 0; i < 6; i++) { const z = -28 + i * 20; k.C(2.2, 1.6, 2.6, 10, wm, sx * 45, 2.3, z); M(g, new THREE.ConeGeometry(2.6, 13, 7), yew, sx * 45, 10, z); } k.B(3, 1.6, 14, wm, sx * 51, 1.8, 22); }                                                                 // obelisks, cypresses in urns, a bench
-        for (const sd of [-1, 1]) { k.B(8, 50, 8, bm, sd * 17, 25, 130); for (let i = 0; i < 3; i++) k.C(1.3, 1.5, 23, 10, bm, sd * (26 + i * 12), 12.5, 130); k.B(34, 2, 3.4, bm, sd * 38, 25, 130); } M(g, gable(42, 24, 8), bm, 0, 50, 130); k.B(44, 1.4, 9, gd, 0, 50, 130);
-        NS(k.B(26, 38, .5, new THREE.MeshBasicMaterial({ color: 0x6a30c0, transparent: true, opacity: .22, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 22, 130));                                                                                                         // the arch you come in by
-      }, { y: GY, hexes: HX, top: 96, view: 760 });
-      for (const [x, z] of [[-85, -112], [0, -112], [85, -112], [-92, -20], [-92, 72], [92, -20], [92, 72], [0, 22]]) lanternPts.push([c[0] + x, GY + 20, c[1] + z, { c: [1.4, .6, 2.6], size: 10, drift: 3, speed: .3 }]); }
+      addThing('Inkwell Lake', '🖋️', c, 1, 30, g => markSilverquillLot(g, 'Inkwell Lake'), { y: GY, hexes: HX, top: 96, view: 760 }); }
 
     // Cold Anchor Stones (35,4; on the live map 34,6, moved out so its field stands clear of the Hatchery): Silverquill's own stone
     { const c = Wp(COLDS), cy = heightAt(c[0], c[1]), gh = (x, z) => heightAt(c[0] + x, c[1] + z) - cy; addThing('Cold Anchor Stones', '🗿', c, 1, 30, g => anchorStone(g, gh), { y: cy, hexes: [[35, 4]], top: 84, view: 360 }); coldField(c[0], cy, c[1]);
@@ -4076,7 +3711,7 @@ function buildProps() {
             const f1 = .12 + .5 * Math.sin(t * 3.1), f2 = .1 + .42 * Math.sin(t * 3.1 - 1); for (const w of wings) { w.arm.rotation.x = -w.sd * f1; w.hand.rotation.x = -w.sd * f2; } }); (window.__beasts = window.__beasts || []).push('pegasus');
         }, undefined, () => console.warn('animal model not loaded: Horse.glb')); }
 
-    for (const t of things) if (t.name === 'Inkwell Lake' || t.name === 'Inkling Hatchery Vats' || t.name === 'Damatha Inkfountains') inkify(t);
+    for (const t of things) if (t.name === 'Damatha Inkfountains') inkify(t);
 
     // ---------------- the roads, which all start from the hall's plaza ----------------
     const HALL = Wp(CITY), GTW = [SQGATE[0] * S, SQGATE[1] * S], GOUT = [Math.cos(SQGATE[2]), Math.sin(SQGATE[2])], HRY = Math.atan2(GTW[0] - HALL[0], GTW[1] - HALL[1]), HF = [Math.sin(HRY), Math.cos(HRY)], HR = [HF[1], -HF[0]], PA = 158, PB = 130;   // the plaza is an ellipse, PB long down the hall's axis and PA across: since Oct 2026 the size of the Meshy hall that stands on it, so no house or street runs into it
@@ -4089,11 +3724,11 @@ function buildProps() {
     const ROADS = [[from(GTW), [GTW[0] - GOUT[0] * 14, GTW[1] - GOUT[1] * 14]]];
     // Duskwalk (28,15 28,16 28,17): the dark road, running out from the hall's north side through the shadow district to the steps of the Annex; close-built with narrow black houses and the alleys between them, purple lamps, a little ink-dust webbing, lanterns moving along it
     { const bm = bmL, roofD = roofL, c = hexW(28, 16);
-      addThing('Duskwalk', '🌑', c, 1, 30, g => { street(g, c, DUSK, { w: 18, road: roadD, wall: bm, roof: roofD, lit: litP, lit2: litW, post: postD, h0: 20, h1: 26, skip: owned, models: 'dark' }); }, { y: GY, hexes: [[28, 15], [28, 16], [28, 17]], top: 70, view: 620 });
-      for (let i = 0; i + 1 < DUSK.length; i++) walkers(DUSK[i], DUSK[i + 1], 12, [1.5, .6, 2.6], 9, GY + 4, 51 + i); { const wr = mulberry32(52), st = []; for (let i = 0; i + 1 < DUSK.length; i++) { const A = DUSK[i], B = DUSK[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), nx = -dz / L, nz = dx / L; for (let d = 14; d < L - 10; d += 12 + 14 * wr()) { const d2 = d + (wr() - .5) * 16, p = [A[0] + dx / L * d, A[1] + dz / L * d], q = [A[0] + dx / L * d2, A[1] + dz / L * d2]; if (owned(p[0], p[1]) || owned(q[0], q[1])) continue; st.push([[p[0] + nx * 13, GY + 22 + 12 * wr(), p[1] + nz * 13], [q[0] - nx * 13, GY + 22 + 12 * wr(), q[1] - nz * 13], .35 + .7 * wr() * wr()]); } } webs(st, 0x08080c, .5); } }
+      addThing('Duskwalk', '🌑', c, 1, 30, g => { street(g, c, DUSK, { w: 18, road: roadD, wall: bm, roof: roofD, lit: litP, lit2: litW, post: postD, h0: 20, h1: 26, skip: owned, models: 'dark' }); g.userData.silverquillStreet = { slug: 'duskwalk', paths: [DUSK], width: 18 }; }, { y: GY, hexes: [[28, 15], [28, 16], [28, 17]], top: 70, view: 620 });
+        }
     // Ray Promenade (four hexes): the bright road, white marble edged in gold, lamps both sides, white houses with gilded roofs - running out from the hall's east side through the bright district, with a second, short arm south
     { const c = hexW(31, 16), lamps = [];
-      addThing('Ray Promenade', '✨', c, 1, 30, g => { const o = { w: 22, road: wm, edge: gd, wall: wm, roof: roofG, lit: litW, lit2: litW, post: gd, h0: 18, h1: 18, gap: 20, skip: owned, lamps, models: 'bright' }; street(g, c, RAY, o); }, { y: GY, hexes: [[32, 15], [31, 16], [30, 17], [29, 18]], top: 60, view: 760 });
+      addThing('Ray Promenade', '✨', c, 1, 30, g => { const o = { w: 22, road: wm, edge: gd, wall: wm, roof: roofG, lit: litW, lit2: litW, post: gd, h0: 18, h1: 18, gap: 20, skip: owned, lamps, models: 'bright' }; street(g, c, RAY, o); street(g, c, RAY2, o); g.userData.silverquillStreet = { slug: 'ray-promenade', paths: [RAY,RAY2], width: 22 }; }, { y: GY, hexes: [[32, 15], [31, 16], [30, 17], [29, 18]], top: 60, view: 760 });
       lamps.forEach((p, i) => { if (i % 3 === 0) lanternPts.push([p[0], GY + 11, p[1], { c: [2.6, 2.2, 1.5], size: 9, drift: .1, speed: .4 }]); }); for (let i = 0; i + 1 < RAY.length; i++) walkers(RAY[i], RAY[i + 1], 9, [2.6, 2.3, 1.6], 12, GY + 4, 58 + i); }
     // the only other road is the short one from the hall's doors to the gate; it is part of the city rather than a place of its own
     const cityG = new THREE.Group(); cityG.position.set(0, GY, 0); const ZERO = [0, 0];
@@ -4115,14 +3750,12 @@ function buildProps() {
       for (const t of things) { if (skipT.has(t.name) || !sqInside(t.x / S, t.z / S)) continue; t.group.updateMatrixWorld(true);
         t.group.traverse(o => { if (!o.isMesh || o.material.transparent) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); bx.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
           if (bx.min.y > GY + 14 || bx.max.x - bx.min.x > 170 || bx.max.z - bx.min.z > 170) return; foot.push([bx.min.x - SQ_LOT.clear, bx.max.x + SQ_LOT.clear, bx.min.z - SQ_LOT.clear, bx.max.z + SQ_LOT.clear, t.name]); }); }
-      for (const h of sqStreet) if (!h.check) { const r = (h.tall ? SQ_SIZE.tower : SQ_SIZE.manor) * SQ_KINDS.street.size * (h.k || 1) * .55 + SQ_LOT.clear; foot.push([h.x - r, h.x + r, h.z - r, h.z + r, 'place house']); }   // the Meshy houses inside places count as part of them
-      const onPlace = (x, z) => foot.some(f => x > f[0] && x < f[1] && z > f[2] && z < f[3]);
+      const reserved = reserveSilverquill(things);
+      const onPlace = (x, z) => isReserved(reserved, x, z) || foot.some(f => x > f[0] && x < f[1] && z > f[2] && z < f[3]);
       // the street houses that stand: clear of the places and of each other (where a street turns, the houses on the inside of the bend would meet)
       const hdim = h => { const k = (h.check ? 1 : SQ_KINDS.street.size) * (h.k || 1), w = (h.tall ? SQ_SIZE.tower : SQ_SIZE.manor) * (h.check ? 1 : k), d = (h.tall ? SQ_SIZE.tower * .95 : SQ_SIZE.manor * .78) * (h.check ? 1 : k); return h.check ? [h.check[0], h.check[1]] : [w, d]; };
       const inHouse = (h, x, z, m) => { const [w, d] = hdim(h), fx = Math.sin(h.face), fz = Math.cos(h.face), dx = x - h.x, dz = z - h.z, a = dx * fz - dz * fx, b = dx * fx + dz * fz; return Math.abs(a) < w / 2 + m && Math.abs(b) < d / 2 + m; };
       const streetKept = [], sr2 = mulberry32(919);
-      for (const h of sqStreet) { const [w, d] = hdim(h), fx = Math.sin(h.face), fz = Math.cos(h.face), ux = fz, uz = -fx, pts = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0]].map(([a, b]) => [h.x + ux * a + fx * b, h.z + uz * a + fz * b]);
-        if (h.check && pts.some(([px, pz]) => onPlace(px, pz))) continue; if (streetKept.some(o => pts.some(([px, pz]) => inHouse(o, px, pz, -1.5)))) continue; streetKept.push(h); }
       // along the two named streets: walk each side in small steps and stand the largest house that fits there, front to the road, shoulder to shoulder
       for (const sg of sqSegs) { const dx = sg.B[0] - sg.A[0], dz = sg.B[1] - sg.A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux;
         for (const sd of [-1, 1]) for (let u = 0; u < L;) { let put = false;
@@ -4154,7 +3787,7 @@ function buildProps() {
       const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'slateW'), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
       const winGeo = mergeGeometries(wq), boxes = [], mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; boxes.push(m); } };
       mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length;
-      cityHouses(houses.concat(streetKept), boxes, GY); }
+      installSilverquillHouses(houses.concat(streetKept), boxes, GY, scene, camera, renderer, anim); }
 
     // ---------------- and round all of it, the wall: black marble, towers along it, a line of violet light running round its top; open only at the gate ----------------
     { const segs = [], tw = [], cones = [], glowS = [], W = SQWALL.map(p => [p[0] * S, p[1] * S]), n = W.length;
@@ -7690,7 +7323,7 @@ setTimeout(async () => {
   const cache = await terrainCache.get(); if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); const t1 = performance.now();
-  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
+  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
   document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? "terrain from cache · " : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
@@ -7702,6 +7335,12 @@ setTimeout(async () => {
       fragmentShader: 'uniform float uR, uTime; uniform vec2 uC; uniform sampler2D uNoise; varying vec2 vP; void main(){ float n = texture2D(uNoise, vP / 2100.0 + uTime * 0.012).r + 0.5 * texture2D(uNoise, vP / 640.0 - uTime * 0.02).r; float d = length(vP - uC) + (n - 0.75) * 620.0; float a = smoothstep(uR - 300.0, uR + 300.0, d); vec3 c = mix(vec3(0.07, 0.08, 0.12), vec3(0.36, 0.40, 0.48), clamp(n * 0.7, 0.0, 1.0)); gl_FragColor = vec4(c, a * 0.99); }' }));
     veil.rotation.x = -Math.PI / 2; veil.position.y = 40; veil.renderOrder = 9999; veil.frustumCulled = false; veil.raycast = () => {}; scene.add(veil); const lb = document.getElementById('labels'); if (lb) lb.style.opacity = 0;
     const tv = performance.now(), DUR = 3200; anim.push(() => { if (!veil.parent) return; const f = Math.min((performance.now() - tv) / DUR, 1); veil.material.uniforms.uR.value = -400 + 6400 * f * f * (3 - 2 * f); if (f >= 1) { scene.remove(veil); veil.geometry.dispose(); veil.material.dispose(); if (lb) { lb.style.transition = 'opacity .6s'; lb.style.opacity = 1; } } }); }
+  if (location.hash === '#silverquill') {
+    const hall = things.find(t => t.name === 'Grandloft Hall');
+    controls.target.set(hall.x, hall.group.position.y + 55, hall.z);
+    camera.position.copy(controls.target).add(new THREE.Vector3(-530, 675, 650));
+    controls.update();
+  }
   loading.style.display = 'none'; terrainCache.put();
   window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, pace, ray, hexOwner, select, setHover, composer, updateLabels, under: { go: p => goUnder(p), surface: () => goSurface(), U: UNDER }, hexAt, sqIn: (x, z) => sqInside(x / S, z / S) };
   const clock = new THREE.Clock(); let acc = 0, frames = 0;
