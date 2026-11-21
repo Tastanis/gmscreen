@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
   heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
@@ -9,6 +10,21 @@ import {
   resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from '../heroic-resource-automation.js';
+
+test('a fast first turn gains Essence on top of the starting balance, independently for each hero', async () => {
+  const run = createHeroicResourceBoundaryQueue();
+  let balance = 9;
+  let finishOldFight;
+  const oldFight = new Promise((resolve) => { finishOldFight = resolve; });
+  const end = run('caster', 'combatEnd', async () => { await oldFight; balance = 0; });
+  const start = run('caster', 'combatStart', () => { balance = 1; });
+  const turn = run('caster', 'turnStart', () => { assert.equal(balance, 1); balance += 2; });
+  assert.equal(await run('other', 'turnStart', () => 4), 4);
+  assert.equal(balance, 9);
+  finishOldFight();
+  await Promise.all([end, start, turn]);
+  assert.equal(balance, 3);
+});
 
 function env(overrides = {}) {
   return {

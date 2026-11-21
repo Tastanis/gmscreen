@@ -787,6 +787,9 @@ function vttSyncV2ProjectCombatEventForUser(array $event, array $auth): array
             $id = $event['payload']['transition'][$field] ?? null;
             if (is_string($id) && trim($id) !== '' && !isset($visibleIds[trim($id)])) {
                 $event['payload']['transition'][$field] = '__hidden_enemy__';
+                if ($field === 'combatantId') {
+                    unset($event['payload']['transition']['turnStartResourceRecipientId']);
+                }
             }
         }
     }

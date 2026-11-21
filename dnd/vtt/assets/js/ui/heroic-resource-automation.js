@@ -390,6 +390,22 @@ function resolveDistanceTargetId(filter, event, payload) {
   return payload?.placementId || payload?.targetId || payload?.newTargetId || payload?.actorId || '';
 }
 
+// Finish a hero's combat-start or combat-end balance before processing a later offer for that hero.
+export function createHeroicResourceBoundaryQueue() {
+  const balances = new Map();
+  return async function run(profileId, eventType, apply) {
+    const previous = balances.get(profileId);
+    const work = previous ? previous.then(apply, apply) : Promise.resolve().then(apply);
+    if (eventType !== 'combatStart' && eventType !== 'combatEnd') return work;
+    balances.set(profileId, work);
+    try {
+      return await work;
+    } finally {
+      if (balances.get(profileId) === work) balances.delete(profileId);
+    }
+  };
+}
+
 // A limited offer belongs to the fight (and possibly the round or turn) that produced it.
 export function heroicResourceTimingAllows(rule, eventType, atEvent, now) {
   if (!rule.limit || eventType === 'combatStart' || eventType === 'combatEnd') return true;

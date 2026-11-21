@@ -80,6 +80,7 @@ import {
 } from './automation-trigger-lifetime.js';
 import { getPowerRollSuggestions, collectRollPassives } from './power-roll-suggestions.js';
 import {
+  createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
   heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
@@ -1287,6 +1288,7 @@ export function mountBoardInteractions(store, routes = {}) {
       fireTimingBoundary('turnStart', {
         placementId: combatantId,
         team: getCombatantTeam(combatantId),
+        resourceRecipientId: transition.turnStartResourceRecipientId,
       });
       runPersistentZoneBoundary(combatantId, 'startOfTurn');
       notifyConditionTurnStart(combatantId);
@@ -1313,10 +1315,7 @@ export function mountBoardInteractions(store, routes = {}) {
       startNewFightCleanSlate(getActiveSceneId());
       clearResourceLimitsForScene();
       setTimeout(() => autoOnAurasAtCombatStart().catch((error) => console.warn('[VTT] auras at combat start', error)), 1500);
-      resetPlayerSurgesToZero('combat-start').finally(() => {
-        fireTimingBoundary('combatStart', { round: 1 });
-        fireTimingBoundary('roundStart', { round: 1 });
-      });
+      fireCombatStartBoundaries(1);
       resetTriggeredActionsForActiveScene();
       // Initial/round malice is committed with the server combat transition.
       return;
@@ -3985,7 +3984,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return '';
   }
 
-  function triggerFire(eventType, payload) {
+  function triggerFire(eventType, payload, { resourcesHandled = false } = {}) {
     try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
     if (eventType === 'staminaChange') fireWindedAndDying(payload);
     if (eventType === 'damage') noteMaintainedDamage(payload).catch((err) => console.warn('[VTT] persistent damage check failed', err));
@@ -4032,9 +4031,11 @@ export function mountBoardInteractions(store, routes = {}) {
         console.warn(`[VTT] automation aura ${eventType} failed`, err);
       });
     }
-    processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
-      console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
-    });
+    if (!resourcesHandled) {
+      processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
+        console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
+      });
+    }
   }
 
   // A creature's Stamina first reaches half or less (winded) or 0 or less (dying).
@@ -4230,7 +4231,19 @@ export function mountBoardInteractions(store, routes = {}) {
   // Stamping them null instead defers their expiry to the next turn end.
   let endingTurnCombatantId = null;
 
-  function fireTimingBoundary(eventType, payload = {}) {
+  function fireCombatStartBoundaries(round) {
+    // Establish each hero's starting balance before a turn gain can be offered.
+    // Other combat-start triggers still see the reset Surges.
+    processHeroicResourceAutomationEvent('combatStart', { round, activeCombatantId }).catch((err) => {
+      console.warn('[VTT] combat-start resources failed', err);
+    });
+    resetPlayerSurgesToZero('combat-start').finally(() => {
+      fireTimingBoundary('combatStart', { round }, { resourcesHandled: true });
+      fireTimingBoundary('roundStart', { round });
+    });
+  }
+
+  function fireTimingBoundary(eventType, payload = {}, options) {
     const boundaryPayload = {
       round: combatRound,
       activeCombatantId,
@@ -4247,7 +4260,7 @@ export function mountBoardInteractions(store, routes = {}) {
       endingTurnCombatantId = boundaryPayload.placementId || null;
     }
     try {
-      triggerFire(eventType, boundaryPayload);
+      triggerFire(eventType, boundaryPayload, options);
     } catch (err) {
       console.warn(`[VTT] triggerFire(${eventType}) failed`, err);
     }
@@ -4435,6 +4448,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // gain is taken (unless the rule says markOn "offered"). While a popup for it is open, the same gain is not offered
   // again on this page (an area attack used to open one popup per creature hit).
   const pendingResourceLimitKeys = new Set();
+  const runAfterResourceBalance = createHeroicResourceBoundaryQueue();
   function heroicResourceLimitKey(rule, placementId, appliedTargetId = '') {
     if (!rule?.limit?.key || !placementId) return '';
     const scope = String(rule.limit.scope || 'round').toLowerCase();
@@ -4892,9 +4906,8 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  // Heroic-resource prompts at turn boundaries belong to the user who
-  // initiated the accepted canonical transition. The selected token's linked
-  // character sheet still supplies the resource and feature rules.
+  // The selected token's sheet supplies the rules. At turn start the server
+  // chooses the connected player or Director who should answer the prompt.
   // - turnStart/turnEnd run only on the canonical boundary winner.
   // - All other events (damage, power rolls, ...) fire only on the single
   //   client that ran the action. That client routes the offer to the
@@ -4923,18 +4936,17 @@ export function mountBoardInteractions(store, routes = {}) {
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
     const currentUserId = normalizeProfileId(getCurrentUserId());
-    for (const placement of placements) {
-      const profileId = getAutomationProfileIdForPlacement(placement.id);
-      if (!profileId) continue;
-      // The hero's player is asked, the start of their turn too (it was whoever started the turn); the Director
-      // when the hero has no player, or when the player's page does not take it up (runPendingHeroResourcePrompt).
-      const controllerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+    async function processPlacement(placement, profileId) {
+      const linkedPlayer = getLinkedProfileUserIdForPlacement(placement.id);
+      const turnRecipient = eventType === 'turnStart' ? normalizeProfileId(payload.resourceRecipientId) : null;
+      const directorStartsDummyTurn = eventType === 'turnStart' && isGmUser() && isDummyId(profileId);
+      const controllerId = turnRecipient || linkedPlayer || (directorStartsDummyTurn ? currentUserId : normalizeProfileId(profileId));
       const isController = Boolean(controllerId) && controllerId === currentUserId;
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
       const hasCasts = eventType === 'turnStart' && getMaintainedAbilities(placement).length > 0;
-      if (!sheet || (!automation.rules.length && !hasCasts)) continue;
+      if (!sheet || (!automation.rules.length && !hasCasts)) return;
       const env = getHeroicResourceRuleEnv(placement.id);
       const matching = automation.rules.filter(rule => ruleMatchesHeroicResourceEvent(rule, eventType, payload, env));
       for (const rule of hasCasts ? attachTurnMaintenance(matching) : matching) {
@@ -4968,6 +4980,15 @@ export function mountBoardInteractions(store, routes = {}) {
           });
         }
       }
+    }
+    function run(placement) {
+      const profileId = getAutomationProfileIdForPlacement(placement.id);
+      if (profileId) return runAfterResourceBalance(profileId, eventType, () => processPlacement(placement, profileId));
+    }
+    if (eventType === 'combatStart' || eventType === 'combatEnd') {
+      await Promise.all(placements.map(run));
+    } else {
+      for (const placement of placements) await run(placement);
     }
   }
 
@@ -5005,7 +5026,7 @@ export function mountBoardInteractions(store, routes = {}) {
       id: `hrp_${Date.now()}_${pendingHeroResourcePromptCounter}_${Math.random().toString(36).slice(2, 7)}`,
       // Whose CHARACTER the resource belongs to (the sheet that gets written).
       profileId: normalizeProfileId(profileId),
-      // Whose client should show a non-turn prompt. Falls back to the linked
+      // Whose client should show the prompt. Falls back to the linked
       // character profile for records written by older clients.
       recipientUserId: normalizeProfileId(recipientUserId) ?? normalizeProfileId(profileId),
       eventType,
@@ -13921,10 +13942,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const startRound = combatRound;
     if (!combatV2Enabled) {
       startNewFightCleanSlate(startingSceneId);
-      resetPlayerSurgesToZero('combat-start').finally(() => {
-        fireTimingBoundary('combatStart', { round: startRound });
-        fireTimingBoundary('roundStart', { round: startRound });
-      });
+      fireCombatStartBoundaries(startRound);
     }
     updateStartCombatButton();
     refreshCombatTracker();

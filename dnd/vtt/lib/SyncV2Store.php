@@ -179,7 +179,7 @@ final class SyncV2Store
                 }
                 $requestInput = is_array($payload['request'] ?? null) ? $payload['request'] : [];
                 $wanted = strtolower(trim((string) ($requestInput['recipientId'] ?? '')));
-                $recipient = $this->resolveRequestedTestRecipient($wanted, $actorId);
+                $recipient = $this->resolvePromptRecipient($wanted, $actorId);
                 $request = $this->normalizeRequestedTestRecord([
                     ...$requestInput,
                     'id' => $requestId,
@@ -1251,6 +1251,14 @@ final class SyncV2Store
                 ];
                 $transition['combatantId'] = $combatantId;
                 $transition['interactionOwnerId'] = $actorId;
+                // Only the boundary winner runs the rules. The hero's connected player gets the decision,
+                // or the Director can answer immediately when running that hero alone.
+                $profile = $this->linkedPlayerProfileForPlacement($placement);
+                if ($profile !== null) {
+                    $transition['turnStartResourceRecipientId'] = $profile === strtolower($actorId)
+                        ? $profile
+                        : $this->resolvePromptRecipient($profile, $isGm ? strtolower($actorId) : $profile);
+                }
                 if ($activeId !== null) {
                     $transition['turnEndInteractionOwnerId'] = $actorId;
                 }
@@ -3664,7 +3672,7 @@ final class SyncV2Store
         return $result;
     }
 
-    private function resolveRequestedTestRecipient(string $desiredRecipient, string $actorId): string
+    private function resolvePromptRecipient(string $desiredRecipient, string $fallbackRecipient): string
     {
         $cutoff = $this->nowMilliseconds() - 5000;
         if ($desiredRecipient !== '' && $desiredRecipient !== '__gm__') {
@@ -3688,7 +3696,7 @@ final class SyncV2Store
         );
         $gm->execute(['world_id' => $this->worldId, 'cutoff' => $cutoff]);
         $gmId = $gm->fetchColumn();
-        return is_string($gmId) && trim($gmId) !== '' ? strtolower(trim($gmId)) : $actorId;
+        return is_string($gmId) && trim($gmId) !== '' ? strtolower(trim($gmId)) : $fallbackRecipient;
     }
 
     private function normalizeCombatState($raw): array

@@ -77,7 +77,7 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, `{round}`, `{target}` and `{source}` (creature names). The popup puts what happened first ("Goblin was force moved.") unless the prompt names {target} or {source}, and asks it as a question. Buttons are Yes / Cancel (`applyLabel`, `cancelLabel` change them). |
 | `autoApply` | Optional boolean. `true` skips the confirmation popup and applies the rule immediately (keep it for combat start and end). |
 
-Who is asked: the hero's player, the start of their turn too; when the player's page does not take the popup up within about 25 seconds (not on), the Director is asked instead. A gain is undone with the action that caused it (one Ctrl+Z), and its limit with it.
+At turn start the Table checks who is connected. The hero’s player receives the resource and upkeep question when present, and the Director receives it immediately when running the hero alone. If a player disconnects after a prompt is routed to them, the Director can still pick up the unanswered offer after about 25 seconds. A gain and its limit are undone with the action that caused them (one Ctrl+Z).
 
 ## Amount Examples
 
