@@ -161,7 +161,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=4';
+import { footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=5';
+import { installVellumGuard } from './vellum-guard.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -394,7 +395,7 @@ const SLUICE = (() => { const A = [[33, 34], [32, 35], [32, 36], [31, 37], [30, 
   const dist = (x, z) => { if (x < x0 - 36 || x > x1 + 36 || z < z0 - 36 || z > z1 + 36) return 1e9; let b = 1e18; for (const g of segs) { let t = ((x - g[0]) * g[2] + (z - g[1]) * g[3]) / (g[2] * g[2] + g[3] * g[3]); t = t < 0 ? 0 : t > 1 ? 1 : t; const px = g[0] + g[2] * t - x, pz = g[1] + g[3] * t - z, d = px * px + pz * pz; if (d < b) b = d; }
     let dd = Math.sqrt(b); for (const p of basins) dd = Math.min(dd, Math.max(Math.hypot(x - p[0], z - p[1]) - 11, 0)); return dd; };
   return { A, B, C, D, lines, dist, basins }; })();
-const ARBIT = hexC([26, 21], [26, 22]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
+const ARBIT = (() => { const p = hexC([25, 22], [26, 21]); return [p[0] + 16 / S, p[1] - 19 / S]; })(), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
 const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0] - 7, p[1] + 7]; })();
 // the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
 const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622], WKI = [8, 81.5, -87.5, 20.5];   // the workshop's gate, its dome, the way the gate looks; and the hall behind it: how far into the hill it runs (from, to) and how far along the face (from, to), measured from the gate
@@ -3558,25 +3559,14 @@ function buildProps() {
         if (o.h0 && o.models) sqSegs.push({ A, B, w: o.w, dark: o.models === 'dark' });   // Meshy houses go along it later, once the places' footprints are known (see the city below)
         for (let d0 = 10; d0 < L; d0 += o.gap || 24) for (const sd of [-1, 1]) { const x = A[0] + ux * d0 + nx * sd * (o.w / 2 - 1.4), z = A[1] + uz * d0 + nz * sd * (o.w / 2 - 1.4); M(g, new THREE.CylinderGeometry(.35, .5, 10, 6), o.post, x - c[0], 5, z - c[1]); NS(M(g, new THREE.SphereGeometry(1.05, 8, 6), o.lit, x - c[0], 10.6, z - c[1])); if (o.lamps) o.lamps.push([x, z]); } } };
 
-    // Vellum Gargoyle Gate (28,18 27,19 28,19): the one way through the wall - two towers and a pointed arch - and beside it, crouched on a plinth and never leaving, a gargoyle of layered, rune-covered parchment
+    // Vellum Gargoyle Gate (28,18 27,19 28,19): the one way through the wall - two towers and a pointed arch - and beside it, standing guard outside, a gargoyle of layered, rune-covered parchment
     { const GW = [SQGATE[0] * S, SQGATE[1] * S], out = [Math.cos(SQGATE[2]), Math.sin(SQGATE[2])], ry0 = -Math.atan2(out[1], out[0]);
-      const parch = new THREE.MeshStandardMaterial({ roughness: .9, flatShading: true, map: canvasTex(256, 256, (c, w, hgt) => { const r = mulberry32(31); c.fillStyle = '#d8c9a0'; c.fillRect(0, 0, w, hgt); c.strokeStyle = '#5a4630'; for (let i = 0; i < 40; i++) { c.globalAlpha = .35 + .4 * r(); c.lineWidth = 1 + r(); c.beginPath(); let x = r() * w, y = r() * hgt; c.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (r() - .5) * 26; y += (r() - .5) * 14; c.lineTo(x, y); } c.stroke(); } c.globalAlpha = 1; }) });
       addThing('Vellum Gargoyle Gate', '🦇', GW, 1, 30, g => markSilverquillLot(g, 'Vellum Gargoyle Gate'), { y: GY, ry: ry0 + Math.PI / 2, hexes: [[28, 18], [28, 19]], top: 120, view: 560 });
-      // the Vellum Gargoyle: Brandon's Meshy model (Oct 2026), crouched on a great plinth outside the gate, facing the road in; three hexes of its own. Its painting shows in its panel
-      { const gH = [[27, 19], [26, 19], [27, 20]].map(([q, r]) => hexAt(q, r)), gx = gH.reduce((a, h) => a + h.x, 0) / 3, gz = gH.reduce((a, h) => a + h.z, 0) / 3, gy = heightAt(gx, gz);
-        const gT = addThing('Vellum Gargoyle', '🦇', [gx, gz], 1, 30, g2 => { const k2 = kit(g2), stoneP = tx(solid(0x2a2830, .7), 'masonry');
-          k2.B(118, 8, 96, stoneP, 0, 4, 0); k2.B(108, 3, 86, bm, 0, 9.5, 0); for (const sd of [-1, 1]) { k2.B(120, 1.4, 1.6, gd, 0, 8.4, sd * 48.4); k2.B(1.6, 1.4, 98, gd, sd * 59.4, 8.4, 0); }   // the plinth, black stone banded in gold
-          for (let i = 0; i < 8; i++) { const a = i * .8; NS(M(g2, new THREE.PlaneGeometry(4, 6), parch, -30 + i * 8, 11.2, (i % 3 - 1) * 18, { rx: -Math.PI / 2, rz: a })); }   // loose pages fallen about it
-        }, { y: gy, hexes: [[27, 19], [26, 19], [27, 20]], top: 150, view: 640 });
-        { const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder), g2 = gT.group, face = Math.atan2(GW[0] - gx, GW[1] - gz) + Math.PI, SZ = 130, st = { lo: null, hi: null, asked: false, near: false };   // SZ: its length nose to tail (world)
-          const mount = (gl, isLo) => { const m = gl.scene, box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), piv = new THREE.Group(), sc = SZ / Math.max(sz.x, sz.z);
-            m.position.set(-c.x, -box.min.y, -c.z); piv.add(m); piv.scale.setScalar(sc); piv.position.y = 11; piv.rotation.y = face;   // the model faces +z: turned to look out from the gate, guarding the way in
-            m.traverse(o => { if (!o.isMesh) return; o.castShadow = o.receiveShadow = true; o.material.metalness = 0; o.material.envMapIntensity = .8; o.material.userData.e0 = o.material.emissive ? o.material.emissive.clone() : null; gT.mats.push(o.material); });
-            g2.add(piv); g2.updateMatrixWorld(true); renderer.shadowMap.needsUpdate = true; return piv; };
-          const getHi = () => { st.asked = true; L.load('models/halls/gargoyle.glb', gl => { st.hi = mount(gl, false); if (st.lo) { st.lo.visible = false; st.near = true; } }); };
-          L.load('models/halls/gargoyle-lo.glb', gl => { st.lo = mount(gl, true); if (st.hi) st.lo.visible = false; }, undefined, () => getHi());
-          anim.push(() => { if (!st.lo && !st.hi) return; const d = camera.position.distanceTo(g2.position); if (!st.asked && d < 900) getHi();
-            if (st.hi && st.lo) { const near = d < (st.near ? 560 : 480); if (near !== st.near) { st.near = near; st.hi.visible = near; st.lo.visible = !near; renderer.shadowMap.needsUpdate = true; } } }); } }
+      // The sentinel guards the approach, occasionally taking a circuit of the grounds.
+      const guardHexes = [[27, 19], [26, 19], [27, 20]], post = cenW(guardHexes);
+      const guard = addThing('Vellum Gargoyle', '🦇', post, 1, 30, () => {},
+        { y: heightAt(...post), hexes: guardHexes, top: 124, view: 450 });
+      installVellumGuard(guard, GW, heightAt, camera, renderer, anim);
     }
 
     // Inkfall Streets (27,16): a knot of streets where black-purple ink dust gathers in every crevice and hangs between the roofs like cobweb
@@ -3589,8 +3579,8 @@ function buildProps() {
       addThing('Hecklebox Balcony', '🎭', c, 1, 30, g => markSilverquillLot(g, 'Hecklebox Balcony'), { y: GY, hexes: [[27, 15]], top: 58, view: 380 }); }
 
     // Annex of Addenda (28,14 28,13 29,13): where devils keep their contracts - a long black archive with four spires, red light in its windows, and on its doors a seal as tall as a house
-    { const HX = [[28, 14], [28, 13], [29, 13]], c = cenW(HX);
-      addThing('Annex of Addenda', '📜', c, 1, 30, g => markSilverquillLot(g, 'Annex of Addenda'), { y: GY, hexes: HX, top: 130, view: 620 }); }
+    { const HX = [[28, 14], [28, 13], [29, 13]], c = cenW(HX); c[0] -= 32;
+      addThing('Annex of Addenda', '📜', c, 1, 30, g => markSilverquillLot(g, 'Annex of Addenda'), { y: GY, ry: -Math.PI / 6, hexes: HX, top: 84, view: 620 }); }
 
     // Umbral Blade Loom (29,14): a black loom as tall as a tower. Its warp of ten thousand threads spreads down from the beam like a skirt; heddle frames rise and fall in it and a gold shuttle flies across; the cloth of woven shadow comes off the front
     // and runs out over the steps; great wheels turn on its sides, bobbins as tall as a man feed it from all round, and the blades it has made stand point-down in a ring about its foot
@@ -3624,7 +3614,7 @@ function buildProps() {
       addThing('Strixhaven Star', '⭐', c, K, 30, g => markSilverquillLot(g, 'Strixhaven Star'), { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); }
 
     // Arbitration Steps (three hexes): outside the city, where devils do their business - ten tiers of black marble with a white stair up the front, horned figures down both sides of it, red fire burning on the tiers, and a canopied seat under a crescent at the top
-    { const c = Wp(ARBIT), y0 = 16 * S, stairAngle = Math.PI + Math.PI / 11, HX = footprintHexes('Arbitration Steps', c, stairAngle, HEX_R, hexAt, worldToHex);
+    { const c = Wp(ARBIT), y0 = 16 * S, stairAngle = -Math.PI / 3, HX = footprintHexes('Arbitration Steps', c, stairAngle, HEX_R, hexAt, worldToHex);
       addThing('Arbitration Steps', '⚖️', c, 1, 30, g => markSilverquillLot(g, 'Arbitration Steps'), { y: y0, ry: stairAngle, hexes: HX, top: 82, view: 405 }); }
 
     // Sealwright Foundry (30,19): a massive black works, four stacks smoking, red banners down its front and above the doors a red wax seal the height of three storeys
@@ -3725,8 +3715,9 @@ function buildProps() {
     const from = to => { const dx = to[0] - HALL[0], dz = to[1] - HALL[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l, rr = 1 / Math.hypot((ux * HR[0] + uz * HR[1]) / PA, (ux * HF[0] + uz * HF[1]) / PB) - 5; return [HALL[0] + ux * rr, HALL[1] + uz * rr]; };   // the point on the plaza's edge that faces a place
     const LMH = new Set([[27, 15], [27, 16], [28, 14], [28, 13], [29, 13], [29, 14], [29, 15], [31, 15], [33, 15], [32, 14], [28, 18], [28, 19], [27, 19]].map(([q, r]) => hexKey(q, r)));
     const owned = (x, z) => { const h = worldToHex(x, z); return LMH.has(hexKey(h.q, h.r)) || inPlaza(x, z, 8) || !sqInside(x / S, z / S) || polyDist(SQPATH, x / S, z / S) * S < 18; }, roadD = solid(0x0c0c10, .3), postD = solid(0x0b0b10, .4);
-    const cA = cenW([[28, 14], [28, 13], [29, 13]]);
-    const DUSK = [from(hexW(28, 16)), hexW(28, 16), hexW(28, 15), [cA[0], cA[1] + 60]], RAY = [from(hexW(30, 17)), hexW(30, 17), hexW(31, 16), hexW(32, 15), [hexW(32, 15)[0] + 52, hexW(32, 15)[1] - 30]], RAY2 = [from(hexW(29, 18)), hexW(29, 18), [hexW(29, 18)[0] + 14, hexW(29, 18)[1] + 56]];
+    const archive = things.find(t => t.name === 'Annex of Addenda'), cA = [archive.x, archive.z];
+    const archiveDoor = [archive.x + 79 * Math.sin(archive.group.rotation.y), archive.z + 79 * Math.cos(archive.group.rotation.y)];
+    const DUSK = [from(hexW(28, 16)), hexW(28, 16), hexW(28, 15), archiveDoor], RAY = [from(hexW(30, 17)), hexW(30, 17), hexW(31, 16), hexW(32, 15), [hexW(32, 15)[0] + 52, hexW(32, 15)[1] - 30]], RAY2 = [from(hexW(29, 18)), hexW(29, 18), [hexW(29, 18)[0] + 14, hexW(29, 18)[1] + 56]];
     const ROADS = [[from(GTW), [GTW[0] - GOUT[0] * 14, GTW[1] - GOUT[1] * 14]]];
     // Duskwalk (28,15 28,16 28,17): the dark road, running out from the hall's north side through the shadow district to the steps of the Annex; close-built with narrow black houses and the alleys between them, purple lamps, a little ink-dust webbing, lanterns moving along it
     { const bm = bmL, roofD = roofL, c = hexW(28, 16);
@@ -4823,12 +4814,12 @@ function setHover(t) {
   tip.style.display = 'block'; canvas.style.cursor = 'pointer';
 }
 let fly = null;
-function flyTo(x, z, dist = 320 * S, polarDeg = 60) {
-  const tgt = new THREE.Vector3(x, UNDER.on ? underY(x, z) : Math.max(heightAt(x, z), 0), z), off = camera.position.clone().sub(controls.target), az = Math.atan2(off.x, off.z), pol = THREE.MathUtils.degToRad(polarDeg);
+function flyTo(x, z, dist = 320 * S, polarDeg = 60, targetY) {
+  const tgt = new THREE.Vector3(x, targetY ?? (UNDER.on ? underY(x, z) : Math.max(heightAt(x, z), 0)), z), off = camera.position.clone().sub(controls.target), az = Math.atan2(off.x, off.z), pol = THREE.MathUtils.degToRad(polarDeg);
   const p1 = tgt.clone().add(new THREE.Vector3(Math.sin(az) * Math.sin(pol), Math.cos(pol), Math.cos(az) * Math.sin(pol)).multiplyScalar(dist));
   fly = { t: 0, dur: 1.6, p0: camera.position.clone(), p1, t0: controls.target.clone(), t1: tgt }; controls.enabled = false;
 }
-const flyTarget = t => t.thing ? flyTo(t.thing.x, t.thing.z, t.thing.view, 62) : t.mover ? (t.mover.getWorldPosition(moverV), flyTo(moverV.x, moverV.z, 420, 62)) : flyTo(t.hex.x, t.hex.z);   // a walker is flown to where it is now, not to its notes' hex
+const flyTarget = t => t.thing?.focusObject ? (t.thing.focusObject.getWorldPosition(moverV), flyTo(moverV.x, moverV.z, t.thing.view, 62, moverV.y + 50)) : t.thing ? flyTo(t.thing.x, t.thing.z, t.thing.view, 62) : t.mover ? (t.mover.getWorldPosition(moverV), flyTo(moverV.x, moverV.z, 420, 62)) : flyTo(t.hex.x, t.hex.z);   // a walker is flown to where it is now, not to its notes' hex
 
 // the hex popup: image, GM information, players' notes - read from and saved to the live map's own records through its own endpoints. Who may see what is decided there, on the server: a player's browser is never sent the GM's material at all
 const API = '/dnd/strixhaven/map/', role = { gm: false, ok: false };
@@ -7449,12 +7440,22 @@ setTimeout(async () => {
       fragmentShader: 'uniform float uR, uTime; uniform vec2 uC; uniform sampler2D uNoise; varying vec2 vP; void main(){ float n = texture2D(uNoise, vP / 2100.0 + uTime * 0.012).r + 0.5 * texture2D(uNoise, vP / 640.0 - uTime * 0.02).r; float d = length(vP - uC) + (n - 0.75) * 620.0; float a = smoothstep(uR - 300.0, uR + 300.0, d); vec3 c = mix(vec3(0.07, 0.08, 0.12), vec3(0.36, 0.40, 0.48), clamp(n * 0.7, 0.0, 1.0)); gl_FragColor = vec4(c, a * 0.99); }' }));
     veil.rotation.x = -Math.PI / 2; veil.position.y = 40; veil.renderOrder = 9999; veil.frustumCulled = false; veil.raycast = () => {}; scene.add(veil); const lb = document.getElementById('labels'); if (lb) lb.style.opacity = 0;
     const tv = performance.now(), DUR = 3200; anim.push(() => { if (!veil.parent) return; const f = Math.min((performance.now() - tv) / DUR, 1); veil.material.uniforms.uR.value = -400 + 6400 * f * f * (3 - 2 * f); if (f >= 1) { scene.remove(veil); veil.geometry.dispose(); veil.material.dispose(); if (lb) { lb.style.transition = 'opacity .6s'; lb.style.opacity = 1; } } }); }
-  if (location.hash === '#silverquill') {
-    const hall = things.find(t => t.name === 'Grandloft Hall');
-    controls.target.set(hall.x, hall.group.position.y + 55, hall.z);
-    camera.position.copy(controls.target).add(new THREE.Vector3(-530, 675, 650));
+  const inspectionViews = {
+    '#silverquill': ['Grandloft Hall', [0,55,0], [-530,675,650]],
+    '#vellum-gargoyle': ['Vellum Gargoyle', [-95,105,-53], [-375,205,330]],
+    '#annex-of-addenda': ['Annex of Addenda', [21,42,15], [-91,310,198]]
+  };
+  function inspectSilverquill() {
+    const view = inspectionViews[location.hash];
+    if (!view) return;
+    const [name, targetOffset, cameraOffset] = view;
+    const place = things.find(t => t.name === name);
+    controls.target.copy(place.group.position).add(new THREE.Vector3(...targetOffset));
+    camera.position.copy(controls.target).add(new THREE.Vector3(...cameraOffset));
     controls.update();
   }
+  inspectSilverquill();
+  window.addEventListener('hashchange', inspectSilverquill);
   loading.style.display = 'none'; terrainCache.put();
   window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, pace, ray, hexOwner, select, setHover, composer, updateLabels, under: { go: p => goUnder(p), surface: () => goSurface(), U: UNDER }, hexAt, sqIn: (x, z) => sqInside(x / S, z / S) };
   const clock = new THREE.Clock(); let acc = 0, frames = 0;
