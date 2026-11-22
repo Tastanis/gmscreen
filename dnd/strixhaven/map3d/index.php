@@ -161,7 +161,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=8';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, courtyardRoads, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=9';
 import { installVellumGuard } from './vellum-guard.js?motion=7';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
@@ -3860,6 +3860,7 @@ function buildProps() {
         && segD(x, z, DUSK) > 13 && segD(x, z, RAY) > 15 && segD(x, z, RAY2) > 15 && segD(x, z, ROADS[0]) > 14 && !byStreet(x, z);   // right up behind the street houses, never on a named street itself
       const R0 = Math.hypot(SQPATH.x1 - SQPATH.x0, SQPATH.z1 - SQPATH.z0) * S;
 // The curb lines use the same axes, origins and pitches as the house parcels.
+      const courts=courtyardRoads(things);
       const gridLimit=Math.ceil(R0/8)*8;
       function lanePoint(alongU,a,cross){return alongU?project(a,cross):project(cross,a);}
       function lane(alongU,cross){
@@ -3870,12 +3871,16 @@ function buildProps() {
           const ends=[lanePoint(alongU,a,cross-SW*.5),lanePoint(alongU,b,cross-SW*.5),
                       lanePoint(alongU,b,cross+SW*.5),lanePoint(alongU,a,cross+SW*.5)];
           if(!alongU)ends.reverse();
-          pavement(lanes,...ends,alongU?.42:.39);
+          const height=alongU?.42:.39;
+          for(const polygon of courts.clip(ends)) {
+            for(let i=1;i+1<polygon.length;i++)for(const p of [polygon[0],polygon[i+1],polygon[i]])lanes.push(p[0],height,p[1]);
+          }
         }
       }
       for(let row=-Math.ceil(R0/PV);row<=Math.ceil(R0/PV);row++)lane(true,row*PV);
       for(let col=-Math.ceil(R0/PU);col<=Math.ceil(R0/PU);col++)lane(false,col*PU);
       pavingMesh(lanes,cobbles,'Silverquill neighborhood lanes');
+      pavingMesh(courts.vertices,cobbles,'Silverquill courtyard approaches');
       // Stitch each street bend over the modular section ends. Continue the open
       // ends to the closest cross street and use a tapered landing at its curb.
       const joints=[];

@@ -65,6 +65,78 @@ export function reserveSilverquill(things) {
     return [{ x:t.x, z:t.z, bounds:s.bounds, c,n }];
   });
 }
+// Reroute the diagonal parcel grid around these two open-ended street models.
+// Work in each model's local axes so the court and its two entrances stay aligned.
+export function courtyardRoads(things) {
+  const ground = .405;
+  const vertices = [], cuts = [];
+  for (const [name, deckHeight, deckDepth, entranceWidth, verge, width] of [
+    ['Whispertube Tenements', .33, 18.6, 16, 1.5, 6], ['Inkfall Streets', .36, 12.4, 18, .9, 4.5],
+  ]) {
+    const t = things.find(t => t.name === name);
+    if (!t) continue;
+    const site = sites[name], [xmin,zmin,xmax,zmax] = site.bounds;
+    const c = Math.cos(t.group.rotation.y), s = Math.sin(t.group.rotation.y);
+    const world = (x,z) => [t.x+c*x+s*z,t.z-s*x+c*z];
+    const left=xmin-verge-width, right=xmax+verge+width;
+    const back=zmin-verge-width, front=zmax+verge+width;
+    const bevel=1.5*width; // Leave the diagonal neighboring parcels clear at the corners.
+    const corners=[world(left+bevel,back),world(right-bevel,back),world(right,back+width),world(right,front-width),
+      world(right-bevel,front),world(left+bevel,front),world(left,front-width),world(left,back+width)];
+    cuts.push({corners,xmin:Math.min(...corners.map(p=>p[0])),xmax:Math.max(...corners.map(p=>p[0])),
+      zmin:Math.min(...corners.map(p=>p[1])),zmax:Math.max(...corners.map(p=>p[1]))});
+
+    function face(points,y0=ground,y1=ground) {
+      const quad=points.map(([x,z])=>world(x,z));
+      for(const i of [0,2,1,0,3,2])vertices.push(quad[i][0],i<2?y0:y1,quad[i][1]);
+    }
+    function strip(x0,x1,z0,z1,y0,y1) {
+      face([[x0,z0],[x1,z0],[x1,z1],[x0,z1]],y0,y1);
+    }
+    strip(left,left+width,back+width,front-width);
+    strip(right-width,right,back+width,front-width);
+    const half=entranceWidth/2, top=deckHeight*site.scale;
+    face([[left+bevel,back],[-half,back],[-half,back+width],[left,back+width]]);
+    face([[half,back],[right-bevel,back],[right,back+width],[half,back+width]]);
+    face([[left,front-width],[-half,front-width],[-half,front],[left+bevel,front]]);
+    face([[half,front-width],[right,front-width],[right-bevel,front],[half,front]]);
+    // The centre of each frontage rises from the curb to the model's own pavement.
+    strip(-half,half,back,back+width/2);
+    strip(-half,half,back+width/2,-deckDepth*site.scale/2,ground,top);
+    strip(-half,half,deckDepth*site.scale/2,front-width/2,top,ground);
+    strip(-half,half,front-width/2,front);
+  }
+  function clip(quad) {
+    let pieces=[quad];
+    for(const cut of cuts) {
+      if(quad.every(p=>p[0]<=cut.xmin)||quad.every(p=>p[0]>=cut.xmax)||
+         quad.every(p=>p[1]<=cut.zmin)||quad.every(p=>p[1]>=cut.zmax))continue;
+      const outside=[];
+      for(let polygon of pieces) {
+        // Peel off the part outside each curb. Only the final interior is discarded.
+        for(let i=0;i<cut.corners.length&&polygon.length;i++){
+          const a=cut.corners[i],b=cut.corners[(i+1)%cut.corners.length],inside=[],off=[];
+          const side=p=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
+          let prev=polygon[polygon.length-1],d0=side(prev);
+          for(const p of polygon){
+            const d1=side(p);
+            if((d0<0)!==(d1<0)){
+              const u=d0/(d0-d1),hit=[prev[0]+u*(p[0]-prev[0]),prev[1]+u*(p[1]-prev[1])];
+              inside.push(hit);off.push(hit);
+            }
+            (d1<0?off:inside).push(p);prev=p;d0=d1;
+          }
+          if(off.length>=3)outside.push(off);
+          polygon=inside;
+        }
+      }
+      pieces=outside;
+    }
+    return pieces;
+  }
+  return {vertices,clip};
+}
+
 export function isReserved(lots, x, z) {
   return lots.some(lot => {
     const dx=x-lot.x, dz=z-lot.z;
