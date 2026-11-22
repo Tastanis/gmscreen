@@ -161,8 +161,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=5';
-import { installVellumGuard } from './vellum-guard.js';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=6';
+import { installVellumGuard } from './vellum-guard.js?motion=2';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -395,7 +395,10 @@ const SLUICE = (() => { const A = [[33, 34], [32, 35], [32, 36], [31, 37], [30, 
   const dist = (x, z) => { if (x < x0 - 36 || x > x1 + 36 || z < z0 - 36 || z > z1 + 36) return 1e9; let b = 1e18; for (const g of segs) { let t = ((x - g[0]) * g[2] + (z - g[1]) * g[3]) / (g[2] * g[2] + g[3] * g[3]); t = t < 0 ? 0 : t > 1 ? 1 : t; const px = g[0] + g[2] * t - x, pz = g[1] + g[3] * t - z, d = px * px + pz * pz; if (d < b) b = d; }
     let dd = Math.sqrt(b); for (const p of basins) dd = Math.min(dd, Math.max(Math.hypot(x - p[0], z - p[1]) - 11, 0)); return dd; };
   return { A, B, C, D, lines, dist, basins }; })();
-const ARBIT = (() => { const p = hexC([25, 22], [26, 21]); return [p[0] + 16 / S, p[1] - 19 / S]; })(), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
+// The new first tread occupies the former summit, just east and north of the center of 26,21.
+const stairHex = hexAt(26,21), stairGoal = hexAt(27,21);
+const arbitration = configureArbitrationSteps([stairHex.x+21.220593,stairHex.z-22.014111], [stairGoal.x,stairGoal.z]);
+const ARBIT = arbitration.center.map(v => v / S), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
 const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0] - 7, p[1] + 7]; })();
 // the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
 const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622], WKI = [8, 81.5, -87.5, 20.5];   // the workshop's gate, its dome, the way the gate looks; and the hall behind it: how far into the hill it runs (from, to) and how far along the face (from, to), measured from the gate
@@ -3614,7 +3617,7 @@ function buildProps() {
       addThing('Strixhaven Star', '⭐', c, K, 30, g => markSilverquillLot(g, 'Strixhaven Star'), { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); }
 
     // Arbitration Steps (three hexes): outside the city, where devils do their business - ten tiers of black marble with a white stair up the front, horned figures down both sides of it, red fire burning on the tiers, and a canopied seat under a crescent at the top
-    { const c = Wp(ARBIT), y0 = 16 * S, stairAngle = -Math.PI / 3, HX = footprintHexes('Arbitration Steps', c, stairAngle, HEX_R, hexAt, worldToHex);
+    { const c = Wp(ARBIT), y0 = 16 * S, stairAngle = arbitration.angle, HX = footprintHexes('Arbitration Steps', c, stairAngle, HEX_R, hexAt, worldToHex);
       addThing('Arbitration Steps', '⚖️', c, 1, 30, g => markSilverquillLot(g, 'Arbitration Steps'), { y: y0, ry: stairAngle, hexes: HX, top: 82, view: 405 }); }
 
     // Sealwright Foundry (30,19): a massive black works, four stacks smoking, red banners down its front and above the doors a red wax seal the height of three storeys
@@ -7443,6 +7446,7 @@ setTimeout(async () => {
   const inspectionViews = {
     '#silverquill': ['Grandloft Hall', [0,55,0], [-530,675,650]],
     '#vellum-gargoyle': ['Vellum Gargoyle', [-95,105,-53], [-375,205,330]],
+    '#arbitration-steps': ['Arbitration Steps', [0,32,0], [-150,160,-174]],
     '#annex-of-addenda': ['Annex of Addenda', [21,42,15], [-91,310,198]]
   };
   function inspectSilverquill() {

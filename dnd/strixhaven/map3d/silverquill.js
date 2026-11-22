@@ -28,6 +28,16 @@ const sites = {
   "Inkling Hatchery Vats": { slug: 'inkling-hatchery-vats', scale: 2.333333, bounds: [-28.957, -37.333, 27.497, 37.333], height: 29.213 },
   "Inkwell Lake": { slug: 'inkwell-lake', scale: 0.85, bounds: [-117.3, -134.3, 117.3, 117.3], height: 76.84 },
 };
+// Local Z of the first tread and the center of the crowned summit landing.
+export function configureArbitrationSteps(foot, summit){
+  const first=13.4, last=-10.75;
+  const dx=foot[0]-summit[0], dz=foot[1]-summit[1], length=Math.hypot(dx,dz);
+  const site=sites['Arbitration Steps'], depthScale=length/(first-last);
+  site.depthScale=depthScale;
+  site.bounds=[-26.04,-13.9748*depthScale,26.04,first*depthScale];
+  return {center:[foot[0]-dx*first/(first-last),foot[1]-dz*first/(first-last)],angle:Math.atan2(dx,dz)};
+}
+
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const assets = new Map();
 function asset(slug, far) {
@@ -94,7 +104,7 @@ export function installSilverquill(things, camera, renderer, anim) {
       state.loading.add(tier);
       try {
         const gltf=await asset(slug,far), root=new THREE.Group(), effects=[];
-        const placements=pieces||[{x:0,z:0,angle:0,sx:site.scale/base.scale.x,sz:site.scale/base.scale.x}];
+        const placements=pieces||[{x:0,z:0,angle:0,sx:site.scale/base.scale.x,sz:(site.depthScale??site.scale)/base.scale.x}];
         for(const [i,p] of placements.entries()) {
           const pivot=new THREE.Group(), model=gltf.scene.clone(true);
           pivot.position.set(p.x,0,p.z);pivot.rotation.y=p.angle;pivot.scale.set(p.sx,p.sx,p.sz);
