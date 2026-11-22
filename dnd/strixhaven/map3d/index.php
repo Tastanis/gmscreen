@@ -89,7 +89,7 @@ require_once '../../includes/strix-nav.php';
 "; ?>
 } }
 </script>
-<link rel="stylesheet" href="campus-scrolls.css?v=2">
+<link rel="stylesheet" href="campus-scrolls.css?v=3">
 </head>
 <body>
 <?php renderStrixNav('map'); ?>
@@ -154,9 +154,10 @@ require_once '../../includes/strix-nav.php';
   });
 </script>
 <span id="scrollKeys" class="scroll-a11y">Use left and right arrows to read a campus scroll, up and down to choose a location, and Enter to travel.</span>
+<section id="pinnedScroll" aria-labelledby="pinnedSchool" hidden><header><h2 id="pinnedSchool"></h2><button class="scroll-close" type="button" aria-label="Close campus scroll">×</button></header><div class="scroll-entries"></div></section>
 <span id="scrollStatus" class="scroll-a11y" role="status"></span>
 <script type="module">
-import {installCampusTable,tableMargin} from './campus-scrolls.js?v=2';
+import {installCampusTable,tableMargin} from './campus-scrolls.js?v=3';
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -5029,7 +5030,7 @@ const setTool = async tool => { if (PS.tool === 'terrain' && tool !== 'terrain' 
   if (PS.mine && tool !== 'draw') { PS.mine = false; pathApi('release_lock'); } PS.tool = tool; PS.curId = null; $('pathNoteRow').style.display = 'none'; for (const b of document.querySelectorAll('#pathBar [data-tool]')) b.classList.toggle('on', b.dataset.tool === tool); $('pathDiff').style.display = tool === 'terrain' ? 'flex' : 'none';
   pathSay({ none: 'Pick a tool', marker: 'Click a hex to set a destination there', draw: 'Click a hex, then click the next to join them - or hold and drag to lay it as you go. Esc, or Draw again, stops', delete: 'Click a destination, or any hex of a route, to remove it', terrain: 'Pick a type, then click or drag across hexes. Click Terrain again to save and close' }[tool]);
   if (tool === 'draw' && !PS.mine) { const d = await pathApi('acquire_lock'); PS.mine = !!(d && d.success) && PS.tool === 'draw' && PS.on; if (!(d && d.success)) pathSay((d && d.error) || 'Somebody else is drawing the route'); } };
-const setPathMode = on => { PS.on = on; U.uTerrOn.value = on ? 1 : 0; seaG.visible = on; if (!on && PS.tool === 'terrain') saveTerrain(); if (!on) PS.tool = 'none'; $('pathTools').style.display = on ? 'flex' : 'none'; $('pathToggle').classList.toggle('on', on); if (on) setTool('none'); else { if (PS.mine) { PS.mine = false; pathApi('release_lock'); } $('pathNoteRow').style.display = 'none'; pathSay(''); } };
+const setPathMode = on => { if(on)campusTable?.clear(); PS.on = on; U.uTerrOn.value = on ? 1 : 0; seaG.visible = on; if (!on && PS.tool === 'terrain') saveTerrain(); if (!on) PS.tool = 'none'; $('pathTools').style.display = on ? 'flex' : 'none'; $('pathToggle').classList.toggle('on', on); if (on) setTool('none'); else { if (PS.mine) { PS.mine = false; pathApi('release_lock'); } $('pathNoteRow').style.display = 'none'; pathSay(''); } };
 $('pathToggle').onclick = () => setPathMode(!PS.on);
 for (const b of document.querySelectorAll('#pathBar [data-tool]')) b.onclick = () => setTool(b.dataset.tool === PS.tool ? 'none' : b.dataset.tool);   // a tool's button a second time turns it off (and for Terrain, saves)
 addEventListener('keydown', e => { if (e.key === 'Escape' && PS.on && PS.tool !== 'none') setTool('none'); });
@@ -7611,7 +7612,7 @@ setTimeout(async () => {
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); if (packed && kept) terrainCache.fresh = packed; const t1 = performance.now();
   buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim);
-  campusTable=installCampusTable({scene,renderer,camera,things,width:MAP_W,depth:MAP_D,glide,
+  campusTable=installCampusTable({scene,renderer,things,width:MAP_W,depth:MAP_D,anim,
     travel:t=>flyTarget({thing:t}),overview:()=>glide(HOME_POS.clone(),HOME_TGT.clone()),canNavigate:()=>!UNDER.on&&!PS.on&&!document.body.classList.contains('touring')}); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
@@ -7674,7 +7675,7 @@ setTimeout(async () => {
     const a = K[i], b = K[i + 1], dt = b.time - a.time, u = clamp((time - a.time) / dt, 0, 1); hm(a.p, a.mp, b.p, b.mp, dt, u, camera.position); hm(a.g, a.mg, b.g, b.mg, dt, u, controls.target);
     const fl = heightAt(camera.position.x, camera.position.z) + 24; if (camera.position.y < fl) camera.position.y = fl; camera.lookAt(controls.target); };
   const endTour = () => { if (!tour.on) return; tour.on = false; controls.enabled = true; document.body.classList.remove('touring'); if (rec && rec.state !== 'inactive') rec.stop(); glide(HOME_POS.clone(), HOME_TGT.clone(), 2); };
-  const startTour = record => { if (!tour.keys) buildTour(); tour.t = 0; tour.i = 0; tour.on = true; fly = null; controls.enabled = false; setHover(null); document.body.classList.add('touring');
+  const startTour = record => { if (!tour.keys) buildTour(); campusTable?.clear(); tour.t = 0; tour.i = 0; tour.on = true; fly = null; controls.enabled = false; setHover(null); document.body.classList.add('touring');
     if (record && window.MediaRecorder) { const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)), chunks = []; rec = new MediaRecorder(canvas.captureStream(60), { mimeType: type, videoBitsPerSecond: 16e6 });
       rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); }; rec.onstop = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); a.download = 'strixhaven-flythrough.webm'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); rec = null; }; rec.start(1000); } };
   addEventListener('keydown', e => { if (e.key === 'Escape' && tour.on) endTour(); });

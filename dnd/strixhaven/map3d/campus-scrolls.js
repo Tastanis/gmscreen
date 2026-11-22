@@ -69,7 +69,7 @@ function entriesFor(things,name) {
   }).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true}));
 }
 
-export function installCampusTable({scene, renderer, camera, things, width, depth, travel, overview, glide, canNavigate}) {
+export function installCampusTable({scene, renderer, things, width, depth, travel, overview, anim, canNavigate}) {
   const top=26,root=new THREE.Group();
   root.name='Strixhaven war table';scene.add(root);buildDesk(root,renderer,width,depth,top,tableMargin);
   const brass=new THREE.MeshStandardMaterial({color:0xb4904e,metalness:.55,roughness:.38});
@@ -117,30 +117,105 @@ export function installCampusTable({scene, renderer, camera, things, width, dept
     const col=Math.floor((paper.uv.x*inkWidth-inset)/columnWidth);
     const row=Math.floor(((1-paper.uv.y)*height-firstRow)/line);
     const item=col>=0&&col<columns&&row>=0&&row<rows?book.entries[col*rows+row]:null;
-    return {book,item};
+    return item || (1-paper.uv.y)*height < firstRow ? {book,item} : null;
   }
-  let timer=0,mouseReady=false;
-  function clear(){clearTimeout(timer);mark.visible=false;mouseReady=false;}
-  function visit(item){clear();travel(item.thing);}
-  function read(book){
-    clear();
-    const target=book.g.position.clone(), tilt=.16;
-    const distance=1.1*Math.max(book.h,book.w/camera.aspect)/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))+book.h*Math.sin(tilt)/2;
-    glide(target.clone().add(new THREE.Vector3(0,distance*Math.cos(tilt),distance*Math.sin(tilt))),target,.8);
+  const panel=document.getElementById('pinnedScroll');
+  const heading=panel.querySelector('h2'), list=panel.querySelector('.scroll-entries');
+  const launcher=document.getElementById('scrollLauncher'), status=document.getElementById('scrollStatus');
+  let pinned=null, bookIndex=-1, rowIndex=-1, previewItem=null, menuItem=null;
+  const beam=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
+    uniforms:{strength:{value:0}},
+    vertexShader:`
+      varying vec2 vUv;
+      void main(){
+        vUv=uv;
+        vec4 p=modelMatrix*vec4(0.,0.,0.,1.);
+        vec2 lateral=cameraPosition.xz-p.xz;
+        lateral=length(lateral)>.001?normalize(lateral):vec2(0.,1.);
+        vec2 right=vec2(lateral.y,-lateral.x);
+        p.xz+=right*position.x*mix(24.,130.,uv.y)+vec2(48.,-36.)*uv.y;
+        p.y+=uv.y*530.;
+        gl_Position=projectionMatrix*viewMatrix*p;
+      }`,
+    fragmentShader:`
+      varying vec2 vUv;
+      uniform float strength;
+      void main(){
+        float x=(vUv.x-.5)*2.;
+        float core=exp(-18.*x*x);
+        float haze=exp(-4.8*x*x);
+        float ribs=.76+.24*cos(x*23.+vUv.y*.8);
+        float alpha=(.60*core+.34*haze*ribs)*(1.-smoothstep(.42,1.,vUv.y));
+        gl_FragColor=vec4(1.,.78,.40,strength*alpha);
+      }`
+  }));
+  beam.name='Campus scroll destination ray';
+  beam.frustumCulled=false;beam.visible=false;root.add(beam);
+  function preview(book,item){
+    if(item!==previewItem)beam.material.uniforms.strength.value=0;
+    previewItem=item;
+    beam.visible=Boolean(item);
+    if(item)highlight(book,book.entries.indexOf(item));
+    else mark.visible=false;
   }
-  renderer.domElement.addEventListener('pointermove',e=>{mouseReady=e.pointerType==='mouse'&&!e.buttons;});
-  for(const event of ['pointerdown','pointerleave','wheel'])renderer.domElement.addEventListener(event,clear,{passive:true});
+  anim.push((time,dt)=>{
+    if(!previewItem)return;
+    const t=previewItem.thing;
+    if(t.focusObject)t.focusObject.getWorldPosition(beam.position);
+    else beam.position.set(t.x,t.group.position.y,t.z);
+    beam.material.uniforms.strength.value=Math.min(1,beam.material.uniforms.strength.value+dt*9);
+  });
+  function endPreview(){menuItem=null;preview(null,null);}
+  function close(){
+    endPreview();pinned=null;panel.hidden=true;list.replaceChildren();
+    bookIndex=rowIndex=-1;status.textContent='';
+  }
+  function visit(item){
+    if(!canNavigate())return;
+    endPreview();travel(item.thing);
+  }
+  function pin(book,focus=false){
+    if(!canNavigate())return;
+    endPreview();pinned=book;bookIndex=books.indexOf(book);rowIndex=-1;
+    heading.textContent=book.college.name;
+    panel.style.setProperty('--seal',book.college.color);
+    panel.classList.toggle('pin-left',book.college.side===1);
+    list.replaceChildren();
+    for(const item of book.entries){
+      const button=document.createElement('button');
+      button.type='button';button.textContent=item.label;
+      const show=()=>{if(canNavigate()){menuItem=item;preview(book,item);}};
+      const leave=()=>{if(menuItem===item)endPreview();};
+      button.addEventListener('pointerenter',e=>{if(e.pointerType!=='touch')show();});
+      button.addEventListener('pointerleave',leave);
+      button.addEventListener('focus',()=>{if(button.matches(':focus-visible'))show();});
+      button.addEventListener('blur',leave);
+      button.onclick=()=>visit(item);
+      list.append(button);
+    }
+    panel.hidden=false;list.scrollTop=0;
+    if(focus)panel.querySelector('.scroll-close').focus({preventScroll:true});
+  }
+  function dismiss(){close();launcher.focus({preventScroll:true});}
+  panel.querySelector('.scroll-close').onclick=dismiss;
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&pinned){e.preventDefault();dismiss();}});
+  panel.addEventListener('keydown',e=>{
+    if(!['ArrowDown','ArrowUp'].includes(e.key))return;
+    e.preventDefault();e.stopPropagation();
+    const buttons=Array.from(list.children),i=buttons.indexOf(document.activeElement);
+    buttons[(i<0?(e.key==='ArrowDown'?0:buttons.length-1):(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length)]?.focus();
+  });
   function hover(hit){
-    clearTimeout(timer);mark.visible=false;
-    if(!hit?.item||!mouseReady)return;
-    highlight(hit.book,hit.book.entries.indexOf(hit.item));
-    timer=setTimeout(()=>{if(mouseReady&&canNavigate())visit(hit.item);},650);
+    if(menuItem)return;
+    preview(hit?.book,hit?.item??null);
   }
-  function activate({book,item}){if(canNavigate()){if(item)visit(item);else read(book);}}
-
-  const launcher=document.getElementById('scrollLauncher'),status=document.getElementById('scrollStatus');
-  let bookIndex=-1,rowIndex=-1;
-  launcher.onclick=()=>{if(canNavigate()){clear();bookIndex=rowIndex=-1;status.textContent='';overview();}};
+  renderer.domElement.addEventListener('pointerleave',()=>{if(!menuItem)endPreview();});
+  function activate({book,item}){
+    if(!canNavigate())return;
+    if(item)visit(item);else pin(book,true);
+  }
+  launcher.onclick=()=>{if(canNavigate()){close();overview();}};
   launcher.addEventListener('keydown',e=>{
     if(!canNavigate())return;
     if(!['ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Enter','Escape'].includes(e.key))return;
@@ -148,17 +223,18 @@ export function installCampusTable({scene, renderer, camera, things, width, dept
     e.preventDefault();e.stopPropagation();
     if(e.key==='Escape'){launcher.click();return;}
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'||bookIndex<0){
-      bookIndex=bookIndex<0?0:(bookIndex+(e.key==='ArrowLeft'?-1:1)+books.length)%books.length;
-      rowIndex=-1;read(books[bookIndex]);
+      const next=bookIndex<0?0:(bookIndex+(e.key==='ArrowLeft'?-1:1)+books.length)%books.length;
+      pin(books[next]);
     }else if(e.key==='Enter'){
-      if(rowIndex>=0)visit(books[bookIndex].entries[rowIndex]);else read(books[bookIndex]);
+      if(rowIndex>=0)visit(books[bookIndex].entries[rowIndex]);
+      else pin(books[bookIndex],true);
     }else{
-      const count=books[bookIndex].entries.length;
-      rowIndex=rowIndex<0?(e.key==='ArrowUp'?count-1:0):(rowIndex+(e.key==='ArrowUp'?-1:1)+count)%count;
-      highlight(books[bookIndex],rowIndex);
+      const book=books[bookIndex];
+      rowIndex=rowIndex<0?(e.key==='ArrowUp'?book.entries.length-1:0):(rowIndex+(e.key==='ArrowUp'?-1:1)+book.entries.length)%book.entries.length;
+      menuItem=book.entries[rowIndex];preview(book,menuItem);
+      list.children[rowIndex].scrollIntoView({block:'nearest'});
     }
-    const book=books[bookIndex];
-    status.textContent=book.college.name+(rowIndex>=0?', '+book.entries[rowIndex].label:'');
+    status.textContent=books[bookIndex].college.name+(rowIndex>=0?', '+books[bookIndex].entries[rowIndex].label:'');
   });
-  return {clear,activate,hover,hit};
+  return {clear:close,activate,hover,hit};
 }
