@@ -161,7 +161,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js';
+import { footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=4';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -394,7 +394,7 @@ const SLUICE = (() => { const A = [[33, 34], [32, 35], [32, 36], [31, 37], [30, 
   const dist = (x, z) => { if (x < x0 - 36 || x > x1 + 36 || z < z0 - 36 || z > z1 + 36) return 1e9; let b = 1e18; for (const g of segs) { let t = ((x - g[0]) * g[2] + (z - g[1]) * g[3]) / (g[2] * g[2] + g[3] * g[3]); t = t < 0 ? 0 : t > 1 ? 1 : t; const px = g[0] + g[2] * t - x, pz = g[1] + g[3] * t - z, d = px * px + pz * pz; if (d < b) b = d; }
     let dd = Math.sqrt(b); for (const p of basins) dd = Math.min(dd, Math.max(Math.hypot(x - p[0], z - p[1]) - 11, 0)); return dd; };
   return { A, B, C, D, lines, dist, basins }; })();
-const ARBIT = hexC([26, 21], [26, 22], [27, 21]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
+const ARBIT = hexC([26, 21], [26, 22]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
 const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0] - 7, p[1] + 7]; })();
 // the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
 const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622], WKI = [8, 81.5, -87.5, 20.5];   // the workshop's gate, its dome, the way the gate looks; and the hall behind it: how far into the hill it runs (from, to) and how far along the face (from, to), measured from the gate
@@ -2004,7 +2004,7 @@ function buildProps() {
   addThing('Rose Stage', '🌹', Wp(ROSE), 1, 30, g => markSilverquillLot(g, 'Rose Stage'), { ry: -1.2, top: 48, view: 420 });
 
   // Dramarium (Silverquill): 3 hexes. A domed training hall with two lesser domes, glass-walled studios and a colonnade
-  addThing('Dramatorium', '🎭', Wp(DRAMA), 2, 92, g => markSilverquillLot(g, 'Dramatorium'), { ry: 1.3, top: 70, view: 560 });
+  addThing('Dramatorium', '🎭', Wp(DRAMA), 2, 92, g => markSilverquillLot(g, 'Dramatorium'), { ry: 1.3, hexes: footprintHexes('Dramatorium', Wp(DRAMA), 1.3, HEX_R, hexAt, worldToHex), top: 29, view: 305 });
 
   // Wiltroot Hall (Witherbloom): 1 hex. The colossal trunk of a long-dead tree, hollowed into halls, with doors and windows cut into the bark
   { const WL = Wp(WILT), wy = heightAt(WL[0], WL[1]), bark = [], lits = [], BK = 0x4a4038, BK2 = 0x3a322c;
@@ -3615,7 +3615,7 @@ function buildProps() {
 
     // Clause Net Driftways (32,16): white streets and a bridge between the houses, all hung with drifting threads of vellum, and brightly lit
     { const c = hexW(32, 16);
-      addThing('Clause Net Driftways', '🕸️', c, 1, 30, g => markSilverquillLot(g, 'Clause Net Driftways'), { y: GY, ry: -.4, hexes: [[32, 16]], top: 60, view: 420 }); }
+      addThing('Clause Net Driftways', '🕸️', c, 1, 30, () => {}, { y: GY, hexes: [[32, 16]], top: 60, view: 420 }); }
 
     // ---------------- outside the wall ----------------
     // Strixhaven Star (26,19): the newspaper. A three-storey office in pale stone with a slated roof and dormers, its name in gold across the front over an arcade of lit shop windows; a clock tower on the corner with a gilt cupola and a gold star turning on top;
@@ -3624,8 +3624,8 @@ function buildProps() {
       addThing('Strixhaven Star', '⭐', c, K, 30, g => markSilverquillLot(g, 'Strixhaven Star'), { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); }
 
     // Arbitration Steps (three hexes): outside the city, where devils do their business - ten tiers of black marble with a white stair up the front, horned figures down both sides of it, red fire burning on the tiers, and a canopied seat under a crescent at the top
-    { const HX = [[26, 21], [26, 22], [27, 21]], c = Wp(ARBIT), y0 = 16 * S;
-      addThing('Arbitration Steps', '⚖️', c, 1, 30, g => markSilverquillLot(g, 'Arbitration Steps'), { y: y0, ry: Math.PI, hexes: HX, top: 130, view: 1080 }); }
+    { const c = Wp(ARBIT), y0 = 16 * S, stairAngle = Math.PI + Math.PI / 11, HX = footprintHexes('Arbitration Steps', c, stairAngle, HEX_R, hexAt, worldToHex);
+      addThing('Arbitration Steps', '⚖️', c, 1, 30, g => markSilverquillLot(g, 'Arbitration Steps'), { y: y0, ry: stairAngle, hexes: HX, top: 82, view: 405 }); }
 
     // Sealwright Foundry (30,19): a massive black works, four stacks smoking, red banners down its front and above the doors a red wax seal the height of three storeys
     { const c = Wp(SEALW), y0 = 16 * S;
@@ -3645,13 +3645,19 @@ function buildProps() {
 
     // Ewfall Guardens (three hexes): a formal garden - four rings of clipped hedge on white gravel, cut by two crossing walks, dark topiary cones at every opening, flower borders, statues on the walks and a fountain at the middle
     { const HX = [[25, 17], [24, 17], [25, 16]], c = Wp(EWF), y0 = 15 * S;
-      addThing('Ewfall Guardens', '🌳', c, 1, 30, g => markSilverquillLot(g, 'Ewfall Guardens'), { y: y0, hexes: HX, top: 40, view: 560 }); }
+      addThing('Ewfall Guardens', '🌳', c, 1, 30, g => { const k = kit(g), hg = solid(0x16381f, 1, { flatShading: true }), gravel = solid(0xe6e0d0, .95), fl = [solid(0xe86a8a, .8), solid(0xf2f0e6, .8), solid(0xb07af0, .8)];
+        k.C(94, 94, .6, 56, gravel, 0, .3, 0);
+        for (let j = 0; j < 4; j++) { const Rr = 24 + j * 20, n = Math.round(Rr * 6.283 / 8); for (let i = 0; i < n; i++) { const a = i / n * 6.283, da = Math.abs(((a + .785) % 1.5708) - .785); if (da < 7 / Rr) continue; k.B(3, 4.6, Rr * 6.283 / n + .5, hg, Math.cos(a) * Rr, 2.6, Math.sin(a) * Rr, { ry: -a }); if (i % 3 === 0) M(g, new THREE.SphereGeometry(.9, 6, 5), fl[(i + j) % 3], Math.cos(a) * (Rr - 3.4), 1, Math.sin(a) * (Rr - 3.4)); }
+          for (let q = 0; q < 4; q++) for (const sd of [-1, 1]) { const a = q * 1.5708 + sd * 10.5 / Rr; M(g, new THREE.ConeGeometry(2.6, 10, 6), hg, Math.cos(a) * Rr, 5.4, Math.sin(a) * Rr); } }
+        k.C(12, 13, 2.4, 20, wm, 0, 1.2, 0); NS(k.C(10.6, 10.6, .4, 20, waterGlass(0x8fd0e8, .8), 0, 2.5, 0)); k.C(1.6, 2.4, 9, 8, wm, 0, 6, 0); k.C(5, 2, 1.4, 12, wm, 0, 11, 0); NS(k.K(1.2, 8, 8, waterGlass(0xd8f2ff, .5), 0, 15.6, 0));
+        for (let q = 0; q < 4; q++) { const a = q * 1.5708; k.B(5, 4, 5, wm, Math.cos(a) * 54, 2, Math.sin(a) * 54); statue(g, wm, Math.cos(a) * 54, 4, Math.sin(a) * 54, 13, Math.PI - a, q); }
+      }, { y: y0, hexes: HX, top: 40, view: 560 }); }
 
     // ---------------- the ink quarter, north of the wall ----------------
     // Inkling Hatchery Vats (three hexes): shown without its roof and with the front of its wall cut low, so that you look in. A round hall, buttressed and lit with violet slits; a gallery running round inside the wall;
     // sixteen vats of warm, moving black ink with pale cocoons at their rims and more hung on hoops above them; a brass alembic over the middle vat feeding the rest through pipes; steam rising; and inklings hopping from vat to vat
-    { const HX = [[31, 7], [32, 7], [32, 6]], c = Wp(HATCH), y0 = 16 * S;
-      addThing('Inkling Hatchery Vats', '🥚', c, 1, 30, g => markSilverquillLot(g, 'Inkling Hatchery Vats'), { y: y0, hexes: HX, top: 60, view: 520 }); }
+    { const c = Wp(HATCH), y0 = 16 * S, HX = footprintHexes('Inkling Hatchery Vats', c, 0, HEX_R, hexAt, worldToHex);
+      addThing('Inkling Hatchery Vats', '🥚', c, 1, 30, g => markSilverquillLot(g, 'Inkling Hatchery Vats'), { y: y0, hexes: HX, top: 35, view: 225 }); }
 
     // Damatha Inkfountains (five hexes): a great round plaza of white marble on the black, a kerb about it, and on it five tiered fountains playing - black ink in the white ones, white in the black. Each throws one jet high into the air, a ring of jets arching out from its top bowl down into the basin, a second ring from its middle bowl, and a curtain falling from each bowl
     { const HX = [[30, 9], [31, 8], [31, 9], [30, 10], [30, 8]], c = Wp(FOUNT), y0 = 16 * S, whiteInk = solid(0xf4f2ea, .12), jets = []; whiteInk.name = 'inkw';
@@ -3717,7 +3723,7 @@ function buildProps() {
     const HALL = Wp(CITY), GTW = [SQGATE[0] * S, SQGATE[1] * S], GOUT = [Math.cos(SQGATE[2]), Math.sin(SQGATE[2])], HRY = Math.atan2(GTW[0] - HALL[0], GTW[1] - HALL[1]), HF = [Math.sin(HRY), Math.cos(HRY)], HR = [HF[1], -HF[0]], PA = 158, PB = 130;   // the plaza is an ellipse, PB long down the hall's axis and PA across: since Oct 2026 the size of the Meshy hall that stands on it, so no house or street runs into it
     const inPlaza = (x, z, m) => { const px = x - HALL[0], pz = z - HALL[1]; return ((px * HR[0] + pz * HR[1]) / (PA + m)) ** 2 + ((px * HF[0] + pz * HF[1]) / (PB + m)) ** 2 < 1; };
     const from = to => { const dx = to[0] - HALL[0], dz = to[1] - HALL[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l, rr = 1 / Math.hypot((ux * HR[0] + uz * HR[1]) / PA, (ux * HF[0] + uz * HF[1]) / PB) - 5; return [HALL[0] + ux * rr, HALL[1] + uz * rr]; };   // the point on the plaza's edge that faces a place
-    const LMH = new Set([[27, 15], [27, 16], [28, 14], [28, 13], [29, 13], [29, 14], [29, 15], [31, 15], [33, 15], [32, 14], [32, 16], [28, 18], [28, 19], [27, 19]].map(([q, r]) => hexKey(q, r)));
+    const LMH = new Set([[27, 15], [27, 16], [28, 14], [28, 13], [29, 13], [29, 14], [29, 15], [31, 15], [33, 15], [32, 14], [28, 18], [28, 19], [27, 19]].map(([q, r]) => hexKey(q, r)));
     const owned = (x, z) => { const h = worldToHex(x, z); return LMH.has(hexKey(h.q, h.r)) || inPlaza(x, z, 8) || !sqInside(x / S, z / S) || polyDist(SQPATH, x / S, z / S) * S < 18; }, roadD = solid(0x0c0c10, .3), postD = solid(0x0b0b10, .4);
     const cA = cenW([[28, 14], [28, 13], [29, 13]]);
     const DUSK = [from(hexW(28, 16)), hexW(28, 16), hexW(28, 15), [cA[0], cA[1] + 60]], RAY = [from(hexW(30, 17)), hexW(30, 17), hexW(31, 16), hexW(32, 15), [hexW(32, 15)[0] + 52, hexW(32, 15)[1] - 30]], RAY2 = [from(hexW(29, 18)), hexW(29, 18), [hexW(29, 18)[0] + 14, hexW(29, 18)[1] + 56]];
@@ -3736,13 +3742,42 @@ function buildProps() {
       street(cityG, ZERO, [P0, [P1[0] + ux * 6, P1[1] + uz * 6]], { w: 30, road: pave, edge: gd, post: gd, lit: litW, gap: 16 });   // the processional from the hall's doors to the gate: paved like the forecourts at either end, gold kerbs, lamps
       M(cityG, new THREE.BoxGeometry(46, .9, 64), pave, P0[0] - ux * 14, .45, P0[1] - uz * 14, { ry }); M(cityG, new THREE.BoxGeometry(40, 1.6, 56), pave, P0[0] - ux * 16, .8, P0[1] - uz * 16, { ry });   // a landing before the doors, a step up
       for (const sd of [-1, 1]) { const nx = -uz * sd, nz = ux * sd; M(cityG, new THREE.BoxGeometry(46, 1.2, 1.4), gd, P0[0] - ux * 14 + nx * 32, .6, P0[1] - uz * 14 + nz * 32, { ry }); for (const k of [-16, 8]) { const x = P0[0] + ux * k + nx * 26, z = P0[1] + uz * k + nz * 26; M(cityG, new THREE.CylinderGeometry(1.2, 1.6, 16, 8), gd, x, 8, z); M(cityG, new THREE.SphereGeometry(1.8, 10, 8), litW, x, 17, z); } } }
+    // One continuous paved forecourt meets the named avenues and the gate road.
+    const paving = applyTex(solid(0xb5aca1,.84),'masonry');
+    const cobbles = applyTex(solid(0x716c76,.9),'masonry');
+    const strips = [], lanes = [];
+    const project = (u,v) => [HALL[0]+HR[0]*u+HF[0]*v,HALL[1]+HR[1]*u+HF[1]*v];
+    function pavement(target,a,b,c,d,height) {
+      for(const p of [a,c,b,a,d,c])target.push(p[0],height,p[1]);
+    }
+    function pavingMesh(vertices,mat,name,colors){
+      if(!vertices.length)return;
+      const geo=new THREE.BufferGeometry(),uv=[];
+      for(let i=0;i<vertices.length;i+=3)uv.push(vertices[i]/6,vertices[i+2]/6);
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+      geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+      if(colors)geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+      geo.computeVertexNormals(); const mesh=new THREE.Mesh(geo,mat);mesh.name=name;
+      mesh.receiveShadow=true;mesh.raycast=()=>{};mesh.position.y=GY;scene.add(mesh);
+    }
+    const loop=(a,offset)=>project((PA+offset)*Math.cos(a),(PB+offset)*Math.sin(a));
+    for(let i=0;i<96;i++){const a=i*Math.PI/48,b=(i+1)*Math.PI/48;
+      pavement(strips,loop(a,-24),loop(a,5),loop(b,5),loop(b,-24),.71);
+    }
+    // Extend the paving beneath the hall's drum. The ring meets its side doors and the front landing.
+    for(let i=0;i<96;i++){const a=i*Math.PI/48,b=(i+1)*Math.PI/48;
+      pavement(strips,loop(a,-68),loop(a,-24),loop(b,-24),loop(b,-68),.71);
+    }
+    pavingMesh(strips,paving,'Grandloft paved forecourt');
+
+
     mergeKids(cityG); cityG.traverse(m => { if (m.isMesh) { m.raycast = () => {}; m.receiveShadow = true; } }); scene.add(cityG);
 
     // ---------------- the city: block after block of houses, everywhere inside the wall that is not a place or a road. Black with violet windows on the dark side, white on the bright ----------------
     // The streets run square to the hall, so the road from its doors to the gate is one of them. Each block holds two rows of houses back to back, each row facing its own
     // street, shoulder to shoulder; a lot is as wide as the house on it (a tower or a manor, the manor's long side to the street), with now and then a small yard left open
     { const segD = (x, z, P) => { let b = 1e9; for (let i = 0; i + 1 < P.length; i++) { const ax = P[i][0], az = P[i][1], dx = P[i + 1][0] - ax, dz = P[i + 1][1] - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1); b = Math.min(b, Math.hypot(ax + dx * t - x, az + dz * t - z)); } return b; };
-      const EX = [[hexW(27, 15), 62], [hexW(27, 16), 80], [cA, 104], [hexW(29, 14), 86], [hexW(29, 15), 72], [hexW(31, 15), 70], [hexW(33, 15), 78], [hexW(32, 14), 68], [hexW(32, 16), 80], [GTW, 62], [[GTW[0] - GOUT[0] * 34, GTW[1] - GOUT[1] * 34], 38]];
+      const EX = [[hexW(27, 15), 62], [hexW(27, 16), 80], [cA, 104], [hexW(29, 14), 86], [hexW(29, 15), 72], [hexW(31, 15), 70], [hexW(33, 15), 78], [hexW(32, 14), 68], [GTW, 62], [[GTW[0] - GOUT[0] * 34, GTW[1] - GOUT[1] * 34], 38]];
       const houses = [], bodies = [], roofs = [], spires = [], winP = [], winW = [], hr = mulberry32(4242);
       const U = HR, V = HF, SW = SQ_LOT.street, BL = SQ_LOT.block, DEP = SQ_LOT.depth, PU = BL + SW, PV = 2 * DEP + SW + SQ_LOT.back;
       // where the named places stand on the ground: the boxes of their parts that come down to street level (beams and lights overhead do not count), a little apart from them
@@ -3769,8 +3804,87 @@ function buildProps() {
           if (!put) u += 3; } }
       const byStreet = (x, z) => streetKept.some(h => inHouse(h, x, z, 2));
       const free = (x, z) => sqInside(x / S, z / S) && polyDist(SQPATH, x / S, z / S) * S > 10 && !inPlaza(x, z, 8) && !onPlace(x, z) && !EX.slice(-2).some(([p, r]) => Math.hypot(x - p[0], z - p[1]) < r)
-        && segD(x, z, DUSK) > 13 && segD(x, z, RAY) > 15 && segD(x, z, ROADS[0]) > 14 && !byStreet(x, z);   // right up behind the street houses, never on a named street itself
+        && segD(x, z, DUSK) > 13 && segD(x, z, RAY) > 15 && segD(x, z, RAY2) > 15 && segD(x, z, ROADS[0]) > 14 && !byStreet(x, z);   // right up behind the street houses, never on a named street itself
       const R0 = Math.hypot(SQPATH.x1 - SQPATH.x0, SQPATH.z1 - SQPATH.z0) * S;
+// The curb lines use the same axes, origins and pitches as the house parcels.
+      const gridLimit=Math.ceil(R0/8)*8;
+      function lanePoint(alongU,a,cross){return alongU?project(a,cross):project(cross,a);}
+      function lane(alongU,cross){
+        for(let step=-gridLimit;step<gridLimit;step+=6){
+          let a=step,b=step+6;
+          const [x,z]=lanePoint(alongU,(a+b)*.5,cross);
+          if(!sqInside(x/S,z/S)||inPlaza(x,z,-8))continue;
+          const ends=[lanePoint(alongU,a,cross-SW*.5),lanePoint(alongU,b,cross-SW*.5),
+                      lanePoint(alongU,b,cross+SW*.5),lanePoint(alongU,a,cross+SW*.5)];
+          if(!alongU)ends.reverse();
+          pavement(lanes,...ends,alongU?.42:.39);
+        }
+      }
+      for(let row=-Math.ceil(R0/PV);row<=Math.ceil(R0/PV);row++)lane(true,row*PV);
+      for(let col=-Math.ceil(R0/PU);col<=Math.ceil(R0/PU);col++)lane(false,col*PU);
+      pavingMesh(lanes,cobbles,'Silverquill neighborhood lanes');
+      // Stitch each street bend over the modular section ends. Continue the open
+      // ends to the closest cross street and use a tapered landing at its curb.
+      const joints=[];
+      for(const [path,width] of [[DUSK,18],[RAY,22],[RAY2,22]]){
+        const half=width*.64;
+        for(const point of path){
+          for(let k=0;k<20;k++){const a=k*Math.PI/10,b=(k+1)*Math.PI/10;
+            const rim=t=>[point[0]+Math.cos(t)*half,point[1]+Math.sin(t)*half];
+            pavement(joints,point,rim(a),rim(b),point,.82);
+          }
+        }
+        const tip=path[path.length-1],dx=tip[0]-HALL[0],dz=tip[1]-HALL[1];
+        const u=dx*U[0]+dz*U[1],v=dx*V[0]+dz*V[1];
+        const nu=Math.round(u/PU)*PU,nv=Math.round(v/PV)*PV;
+        const target=Math.abs(u-nu)<Math.abs(v-nv)?project(nu,v):project(u,nv);
+        const len=Math.hypot(target[0]-tip[0],target[1]-tip[1]);if(len<.02)continue;
+        const nx=(target[1]-tip[1])/len,nz=-(target[0]-tip[0])/len;
+        const edge=(p,s)=>[p[0]+nx*s,p[1]+nz*s];
+        pavement(joints,edge(tip,-half),edge(tip,half),edge(target,SW/2),edge(target,-SW/2),.83);
+      }
+      pavingMesh(joints,paving,'Street junctions');
+      // Fan each raised avenue down onto the surrounding paving. The outside
+      // lip meets the forecourt or crosses the first neighborhood curb.
+      for(const [path,width,material] of [[DUSK,18,roadD],[RAY,22,paving],[RAY2,22,paving]]){
+        const surface=width/3.74*.392;
+        const verts=[],colors=[],transition=paving.clone();
+        transition.color.set(0xffffff);transition.vertexColors=true;
+        for(const index of [0,path.length-1]){
+          const tip=path[index],before=path[index===0?1:index-1];
+          const dx=tip[0]-before[0],dz=tip[1]-before[1],length=Math.hypot(dx,dz);
+          const ux=dx/length,uz=dz/length,nx=-uz,nz=ux;
+          let reach=20;
+          if(index!==0){
+            const hits=[];
+            for(const [axis,pitch] of [[U,PU],[V,PV]]){
+              const start=(tip[0]-HALL[0])*axis[0]+(tip[1]-HALL[1])*axis[1],rate=ux*axis[0]+uz*axis[1];
+              if(Math.abs(rate)<.02)continue;
+              const stop=(rate>0?Math.floor(start/pitch)+1:Math.ceil(start/pitch)-1)*pitch;
+              hits.push((stop-start)/rate);
+            }
+            reach=Math.min(65,Math.max(16,Math.min(...hits)+SW*.4));
+          }
+          const streetColor=material.color, endColor=index===0?paving.color:cobbles.color;
+          function vertex(t,across){
+            const taper=t*t*(3-2*t), endWidth=index===0?width*.76:SW*.50;
+            const half=width*.675*(1-taper)+endWidth*taper;
+            const distance=-.25+(reach+.25)*t+.20*reach*(1-across*across)*t;
+            const color=streetColor.clone().lerp(endColor,taper);
+            colors.push(color.r,color.g,color.b);
+            verts.push(tip[0]+ux*distance+nx*across*half,surface-.014+(index===0?.72-surface:.48-surface)*taper,tip[1]+uz*distance+nz*across*half);
+          }
+          for(let row=0;row<6;row++)for(let col=0;col<6;col++){
+            const a=row/6,b=(row+1)/6,c=col/3-1,d=(col+1)/3-1;
+            vertex(a,c);vertex(a,d);vertex(b,c);vertex(b,c);vertex(a,d);vertex(b,d);
+          }
+        }
+        pavingMesh(verts,transition,'Avenue approaches',colors);
+      }
+
+
+
+
       for (let iu = -Math.ceil(R0 / PU); iu <= Math.ceil(R0 / PU); iu++) for (let iv = -Math.ceil(R0 / PV); iv <= Math.ceil(R0 / PV); iv++) {
         const bu = iu * PU + PU / 2, bv = iv * PV + PV / 2;                                                                                                   // the block's middle, in the street grid
         for (const row of [-1, 1]) { const fwd = [V[0] * row, V[1] * row], face = Math.atan2(fwd[0], fwd[1]);
@@ -3787,7 +3901,7 @@ function buildProps() {
       const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'slateW'), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
       const winGeo = mergeGeometries(wq), boxes = [], mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; boxes.push(m); } };
       mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length;
-      installSilverquillHouses(houses.concat(streetKept), boxes, GY, scene, camera, renderer, anim); }
+      installSilverquillHouses(houses.concat(streetKept), boxes, GY, scene, camera, renderer, anim, things.find(t => t.name === 'Clause Net Driftways')); }
 
     // ---------------- and round all of it, the wall: black marble, towers along it, a line of violet light running round its top; open only at the gate ----------------
     { const segs = [], tw = [], cones = [], glowS = [], W = SQWALL.map(p => [p[0] * S, p[1] * S]), n = W.length;
