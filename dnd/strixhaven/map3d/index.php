@@ -89,7 +89,7 @@ require_once '../../includes/strix-nav.php';
 "; ?>
 } }
 </script>
-<link rel="stylesheet" href="campus-scrolls.css">
+<link rel="stylesheet" href="campus-scrolls.css?v=2">
 </head>
 <body>
 <?php renderStrixNav('map'); ?>
@@ -140,7 +140,7 @@ require_once '../../includes/strix-nav.php';
   <div id="pathTools"><button data-tool="marker">Destination</button><button data-tool="draw">Draw</button><button id="pathNew">New line</button><button data-tool="delete">Delete</button><button data-tool="terrain" class="gm-only">Terrain</button>
     <span id="pathDiff"><button data-diff="normal">Normal</button><button data-diff="fast">Easy</button><button data-diff="yellow">Yellow</button><button data-diff="red">Red</button><span class="sep">Brush</span><button data-brush="0">Small</button><button data-brush="1">Medium</button><button data-brush="2">Large</button></span>
     <button id="pathUndo">Undo</button><button id="pathClear">Clear all</button><span id="pathTotal"></span></div>
-  <div id="barRow"><button id="scrollLauncher" aria-controls="scrollReader" aria-expanded="false">Campus scrolls</button><button id="pathToggle">Player path</button><button id="tpToggle" title="Show the teleportation circles">Circles</button><button id="underToggle" title="See what lies under the campus">Under</button></div>
+  <div id="barRow"><button id="scrollLauncher" aria-describedby="scrollKeys" title="View all six tabletop scrolls">Campus scrolls</button><button id="pathToggle">Player path</button><button id="tpToggle" title="Show the teleportation circles">Circles</button><button id="underToggle" title="See what lies under the campus">Under</button></div>
 </div>
 <div id="imgBig"><button class="nav" id="imgBigPrev" title="Previous image">&lsaquo;</button><img id="imgBigImg" alt=""><button class="nav" id="imgBigNext" title="Next image">&rsaquo;</button><div id="imgBigCount"></div></div>
 <div id="tip"></div>
@@ -153,9 +153,10 @@ require_once '../../includes/strix-nav.php';
     l.textContent = 'Error: ' + (e.message || 'failed to load a script (needs internet for the 3D library)');
   });
 </script>
-<section id="scrollReader" aria-labelledby="scrollHeading" hidden><header><button type="button" class="scroll-back">‹ All campuses</button><button type="button" class="scroll-close" aria-label="Close scroll">×</button></header><h2 id="scrollHeading">Campus scrolls</h2><div class="scroll-entries"></div></section>
+<span id="scrollKeys" class="scroll-a11y">Use left and right arrows to read a campus scroll, up and down to choose a location, and Enter to travel.</span>
+<span id="scrollStatus" class="scroll-a11y" role="status"></span>
 <script type="module">
-import {installCampusTable,tableMargin} from './campus-scrolls.js';
+import {installCampusTable,tableMargin} from './campus-scrolls.js?v=2';
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -4908,7 +4909,7 @@ function setHover(t) {
   campusTable?.hover(t?.scroll);
   hover = t; hoverKey = k;
   if (!t) { U.uHovN.value = 0; tip.style.display = 'none'; canvas.style.cursor = ''; return; }
-  if(t.scroll){U.uHovN.value=0;tip.textContent=t.scroll.item?.label||t.scroll.book.college.name;tip.style.visibility='';tip.style.display='block';canvas.style.cursor='pointer';return;}
+  if(t.scroll){U.uHovN.value=0;tip.style.display='none';canvas.style.cursor='pointer';return;}
   setList(U.uHov, U.uHovN, hexesOf(t)); if (t.thing) glow(t.thing, true);
   tip.textContent = t.thing ? (role.gm ? t.thing.name : `Hex ${t.thing.hexes[0].q},${t.thing.hexes[0].r}`) : t.label && (role.gm || t.hex.q > 50) ? (role.gm ? t.label : '') : `Hex ${t.hex.q},${t.hex.r}`; tip.style.visibility = tip.textContent ? '' : 'hidden';
   tip.style.display = 'block'; canvas.style.cursor = 'pointer';
@@ -7074,7 +7075,7 @@ function renderPortals() { let best = null, bd = 700; for (const o of UNDER.door
   const u = best.open.material.uniforms; u.map.value = UNDER.portal.texture; u.res.value.copy(pSz); u.on.value = 1; }
 
 function surfaceShown(on) {
-  if(!on)campusTable?.close();
+  if(!on)campusTable?.clear();
   if (!on) { UNDER.saved = { mask: camera.layers.mask, sun: sun.intensity, hemi: hemi.intensity, fog: scene.fog.color.getHex(), bg: scene.background };
     camera.layers.set(3); UNDER.grp.visible = true; sun.intensity = .5; hemi.intensity = .7; scene.fog.color.set(0x0e0a08); scene.background = new THREE.Color(0x050407); }
   else if (UNDER.saved) { camera.layers.mask = UNDER.saved.mask; UNDER.grp.visible = false; sun.intensity = UNDER.saved.sun; hemi.intensity = UNDER.saved.hemi; scene.fog.color.setHex(UNDER.saved.fog); scene.background = UNDER.saved.bg; UNDER.saved = null; renderer.shadowMap.needsUpdate = true; }
@@ -7610,7 +7611,7 @@ setTimeout(async () => {
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); if (packed && kept) terrainCache.fresh = packed; const t1 = performance.now();
   buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim);
-  campusTable=installCampusTable({scene,renderer,things,width:MAP_W,depth:MAP_D,anim,
+  campusTable=installCampusTable({scene,renderer,camera,things,width:MAP_W,depth:MAP_D,glide,
     travel:t=>flyTarget({thing:t}),overview:()=>glide(HOME_POS.clone(),HOME_TGT.clone()),canNavigate:()=>!UNDER.on&&!PS.on&&!document.body.classList.contains('touring')}); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;

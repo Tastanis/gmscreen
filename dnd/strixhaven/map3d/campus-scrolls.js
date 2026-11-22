@@ -23,27 +23,44 @@ function crest(c,key,x,y) {
     leaf:'M-3 21V-8 M-2 4Q-20 5 -21 -9Q-4 -11 -2 4Z M-2 -4Q0 -21 15 -21Q13 -5 -2 -4Z M-2 15Q5 -1 22 0Q18 13 -2 15Z'
   };c.stroke(new Path2D(forms[key]));c.restore();
 }
-function scrollArt(college,entries,renderer) {
-  const w=1024,h=640,cv=document.createElement('canvas');cv.width=768;cv.height=480;
-  const c=cv.getContext('2d');c.scale(.75,.75);const wash=c.createLinearGradient(0,0,w,h);
-  for(const [u,color] of [[0,'#c9a773'],[.12,'#e6cca0'],[.48,'#f5e5bf'],[.84,'#e5cda0'],[1,'#bd975f']])wash.addColorStop(u,color);
-  c.fillStyle=wash;c.fillRect(0,0,w,h);
+const inkWidth = 1024;
+const inset = 56;
+const firstRow = 138;
+
+function layoutFor(college, count) {
+  const columns = !college.side && count > 12 ? 2 : 1;
+  const rows = Math.ceil(count / columns);
+  const line = columns === 2 ? 39 : 48;
+  const height = firstRow + rows * line + 45;
+  return {columns, rows, line, height, columnWidth:(inkWidth - 2 * inset) / columns};
+}
+
+function scrollArt(college, entries, layout, renderer) {
+  const {height, rows, columnWidth, line} = layout;
+  const canvas = document.createElement('canvas');
+  canvas.width = inkWidth;
+  canvas.height = height;
+  const c = canvas.getContext('2d'), wash = c.createLinearGradient(0,0,inkWidth,height);
+  for (const [stop,color] of [[0,'#c9a773'],[.12,'#e6cca0'],[.48,'#f5e5bf'],[.84,'#e5cda0'],[1,'#bd975f']]) wash.addColorStop(stop,color);
+  c.fillStyle=wash;c.fillRect(0,0,inkWidth,height);
   let seed=117;const random=()=>((seed=seed*16807%2147483647)/2147483647);
-  for(let i=0;i<9000;i++){c.fillStyle=random()<.5?'rgba(92,59,27,.055)':'rgba(255,249,215,.11)';c.fillRect(random()*w,random()*h,1+random()*4,1);}
-  c.strokeStyle='#a08049';c.lineWidth=2;c.strokeRect(18,12,w-36,h-24);
-  c.strokeStyle=college.color;c.lineWidth=3;c.strokeRect(26,20,w-52,h-40);
-  c.strokeStyle=college.color;crest(c,college.glyph,102,66);
-  c.fillStyle=college.color;c.textAlign='center';c.font='bold 88px Georgia';c.fillText(college.name,556,96,815);
-  c.beginPath();c.moveTo(68,116);c.lineTo(956,116);c.stroke();
-  const {rows,cw,line}=pageLayout(entries);
-  c.font=Math.min(30,line*.79)+'px Georgia';c.fillStyle='#392b20';c.textAlign='left';
-  entries.forEach((e,i)=>{const col=Math.floor(i/rows),row=i%rows;c.fillText(e.label,60+col*cw,146+(row+.63)*line,cw-20);});
-  const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t;
+  for(let i=0;i<9000;i++){c.fillStyle=random()<.5?'rgba(92,59,27,.055)':'rgba(255,249,215,.11)';c.fillRect(random()*inkWidth,random()*height,1+random()*4,1);}
+  c.strokeStyle='#a08049';c.lineWidth=2;c.strokeRect(18,12,inkWidth-36,height-24);
+  c.strokeStyle=college.color;c.lineWidth=3;c.strokeRect(26,20,inkWidth-52,height-40);
+  crest(c,college.glyph,102,66);
+  c.fillStyle=college.color;c.textAlign='center';c.font='bold 82px Georgia';c.fillText(college.name,556,97,815);
+  c.beginPath();c.moveTo(inset,118);c.lineTo(inkWidth-inset,118);c.stroke();
+  c.font=(line*.79)+'px Georgia';c.fillStyle='#302319';c.textAlign='left';
+  entries.forEach(({label},i)=>{
+    const col=Math.floor(i/rows),row=i%rows;
+    c.fillText(label,inset+6+col*columnWidth,firstRow+(row+.76)*line,columnWidth-14);
+  });
+  const map=new THREE.CanvasTexture(canvas);
+  map.colorSpace=THREE.SRGBColorSpace;
+  map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+  return map;
 }
-function pageLayout(entries){
-  const cols=entries.length>15?2:1,rows=Math.ceil(entries.length/cols);
-  return {cols,rows,cw:912/cols,line:Math.min(44,485/rows)};
-}
+
 function entriesFor(things,name) {
   const entries=things.filter(t=>t.campus===name);
   return entries.map(thing=>{
@@ -51,84 +68,97 @@ function entriesFor(things,name) {
     return {thing,label:duplicate&&hex?thing.name+' ('+hex.q+', '+hex.r+')':thing.name};
   }).sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true}));
 }
-export function installCampusTable({scene,renderer,things,width,depth,anim,travel,overview,canNavigate}) {
-  const top=26,root=new THREE.Group();root.name='Strixhaven war table';scene.add(root);
-  buildDesk(root,renderer,width,depth,top,tableMargin);
-  const panel=document.getElementById('scrollReader'), launcher=document.getElementById('scrollLauncher');
-  const title=panel.querySelector('h2'),list=panel.querySelector('.scroll-entries'),back=panel.querySelector('.scroll-back');
-  const objects=[],scrolls=[];let current=null,timer=0,paperTimer=0;
+
+export function installCampusTable({scene, renderer, camera, things, width, depth, travel, overview, glide, canNavigate}) {
+  const top=26,root=new THREE.Group();
+  root.name='Strixhaven war table';scene.add(root);buildDesk(root,renderer,width,depth,top,tableMargin);
   const brass=new THREE.MeshStandardMaterial({color:0xb4904e,metalness:.55,roughness:.38});
   const wood=new THREE.MeshStandardMaterial({color:0x553321,roughness:.62});
+  const parchment=new THREE.MeshStandardMaterial({color:0xd5b784,roughness:.91});
   const tube=new THREE.CylinderGeometry(1,1,1,20).rotateZ(Math.PI/2);
+  const pages=[],books=[];
   for(const college of colleges){
-    const entries=entriesFor(things,college.name),g=new THREE.Group();
-    const W=college.side?1050:1120,H=640,short=166;
+    const entries=entriesFor(things,college.name),layout=layoutFor(college,entries.length);
+    const w=college.side?1140:1360,h=w*layout.height/inkWidth;
+    const g=new THREE.Group();
     g.name='Campus scroll · '+college.name;
-    g.position.set(college.side?college.side*(width/2+811):width*college.north,top+9,college.side?depth/2*college.z:-(depth/2+620));root.add(g);
-    const map=scrollArt(college,entries,renderer),page=new THREE.Mesh(new THREE.PlaneGeometry(W,H).rotateX(-Math.PI/2),new THREE.MeshStandardMaterial({map,roughness:.91}));
-    g.add(page);
-    const parchment=new THREE.MeshStandardMaterial({color:0xd5b784,roughness:.91});
-    const rolls=[-1,1].map(sign=>{const bar=new THREE.Group();g.add(bar);const add=(material,x,length,radius)=>{const m=new THREE.Mesh(tube,material);m.position.x=x;m.scale.set(length,radius,radius);bar.add(m);return m;};
-      add(wood,0,W+62,13);add(parchment,0,W+5,22);for(const sd of [-1,1])add(brass,sd*(W/2+23),12,19);
-      bar.position.y=12;return bar;});
-    const book={college,entries,g,page,rolls,map,H,short,openness:0}; scrolls.push(book);
-    const hit=new THREE.Mesh(new THREE.PlaneGeometry(W+78,H).rotateX(-Math.PI/2));hit.visible=false;g.add(hit);hit.userData.book=book;objects.push(hit);book.hit=hit;
-    pose(book,0);
-  }
-  function pose(b,t){
-    const length=b.short+(b.H-b.short)*t;
-    b.page.scale.z=length/b.H;
-    b.map.repeat.y=length/b.H;b.map.offset.y=1-length/b.H;
-    b.rolls[0].position.z=-length/2;b.rolls[1].position.z=length/2;
-    b.hit.scale.z=(length+45)/b.H;b.hit.position.y=18;
-  }
-  anim.push((time,dt)=>{for(const b of scrolls){const target=b===current?1:0;if(b.openness===target)continue;
-    const delta=Math.min(Math.abs(target-b.openness),3*Math.min(dt||.016,.1));b.openness+=Math.sign(target-b.openness)*delta;pose(b,b.openness);}});
-  function cancel(){clearTimeout(timer);clearTimeout(paperTimer);}
-  function close(){cancel();current=null;panel.hidden=true;launcher.setAttribute('aria-expanded','false');}
-  function button(label,action){const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=action;return el;}
-  function open(book,focus=false){
-    if(!canNavigate())return;
-    cancel();current=book;panel.hidden=false;launcher.setAttribute('aria-expanded','true');
-    panel.classList.toggle('scroll-left',book?.college.side===1);panel.style.setProperty('--seal',book?.college.color||'#76572c');title.textContent=book?.college.name||'Campus scrolls';
-    back.hidden=!book;list.replaceChildren();
-    const items=book?book.entries:scrolls;
-    for(const item of items){
-      const el=button(book?item.label:item.college.name,()=>{if(book){close();travel(item.thing);}else open(item,true);});
-      if(book){
-        el.addEventListener('pointerenter',e=>{if(e.pointerType!=='mouse')return;clearTimeout(timer);timer=setTimeout(()=>{if(current===book&&canNavigate()){travel(item.thing);}},650);});
-        el.addEventListener('pointerleave',()=>clearTimeout(timer));
+    g.position.set(college.side?college.side*(width/2+811):width*college.north,top+9,college.side?depth/2*college.z:-(depth/2+620));
+    root.add(g);
+    const map=scrollArt(college,entries,layout,renderer);
+    const page=new THREE.Mesh(new THREE.PlaneGeometry(w,h).rotateX(-Math.PI/2),new THREE.MeshStandardMaterial({map,roughness:.91}));
+    g.add(page);pages.push(page);
+    const book={college,entries,layout,g,page,w,h};books.push(book);page.userData.book=book;
+    for(const sign of [-1,1]){
+      const bar=new THREE.Group();bar.position.set(0,12,sign*h/2);g.add(bar);
+      function spindle(material,x,length,radius){
+        const part=new THREE.Mesh(tube,material);
+        part.position.x=x;part.scale.set(length,radius,radius);bar.add(part);
       }
-      list.append(el);
+      spindle(wood,0,w+62,13);spindle(parchment,0,w+5,22);
+      for(const end of [-1,1])spindle(brass,end*(w/2+23),12,19);
     }
-    list.scrollTop=0;if(focus)list.firstElementChild?.focus({preventScroll:true});
   }
-  launcher.onclick=()=>{if(!canNavigate())return;if(!panel.hidden){close();return;}overview();open(null,true);};
-  back.onclick=()=>{overview();open(null,true);};
-  panel.querySelector('.scroll-close').onclick=()=>{close();launcher.focus({preventScroll:true});};
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){close();launcher.focus({preventScroll:true});}});
+  // A single translucent wash follows the selected printed line on the table.
+  const mark=new THREE.Mesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x967640,transparent:true,opacity:.24,depthWrite:false}));
+  root.add(mark);mark.visible=false;
+  function highlight(book,index){
+    mark.visible=index>=0;
+    if(!mark.visible)return;
+    const {rows,columnWidth,line}=book.layout, scale=book.w/inkWidth;
+    mark.scale.set((columnWidth-5)*scale,1,line*scale);
+    mark.position.set(book.g.position.x-book.w/2+(inset+(Math.floor(index/rows)+.5)*columnWidth)*scale,
+      book.g.position.y+1,book.g.position.z-book.h/2+(firstRow+(index%rows+.5)*line)*scale);
+  }
   function hit(ray,distance){
-    const hit=ray.intersectObjects(objects,false)[0];
-    if(!hit||hit.distance>=distance)return null;
-    const book=hit.object.userData.book;
-    let item=null;
-    if(book===current&&book.openness>.99){
-      const paper=ray.intersectObject(book.page,false)[0];
-      if(paper){
-        const {cols,rows,cw,line}=pageLayout(book.entries);
-        const col=Math.floor((paper.uv.x*1024-56)/cw),row=Math.floor(((1-paper.uv.y)*640-146)/line);
-        if(col>=0&&col<cols&&row>=0&&row<rows)item=book.entries[col*rows+row]||null;
-      }
-    }
+    const paper=ray.intersectObjects(pages,false)[0];
+    if(!paper||paper.distance>=distance)return null;
+    const book=paper.object.userData.book,{columnWidth,rows,columns,height,line}=book.layout;
+    const col=Math.floor((paper.uv.x*inkWidth-inset)/columnWidth);
+    const row=Math.floor(((1-paper.uv.y)*height-firstRow)/line);
+    const item=col>=0&&col<columns&&row>=0&&row<rows?book.entries[col*rows+row]:null;
     return {book,item};
   }
+  let timer=0,mouseReady=false;
+  function clear(){clearTimeout(timer);mark.visible=false;mouseReady=false;}
+  function visit(item){clear();travel(item.thing);}
+  function read(book){
+    clear();
+    const target=book.g.position.clone(), tilt=.16;
+    const distance=1.1*Math.max(book.h,book.w/camera.aspect)/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))+book.h*Math.sin(tilt)/2;
+    glide(target.clone().add(new THREE.Vector3(0,distance*Math.cos(tilt),distance*Math.sin(tilt))),target,.8);
+  }
+  renderer.domElement.addEventListener('pointermove',e=>{mouseReady=e.pointerType==='mouse'&&!e.buttons;});
+  for(const event of ['pointerdown','pointerleave','wheel'])renderer.domElement.addEventListener(event,clear,{passive:true});
   function hover(hit){
-    clearTimeout(paperTimer);
-    if(hit?.item)paperTimer=setTimeout(()=>{if(current===hit.book&&canNavigate())travel(hit.item.thing);},650);
+    clearTimeout(timer);mark.visible=false;
+    if(!hit?.item||!mouseReady)return;
+    highlight(hit.book,hit.book.entries.indexOf(hit.item));
+    timer=setTimeout(()=>{if(mouseReady&&canNavigate())visit(hit.item);},650);
   }
-  function activate({book,item}){
-    if(item){close();travel(item.thing);}
-    else open(book,true);
-  }
-  return {close,activate,hover,hit};
+  function activate({book,item}){if(canNavigate()){if(item)visit(item);else read(book);}}
+
+  const launcher=document.getElementById('scrollLauncher'),status=document.getElementById('scrollStatus');
+  let bookIndex=-1,rowIndex=-1;
+  launcher.onclick=()=>{if(canNavigate()){clear();bookIndex=rowIndex=-1;status.textContent='';overview();}};
+  launcher.addEventListener('keydown',e=>{
+    if(!canNavigate())return;
+    if(!['ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Enter','Escape'].includes(e.key))return;
+    if(e.key==='Enter'&&bookIndex<0)return;
+    e.preventDefault();e.stopPropagation();
+    if(e.key==='Escape'){launcher.click();return;}
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'||bookIndex<0){
+      bookIndex=bookIndex<0?0:(bookIndex+(e.key==='ArrowLeft'?-1:1)+books.length)%books.length;
+      rowIndex=-1;read(books[bookIndex]);
+    }else if(e.key==='Enter'){
+      if(rowIndex>=0)visit(books[bookIndex].entries[rowIndex]);else read(books[bookIndex]);
+    }else{
+      const count=books[bookIndex].entries.length;
+      rowIndex=rowIndex<0?(e.key==='ArrowUp'?count-1:0):(rowIndex+(e.key==='ArrowUp'?-1:1)+count)%count;
+      highlight(books[bookIndex],rowIndex);
+    }
+    const book=books[bookIndex];
+    status.textContent=book.college.name+(rowIndex>=0?', '+book.entries[rowIndex].label:'');
+  });
+  return {clear,activate,hover,hit};
 }
