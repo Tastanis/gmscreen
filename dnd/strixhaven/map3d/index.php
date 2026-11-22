@@ -162,7 +162,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=6';
-import { installVellumGuard } from './vellum-guard.js?motion=3';
+import { installVellumGuard } from './vellum-guard.js?motion=4';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
