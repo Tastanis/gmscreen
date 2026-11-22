@@ -90,22 +90,25 @@ function makeLeg(upper,bend,claw,hind,side,anchor){
     const fold=smooth(s,1.28,2.68);
     let upperPitch,lowerPitch,elbowSide,pawSide,wristPitch,wristYaw,wristRoll;
     if(hind){
-      // Adduct the thighs after toe-off. Fold the hocks back under the pelvis.
-      upperPitch=T.MathUtils.lerp(-.91,1.18,gather);
-      lowerPitch=T.MathUtils.lerp(-1.08,-1.48,gather);
+      // Keep the knees under the hips, with the shin and talons trailing
+      // behind the rump. Let the hock yield a little on each wing stroke.
+      upperPitch=T.MathUtils.lerp(-.91,-.64,gather);
+      lowerPitch=T.MathUtils.lerp(-1.08,-1.12+.08*stroke,gather);
       elbowSide=side*T.MathUtils.lerp(.47,-.38,gather);
-      pawSide=side*T.MathUtils.lerp(.23,-.05,gather);
-      wristPitch=.34+.67*gather;wristYaw=.12;wristRoll=.16;
+      pawSide=side*T.MathUtils.lerp(.23,.16,gather);
+      wristPitch=.34+.08*stroke*gather;
+      wristYaw=T.MathUtils.lerp(.12,1.06,gather);
+      wristRoll=T.MathUtils.lerp(.16,-.42,gather);
     }else{
       const lift=smooth(s,-.13,.40);
-      // Lead with high elbows and upturned palms. As the wings take the load,
-      // sweep the elbows back alongside the ribs and fold the forearms upward.
-      upperPitch=T.MathUtils.lerp(.75+1.46*lift,-.52,fold)+.095*stroke;
-      lowerPitch=T.MathUtils.lerp(1.06+1.08*lift,2.66,fold)+.11*stroke;
-      elbowSide=side*T.MathUtils.lerp(.77,.48,fold);
-      pawSide=-side*T.MathUtils.lerp(.04,.37,fold);
-      wristPitch=T.MathUtils.lerp(-2.06,-1.03,fold)+.06*stroke;
-      wristYaw=T.MathUtils.lerp(.35,-.32,fold);wristRoll=T.MathUtils.lerp(.23,-.70,fold);
+      // After the display, lower the elbows outside the ribs. Carry the
+      // forearms forward of the sternum so the claws remain in silhouette.
+      upperPitch=T.MathUtils.lerp(.75+1.46*lift,.08,fold)+.095*stroke;
+      lowerPitch=T.MathUtils.lerp(1.06+1.08*lift,2.09,fold)+.11*stroke;
+      elbowSide=side*T.MathUtils.lerp(.77,.68,fold);
+      pawSide=side*T.MathUtils.lerp(-.04,.11,fold);
+      wristPitch=T.MathUtils.lerp(-2.06,-.70,fold)+.06*stroke;
+      wristYaw=T.MathUtils.lerp(.35,.23,fold);wristRoll=T.MathUtils.lerp(.23,-.18,fold);
     }
     upperPitch=T.MathUtils.lerp(upperPitch,hind?.27:.69,flare);
     lowerPitch=T.MathUtils.lerp(lowerPitch,hind?.19:.38,flare);
