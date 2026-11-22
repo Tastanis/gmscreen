@@ -161,7 +161,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=7';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=8';
 import { installVellumGuard } from './vellum-guard.js?motion=7';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
@@ -1195,6 +1195,27 @@ function readProp(loader, url, ok, progress, fail) {
   source.then(ok).catch(fail || console.warn);
 }
 const HALL_LP = {};   // the lantern lights each hand-built hall hung, [first, end] in lanternPts, taken down when its model replaces it
+// The arena uses the original WebP model on devices without a GPU block format.
+async function loadStadium(loader) {
+  const ext=renderer.extensions;
+  if (['WEBGL_compressed_texture_astc','EXT_texture_compression_bptc','WEBGL_compressed_texture_s3tc','WEBGL_compressed_texture_etc'].some(name=>ext.has(name))) {
+    let decoder;
+    try {
+      const {KTX2Loader}=await import('three/addons/loaders/KTX2Loader.js');
+      decoder=new KTX2Loader().setTranscoderPath('lib/three/examples/jsm/libs/basis/').setWorkerLimit(2).detectSupport(renderer);
+      const model=await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setKTX2Loader(decoder).loadAsync('models/halls/arena-ktx.glb');
+      const materials=new Set(),geometries=new Set();
+      model.scene.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);materials.add(o.material);}});
+      // GLTFLoader can resolve a model with null maps after a texture decode error.
+      const missing=[...materials].some(m=>(m.name==='field'||m.name.startsWith('flag_')||m.name.startsWith('Material_0'))&&!m.map);
+      if(!missing)return model;
+      const textures=new Set();for(const m of materials){for(const v of Object.values(m))if(v?.isTexture)textures.add(v);m.dispose();}
+      for(const t of textures)t.dispose();for(const g of geometries)g.dispose();
+    } catch(error) { console.warn('Using the WebP stadium',error); }
+    finally {decoder?.dispose();}
+  }
+  return loader.loadAsync('models/halls/arena.glb');
+}
 function hallsSetup() {
   for (const r of Object.values(HALL_LP).sort((a, b) => b[0] - a[0])) lanternPts.splice(r[0], r[1] - r[0]);
   const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder); let loPending = 0; setTimeout(() => laterGL.start(), 6000);
@@ -1211,7 +1232,7 @@ function hallsSetup() {
       if (extra) { const fx = new THREE.Group(); fx.position.copy(piv.position); fx.quaternion.copy(piv.quaternion); fx.scale.copy(piv.scale); fx.add(extra); lod.add(fx); }   // the glows stay whichever copy is drawn
       lod.add(piv); g.updateMatrixWorld(true); renderer.shadowMap.needsUpdate = true; console.log('hall model in place: ' + name + (isLo ? ' (light copy)' : '')); return piv; };
     const fail = () => console.warn('hall model not loaded, keeping what is there: ' + name);
-    const getHi = () => { st.asked = true; L.load('models/halls/' + h.file, gltf => { st.hi = mount(gltf.scene, false); if (st.lo) { st.hi.visible = st.near = true; st.lo.visible = false; } }, undefined, fail); };
+    const getHi = () => { st.asked = true; const model = h.file === 'arena.glb' ? loadStadium(L) : L.loadAsync('models/halls/' + h.file); model.then(gltf => { st.hi = mount(gltf.scene, false); if (st.lo) { st.hi.visible = st.near = true; st.lo.visible = false; } }).catch(fail); };
     if (!h.lo) { getHi(); continue; }
     loPending++; const loDone = () => { if (--loPending === 0) laterGL.start(); };
     L.load('models/halls/' + h.lo, gltf => { st.lo = mount(gltf.scene, true); if (st.hi) st.lo.visible = false; loDone(); }, undefined, () => { fail(); loDone(); if (!st.asked) getHi(); });
@@ -5125,7 +5146,7 @@ function underKit(g, area, R) {
 // The under-areas' lights: many spots, but only a fixed pool of real lights, which each frame take the spots nearest the middle of the view. The number of lights never
 // changes, so no material has to be rebuilt as you move about; everything else that glows does so by its own material
 const UNDER_SPOTS = [], UNDER_POOL = 12; let UNDER_OFF = 0;   // UNDER_OFF: how far the area being built is sunk, so its lights and marks land where it really is
-function underLightPool(g) { if (!UNDER_SPOTS.length) return; const pool = Array.from({ length: UNDER_POOL }, () => { const p = new THREE.PointLight(0xffffff, 0, 100, 1.15); g.add(p); return p; }), focus = new THREE.Vector3();
+function underLightPool(g) { const pool = Array.from({ length: UNDER_POOL }, () => { const p = new THREE.PointLight(0xffffff, 0, 100, 1.15); g.add(p); return p; }), focus = new THREE.Vector3();
   anim.push(t => { if (!UNDER.on || UNDER.shaft) { for (const p of pool) p.intensity = 0; return; } focus.copy(controls.target).lerp(camera.position, .25);
     const near = UNDER_SPOTS.map(s2 => [s2, (s2.x - focus.x) ** 2 + (s2.y - focus.y) ** 2 * .3 + (s2.z - focus.z) ** 2]).sort((a, b) => a[1] - b[1]);
     pool.forEach((p, i) => { const e = near[i]; if (!e) { p.intensity = 0; return; } const s2 = e[0]; p.position.set(s2.x, s2.y, s2.z); p.color.copy(s2.col); p.distance = s2.dist;
@@ -5612,7 +5633,7 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
 // fire in lava lakes boiling off steam, water in turquoise pools with falls pouring off the wall tops, snow round an ice peak rising over everything. Libraries stand all through
 // it, burned, frozen, half sunk or overgrown as their pocket has left them. At the very bottom, in the dark, the lich's sanctum: an obsidian floor ringed with a summoning circle,
 // a throne, its phylactery turning in a cage of runes, and a slow wheel of four elemental motes that it has never finished binding
-UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
+UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const K = underKit(g, area, R), { rnd, inA, B, C, S, T, add, tr } = K;
   const basaltTex = noiseTex('colrock', '#c4c0c8', ['rgba(0,0,0,A)', 'rgba(255,255,255,A)'], .22), colM = new THREE.MeshStandardMaterial({ map: basaltTex, vertexColors: true, roughness: .85, flatShading: true });
   const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x6a6070 });
@@ -5699,6 +5720,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
   const segD = (pts, x, z) => { let bd = 1e9; for (let k = 0; k + 1 < pts.length; k++) { const [ax, az] = pts[k], [bx, bz] = pts[k + 1]; if (Math.abs(ax - x) > 30 && Math.abs(bx - x) > 30) continue; const ex = bx - ax, ez = bz - az, l2 = ex * ex + ez * ez || 1, u = clamp(((x - ax) * ex + (z - az) * ez) / l2, 0, 1), d = Math.hypot(ax + ex * u - x, az + ez * u - z); if (d < bd) bd = d; } return bd; };
   const pathPts = path.map(p => [p.x, p.z]);
   const pathAt = (x, z) => { let b = 1e9, bi = 0; for (let i = 0; i < path.length; i++) { const d = (path[i].x - x) ** 2 + (path[i].z - z) ** 2; if (d < b) { b = d; bi = i; } } return [Math.sqrt(b), path[bi]]; };
+  yield;
   // ---- the ground: the rock's flat top, the cliffs dropping into each pocket (rough, as if split along the grain), the pocket's floor with its ledges; the trail and the sanctum levelled
   const ground = (x, z) => { const t = tAt(x, z), [pi, , e, si, es] = near3(x, z), p = P[pi], bi = p.bi, w = BI.map((_, i) => i === bi ? 1 : 0);
     const cy = crestY(x, z), wh = 4.6 + 2 * N3(x / 45 + 9, z / 45), cw = 4.5 + 3 * (.5 + .5 * N2(x / 50, z / 50)), e2 = e + 1.8 * N1(x / 9, z / 9) + .8 * N2(x / 3.3, z / 3.3);
@@ -5709,7 +5731,10 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
     y = Math.max(1.2, y); const liq = p.liq && y < p.lv && kind !== 'path' && kind !== 'sanctum' ? p.liq : null; if (liq) kind = 'low';
     return { y, t, w, bi, rg: 1 - k, lv: p.liq ? p.lv : y - 50, liq, kind, pi }; };
   const G = 3, gx0 = xa - R, gz0 = Z0, GX = Math.ceil((xb + R - gx0) / G) + 1, GZ = Math.ceil((Z1 - gz0) / G) + 1, GV = new Array(GX * GZ), gid = (i, j) => i * GZ + j;
-  for (let i = 0; i < GX; i++) for (let j = 0; j < GZ; j++) GV[gid(i, j)] = ground(gx0 + i * G, gz0 + j * G);
+  for (let i = 0; i < GX; i++) {
+    for (let j = 0; j < GZ; j++) GV[gid(i,j)] = ground(gx0+i*G,gz0+j*G);
+    if (i % 4 === 3) yield;
+  }
   const cellIn = (i, j) => inA(gx0 + (i + .5) * G, gz0 + (j + .5) * G);
   { const pos = new Float32Array(GX * GZ * 3), uv = new Float32Array(GX * GZ * 2), col = new Float32Array(GX * GZ * 3), idx = [];
     for (let i = 0; i < GX; i++) for (let j = 0; j < GZ; j++) { const k = gid(i, j), v = GV[k], x = gx0 + i * G, z = gz0 + j * G; pos.set([x, v.y, z], k * 3); uv.set([(x + v.y * .6) / 44, (z + v.y * .6) / 44], k * 2); }
@@ -5721,6 +5746,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
       const flat = ss(.55, .85, nrm.getY(k)); cT.lerp(cB, 1 - flat); if (v.kind === 'ridge' && flat > .5) cT.lerp(crestC, v.bi === SNOW ? .2 : .6); if (v.kind === 'path') cT.lerp(pathC, .75); if (v.kind === 'sanctum') cT.setHex(0x0e0a14); if (P[v.pi].void) cT.multiplyScalar(.25 + .75 * ss(10, 40, v.y)); if (P[v.pi].liq === 'lava' && v.y < v.lv + 3) cT.lerp(lavaShore, .7);
       col.set([cT.r, cT.g, cT.b], k * 3); }
     ge.setAttribute('color', new THREE.BufferAttribute(col, 3)); const gm = new THREE.MeshStandardMaterial({ map: rockTex, vertexColors: true, roughness: .9, emissive: 0x2a2018, emissiveIntensity: .55 }); const me = new THREE.Mesh(ge, gm); me.raycast = () => {}; g.add(me); }
+  yield;
   // the spots things are placed on: a coarse sampling of the same ground
   const cr = 10, cols = [], liquid = { lava: [], water: [], ice: [], ecto: [], spore: [], storm: [] };
   for (let x = xa - R; x < xb + R; x += cr) for (let z = Z0; z < Z1; z += cr) { if (!inA(x, z, 4)) continue; const v = ground(x, z), sl = Math.max(...[[6, 0], [-6, 0], [0, 6], [0, -6]].map(([a, b]) => Math.abs(ground(x + a, z + b).y - v.y))); const c = { x, z, ...v, sl }; cols.push(c); if (c.kind === 'low' && c.liq) liquid[c.liq].push([x, v.lv, z]); }
@@ -5732,7 +5758,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
     storm: new THREE.MeshStandardMaterial({ color: 0x2a1a5a, emissive: 0x7a40ff, emissiveIntensity: 1.4, roughness: .1, metalness: .2, transparent: true, opacity: .86 }) };
   anim.push(t => { if (!UNDER.on) return; lavaM.map.offset.set(t * .01, -t * .04); LQ.storm.emissiveIntensity = 1.2 + .5 * Math.max(0, Math.sin(t * 7.3) * Math.sin(t * 2.1)); });
   // each liquid a surface at its own level over the hollows that hold it; the ground rises through it at the shores
-  for (const k of Object.keys(LQ)) { const pos = new Float32Array(GX * GZ * 3), uv = new Float32Array(GX * GZ * 2), idx = [];
+  for (const k of Object.keys(LQ)) { yield; const pos = new Float32Array(GX * GZ * 3), uv = new Float32Array(GX * GZ * 2), idx = [];
     for (let i = 0; i < GX; i++) for (let j = 0; j < GZ; j++) { const n = gid(i, j), v = GV[n], x = gx0 + i * G, z = gz0 + j * G; pos.set([x, v.lv, z], n * 3); uv.set([x / 40, z / 40], n * 2); }
     for (let i = 0; i + 1 < GX; i++) for (let j = 0; j + 1 < GZ; j++) { if (!cellIn(i, j)) continue; const q = [gid(i, j), gid(i + 1, j), gid(i, j + 1), gid(i + 1, j + 1)]; if (!q.some(n => GV[n].y < GV[n].lv + 2.5)) continue; if (q.some(n => P[GV[n].pi].liq !== k || GV[n].kind === 'sanctum')) continue; idx.push(q[0], q[2], q[1], q[1], q[2], q[3]); }
     if (!idx.length) continue; const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals();
@@ -5781,6 +5807,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
       const sh = new THREE.Shape(); sh.moveTo(-3.4, 0); sh.lineTo(3.4, 0); sh.lineTo(3.4, 7); sh.absarc(0, 7, 3.4, 0, Math.PI, false); sh.lineTo(-3.4, 0); add(new THREE.ExtrudeGeometry(sh, { depth: 3, bevelEnabled: false }).translate(0, 0, -3).rotateY(ry).translate(x, y, z), glowM);
       add(new THREE.TorusGeometry(4.1, .9, 5, 12, Math.PI).translate(0, 7, .2).rotateY(ry).translate(x, y, z), frameM); for (const sd of [-1, 1]) add(new THREE.BoxGeometry(1.6, 7.4, 1.6).translate(sd * 4.1, 3.7, .2).rotateY(ry).translate(x, y, z), frameM);
       umist(g, x + Math.sin(ry) * 3, z + Math.cos(ry) * 3, { n: 8, seed: 2600 + made, r0: 0, r1: 3, y0: y + 1, y1: y + 9, rise: .05, size: 22, alpha: .12, col: p.bi === AIR ? [.8, .6, 1.5] : [1.5, .9, .4] }); reserved.push([x, z, 7]); made++; } }
+  yield;
   // ---- each pocket's life (Oct 24 rebuild): falls pouring off the wall tops into the pools, steam boiling off the lava, lightning in the storm,
   // an ice peak with its falls in the snow, great trees rooted round the jungle pools, amber crystal grottos, and every pocket lit and hazed in its own colour
   const fallInto = (p, a, col, lq) => { const tp = rayHit(p, a, atTop); if (!tp) return; const inx = -Math.cos(a), inz = -Math.sin(a), bot = p.liq ? p.lv : p.fy, h = tp.y + .5 - bot; if (h < 8) return;
@@ -5856,11 +5883,13 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
   { let bi = 0, bd = 1e9; path.forEach((q, i) => { const d = Math.hypot(q.x - S0[0], q.z - S0[1]); if (d < bd) { bd = d; bi = i; } }); const q = path[bi], run = bd - 80;
     if (run > 4 && run < 75) { const ux = (S0[0] - q.x) / bd, uz = (S0[1] - q.z) / bd, ry = Math.atan2(ux, uz), n = Math.max(3, Math.round(run / 2.8)), step = run / n;
       for (let k = 0; k < n; k++) { const top = q.y + (4.6 - q.y) * (k + 1) / n + .5, x = q.x + ux * (step * (k + .5)), z = q.z + uz * (step * (k + .5)); add(tr(new THREE.BoxGeometry(8, top + 2, step + .1), x, (top - 2) / 2, z, ry), flagM); } } }
+  yield;
   // ---- places to put things: open rock, not the trail or a ridge, not too near what is already there
   const used = [], free = (x, z, r) => !used.some(([ux, uz, ur]) => Math.hypot(ux - x, uz - z) < ur + r), open = cols.filter(c => c.kind === 'rock');
   const placeIn = (biome, r, minW = .35) => { for (let q = 0; q < 400; q++) { const c = open[(rnd() * open.length) | 0]; if (!c || c.w[biome] < minW || c.sl > (r > 12 ? 2.5 : 5) || !free(c.x, c.z, r)) continue; used.push([c.x, c.z, r]); return c; } return null; };
   const anyPlace = r => { for (let q = 0; q < 400; q++) { const c = open[(rnd() * open.length) | 0]; if (c && c.sl < (r > 12 ? 2.5 : 5) && free(c.x, c.z, r)) { used.push([c.x, c.z, r]); return c; } } return null; };
   for (const p of path) used.push([p.x, p.z, 9]); used.push([S0[0], S0[1], 100]); reserved.forEach(r => used.push(r));
+  yield;
   // ---- the libraries (Oct 24 pass): proper cases now - a back, posts, a cornice and a plinth, five shelves of books, a gap here and there where a volume has fallen out and
   // the next one leans into it. Groves of them in an arc round a reader's desk with a book lying open and glowing on it, a ladder against the cases, books dropped on the floor,
   // and a few open books hovering over the desk turning their own pages; each in the state its pocket has left it. Fewer than before, with the Prismari's other work between them
@@ -5901,6 +5930,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
     const ns = Math.round(h / 1.6); for (let s = 0; s < ns; s++) { const a = s * .42, y = c.y + s * 1.6; add(new THREE.BoxGeometry(3.4, .5, 2).translate(8.4, 0, 0).rotateY(-a).translate(c.x, y + .25, c.z), shelfW); if (s % 4 === 0) add(new THREE.CylinderGeometry(.15, .15, 3.4, 4).translate(10, 1.7, 0).rotateY(-a).translate(c.x, y, c.z), trimM); }
     add(new THREE.CylinderGeometry(9, 9, 1, 18).translate(c.x, c.y + h + .5, c.z), shelfW); for (let k = 0; k < 14; k++) { const a = k / 14 * 6.283; add(new THREE.CylinderGeometry(.18, .18, 3, 4).translate(c.x + Math.cos(a) * 8.6, c.y + h + 2.5, c.z + Math.sin(a) * 8.6), trimM); }
     T(8.6, .2, trimM, c.x, c.y + h + 4, c.z, 0, Math.PI / 2, Math.PI * 2, 24); add(new THREE.ConeGeometry(7.4, 8, 14).translate(c.x, c.y + h + 5, c.z), style === SNOW ? snowM : style === EARTH ? mossM : style === FIRE ? charM : capM); S(1.2, candle, c.x + 6, c.y + h + 2.2, c.z, 1, 1.2, 1, 8); K.mark('tower' + q, c.x, c.y + h, c.z); }
+  yield;
   // ---- the Prismari's other work, left where it was going on: easels with half-finished paintings of the elements, statues of artists caught mid-spell,
   // cauldrons of colour boiling over, and motes of the elements held in cages of crystal
   { const pal = [['#ff6a10', '#ffd040', '#3a0a04', '#ff3010'], ['#40c0ff', '#e0f8ff', '#0a2a5a', '#80e0ff'], ['#a060ff', '#f0d0ff', '#1a0a3a', '#ff60e0'], ['#60ff90', '#e0ffb0', '#0a3a1a', '#40d0a0']];
@@ -5924,6 +5954,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
     for (let q = 0; q < 4; q++) { const c = anyPlace(8); if (!c) break; const col = [0xff6a10, 0x40c0ff, 0xb070ff, 0x60ff90][(q + 2) % 4];   // a mote of an element, caught in a cage of crystal
       add(new THREE.CylinderGeometry(3.4, 4, 2, 8).translate(c.x, c.y + 1, c.z), stoneP); for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283; add(new THREE.CylinderGeometry(.3, .3, 12, 5).translate(c.x + Math.cos(a) * 3, c.y + 8, c.z + Math.sin(a) * 3), BI[AIR].glow); }
       T(3.2, .35, stoneP, c.x, c.y + 14, c.z, 0, Math.PI / 2, Math.PI * 2, 16); add(new THREE.ConeGeometry(3.4, 4, 8).translate(c.x, c.y + 16, c.z), stoneP); S(1.8, K.glow(col, 5), c.x, c.y + 8, c.z, 1, 1, 1, 10); light(c.x, c.y + 10, c.z, col, 1.2, 70, .4); } }
+  yield;
   // ---- each biome's own things, scattered by its weight so they spill over its edges a little
   const crystal = BI[EARTH].glow, rootM = new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: .95 }), stoneE = new THREE.MeshStandardMaterial({ color: 0x6a5a44, roughness: 1, flatShading: true }), obsid = new THREE.MeshStandardMaterial({ color: 0x0c0a0e, roughness: .15, metalness: .4 }), iron = new THREE.MeshStandardMaterial({ color: 0x2c2a2c, roughness: .5, metalness: .7 });
   const paper2 = new THREE.MeshStandardMaterial({ color: 0xf4f0e4, roughness: .8, side: THREE.DoubleSide, flatShading: true, emissive: 0x4a4436, emissiveIntensity: .4 }), brass = new THREE.MeshStandardMaterial({ color: 0xc8a050, roughness: .35, metalness: .8 });
@@ -5997,6 +6028,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
   // the lich's ground: leaning grave markers and obelisks with a purple light in them, as you come down to the sanctum
   { for (let q = 0; q < 16; q++) { const c = placeIn(LICH, 5, .3); if (!c) continue; add(new THREE.BoxGeometry(3, 5 + rnd() * 3, 1).rotateZ((rnd() - .5) * .4).translate(c.x, c.y + 3, c.z), stoneE); }
     for (let q = 0; q < 5; q++) { const c = placeIn(LICH, 8, .4); if (!c) continue; add(new THREE.CylinderGeometry(.6, 2.6, 22, 4).translate(c.x, c.y + 11, c.z), obsid); K.K(1, 3, 4, BI[LICH].glow, c.x, c.y + 23, c.z); light(c.x, c.y + 18, c.z, BI[LICH].lit, 1.4, 110, .2); } }
+  yield;
   // ---- landmarks: a tall fall off a high ridge into the lake, a fall of lava into the lava river, a fall of ice frozen mid-pour, a ruined library floating high over the air, a giant frozen in the snow
   { const c = placeIn(AIR, 30, .45); if (c) { const ring = new THREE.Group(), hy = c.y + 46; ring.position.set(c.x, hy, c.z); const n = 9;   // a broken ring of library floating high, turning slowly, its floor gone
       for (let k = 0; k < n; k++) { if (k === 3) continue; const an = k / n * Math.PI * 2, x = Math.cos(an) * 22, z = Math.sin(an) * 22, piece = new THREE.Group(); piece.position.set(x, (rnd() - .5) * 6, z); piece.rotation.y = -an + Math.PI / 2;
@@ -6005,6 +6037,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
   { const c = placeIn(SNOW, 30, .5); if (c) { const fz = new THREE.MeshStandardMaterial({ color: 0x34343e, roughness: .9 }), x = c.x, z = c.z, y = c.y;   // a giant caught in the ice, one hand raised
       C(4, 6.5, 26, 9, fz, x, y + 13, z); S(4.6, fz, x, y + 30, z, 1, 1.1, 1, 10); C(1.4, 1.6, 18, 6, fz, x + 7, y + 30, z, 0, 0, -.5); C(1.4, 1.6, 16, 6, fz, x - 6, y + 18, z, 0, 0, .35); add(new THREE.BoxGeometry(24, 42, 20).rotateY(.3).translate(x, y + 20, z), iceClear);
       for (let q = 0; q < 8; q++) { const an = rnd() * 6.28, hh = 8 + rnd() * 14; add(new THREE.ConeGeometry(2 + rnd() * 2, hh, 5).translate(x + Math.cos(an) * 16, y + hh / 2, z + Math.sin(an) * 16), iceM); } light(x, y + 30, z, BI[SNOW].lit, 2.4, 160, .05); K.mark('snow-giant', x, y + 20, z); } }
+  yield;
   // ---- the dungeon under it all: ruins of the archive's old halls standing up through every biome - broken archways, stretches of wall with a doorway, fallen pillars - in the state the ground has left them
   { const ruinM = new THREE.MeshStandardMaterial({ map: brickTex('#6a6474', '#24202a', 56, 24), roughness: .85, color: 0xd8d0e0 });
     for (let q = 0; q < 26; q++) { const c = anyPlace(14); if (!c) continue; const st = pick(c.w), ry = rnd() * Math.PI, cs = Math.cos(ry), sn = Math.sin(ry), at = (u, v) => [c.x + cs * u + sn * v, c.z - sn * u + cs * v], kind = q % 3;
@@ -6041,6 +6074,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
   { const NPG = 90, im = new THREE.InstancedMesh(new THREE.PlaneGeometry(3, 4), page, NPG), base3 = [], ob = new THREE.Object3D(); im.raycast = () => {}; im.frustumCulled = false;   // one batch for all of them
     for (let q = 0; q < NPG; q++) { const c = cols[(rnd() * cols.length) | 0]; base3.push([c.x, c.y + 10 + rnd() * 30, c.z, rnd() * 9]); } g.add(im);
     anim.push(t => { if (!UNDER.on) return; base3.forEach(([x, y, z, ph], i) => { ob.position.set(x + Math.sin(t * .2 + ph) * 6, y + Math.sin(t * .5 + ph) * 3, z + Math.cos(t * .17 + ph) * 6); ob.rotation.set(Math.sin(t * .4 + ph) * .6, t * .3 + ph, 0); ob.updateMatrix(); im.setMatrixAt(i, ob.matrix); }); im.instanceMatrix.needsUpdate = true; }); }
+  yield;
   K.flush();
 };
 // The labyrinth under the Hedgemaze, Quandrix's: a true maze, every passage floored with a lit grid, that changes as you go through it. Its quarters are walled differently -
@@ -6184,9 +6218,13 @@ function buildUnder() {
     const ctrs = cfg.reach ? t.hexes.flatMap(b => [b, ...cfg.reach.map(([dq, dr]) => ({ q: b.q + dq, r: b.r + dr }))]) : t.hexes, hexes = cfg.shaft ? t.hexes.map(h => hexAt(h.q, h.r)) : all.filter(h => ctrs.some(b => hexDist(h, b) <= cfg.ring)), area = { name: cfg.name, src: t, hexes, x: t.x, z: t.z, view: 600, mats: [], id: 'u' + t.id, shaft: !!cfg.shaft, under: true };
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const h of hexes) { x0 = Math.min(x0, h.x); x1 = Math.max(x1, h.x); z0 = Math.min(z0, h.z); z1 = Math.max(z1, h.z); UNDER.byHex.set(hexKey(h.q, h.r), area); }
     area.view = clamp(Math.max(x1 - x0, z1 - z0) * 1.3 + 320, 480, 1900); UNDER.areas.push(area);
-    if (cfg.shaft) { buildShaft(g, t); continue; }
+    if (cfg.shaft) {
+      const shaftRoot=new THREE.Group();g.add(shaftRoot);
+      area.build=()=>{buildShaft(shaftRoot,t);shaftRoot.traverse(o=>o.layers.set(3));return true;};
+      continue;
+    }
     // sunk into the floor: the place sits down in a pit of its own outline, the floor round it standing as its edge, so it needs little wall of its own
-    area.sink = UNDER_SINK[t.name] ?? 20; const ag = new THREE.Group(); ag.position.y = -area.sink; g.add(ag); UNDER_OFF = -area.sink;
+    area.sink = UNDER_SINK[t.name] ?? 20; const ag = new THREE.Group(); ag.position.y = -area.sink; g.add(ag);
     { const set = new Set(hexes.map(h => hexKey(h.q, h.r))), nxt = new Map(), key = (x, z) => Math.round(x * 10) + ',' + Math.round(z * 10), pv = [];
       for (const h of hexes) for (let i = 0; i < 6; i++) { const th = i * Math.PI / 3 + Math.PI / 6, nb = worldToHex(h.x + Math.cos(th) * R * SQ3, h.z + Math.sin(th) * R * SQ3); if (set.has(hexKey(nb.q, nb.r))) continue;
         const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3, p0 = [h.x + Math.cos(a0) * R, h.z + Math.sin(a0) * R], p1 = [h.x + Math.cos(a1) * R, h.z + Math.sin(a1) * R]; nxt.set(key(...p0), p1);
@@ -6194,7 +6232,19 @@ function buildUnder() {
       area.outline = []; const seen = new Set(); for (const [k0, p1] of nxt) { if (seen.has(k0)) continue; const loop = []; let k = k0, p = null; while (!seen.has(k) && nxt.has(k)) { seen.add(k); p = nxt.get(k); loop.push(p); k = key(...p); } if (loop.length > 2) area.outline.push(loop); }
       const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pv, 3)); pg.computeVertexNormals(); const uvs = []; for (let i = 0; i < pv.length; i += 3) uvs.push((pv[i] + pv[i + 2]) / 60, pv[i + 1] / 60); pg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       g.add(new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ map: rock1, color: 0x8a8078, roughness: 1, side: THREE.DoubleSide }))); }
-    if (UNDER_BUILD[t.name]) { UNDER_BUILD[t.name](ag, area, R); UNDER_OFF = 0; const bm = new THREE.Mesh(new THREE.CylinderGeometry(14, 18, 240, 24, 1, true), new THREE.MeshBasicMaterial({ color: cfg.glow, transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); bm.position.set(t.x, 120 - area.sink, t.z); bm.raycast = () => {}; g.add(bm); continue; }   // built out in full: its own builder, and the way up still shown
+    if (UNDER_BUILD[t.name]) {
+      let steps;
+      ag.visible=false;
+      area.build=()=>{
+        UNDER_OFF=-area.sink;
+        try {
+          if (!steps) steps=UNDER_BUILD[t.name](ag,area,R);
+          if (steps && !steps.next().done) return false;
+          steps=null;
+          ag.traverse(o=>o.layers.set(3));ag.visible=true;
+          return true;
+        } finally {UNDER_OFF=0;}
+      }; const bm = new THREE.Mesh(new THREE.CylinderGeometry(14, 18, 240, 24, 1, true), new THREE.MeshBasicMaterial({ color: cfg.glow, transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); bm.position.set(t.x, 120 - area.sink, t.z); bm.raycast = () => {}; g.add(bm); continue; }   // built out in full: its own builder, and the way up still shown
     // the cavern: its floor across all its hexes, a ragged wall of rock round its edge, and in the middle the way down from above
     const fv = [], fu = [], walls = [], spanX = x1 - x0 + 2 * R, spanZ = z1 - z0 + 2 * R;
     for (const h of hexes) for (let i = 0; i < 6; i++) { const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3;
@@ -6994,7 +7044,7 @@ function surfaceShown(on) {
 const shaftMove = d => { const y = clamp(controls.target.y + d, -SHAFT_D + 40, 30), dd = y - controls.target.y; controls.target.y += dd; camera.position.y += dd; if (dd && UNDER.shaft) UNDER.shaft.atTab = false; };
 const shaftAlong = d => { const k = chasmNear(controls.target.x, controls.target.z), T = pdGeo().T[k.i]; controls.target.x += T[0] * d; controls.target.z += T[1] * d; camera.position.x += T[0] * d; camera.position.z += T[1] * d; if (d && UNDER.shaft) UNDER.shaft.atTab = false; };
 const SHAFT_CTL = { enableZoom: false, minDistance: .5, maxDistance: 2, minPolarAngle: .05, maxPolarAngle: Math.PI - .05 }, SV1 = new THREE.Vector3(), SV2 = new THREE.Vector3();
-function enterShaft(area) { camera.near = .3; camera.far = 4500; camera.updateProjectionMatrix(); const c = chasmAt(.5); UNDER.line = { x: c.x, z: c.z }; UNDER.aim = -1; UNDER.shaft = { atTab: true }; Object.assign(controls, SHAFT_CTL); if (UNDER.sky) UNDER.sky.visible = true; toTablet(true);
+function enterShaft(area) { finishUnderArea(area); camera.near = .3; camera.far = 4500; camera.updateProjectionMatrix(); const c = chasmAt(.5); UNDER.line = { x: c.x, z: c.z }; UNDER.aim = -1; UNDER.shaft = { atTab: true }; Object.assign(controls, SHAFT_CTL); if (UNDER.sky) UNDER.sky.visible = true; toTablet(true);
   showHint('Click a door on the tablet, or a door on the wall, to go to it  ·  Wheel: go the way you are looking (tilt down to go down, up to go up)  ·  Middle-drag: look round  ·  Esc: back', 8000); }
 function toTablet(now) { UNDER.vel = 0; if (UNDER.shaft) UNDER.shaft.door = null; const T = UNDER.tab, tgt = T.pos.clone().add(new THREE.Vector3(0, 7, 0)), cam = new THREE.Vector3(UNDER.line.x, T.pos.y + 10, UNDER.line.z); UNDER.shaft.atTab = true;
   if (now) { controls.target.copy(tgt); camera.position.copy(cam); camera.lookAt(tgt); } else { fly = { t: 0, dur: clamp(camera.position.distanceTo(cam) / 700, 1.4, 3.6), p0: camera.position.clone(), p1: cam, t0: controls.target.clone(), t1: tgt }; controls.enabled = false; } }
@@ -7017,11 +7067,39 @@ function exitWorld() { const W = UNDER.world; if (!W || fly) return; const o = W
 function exitShaft() { if (!UNDER.shaft) return;
   if (UNDER.portal) { for (const door of UNDER.doors) { const u = door.open.material.uniforms; u.on.value = 0; u.map.value = null; } UNDER.portal.dispose(); UNDER.portal = null; } camera.near = 5; camera.far = 90000; camera.updateProjectionMatrix(); if (UNDER.world) { scene.fog = UNDER.world.fog; scene.background = UNDER.world.bg; camera.layers.set(3); UNDER.world = null; } UNDER.shaft = null; Object.assign(controls, { enableZoom: true, minDistance: 90, maxDistance: 6500 * S, minPolarAngle: 0, maxPolarAngle: 1.42 }); if (UNDER.sky) UNDER.sky.visible = false; }
 const placeView = (tx, ty, tz, d) => { const off = camera.position.clone().sub(controls.target), az = Math.atan2(off.x, off.z), pol = .95; controls.target.set(tx, ty, tz); camera.position.set(tx + Math.sin(az) * Math.sin(pol) * d, ty + Math.cos(pol) * d, tz + Math.cos(az) * Math.sin(pol) * d); camera.lookAt(controls.target); controls.update(); };
+function finishUnderArea(area, deadline=Infinity) {
+  if (!area?.build) return;
+  while (!area.build()) if (performance.now()>=deadline) return;
+  delete area.build;
+  renderer.shadowMap.needsUpdate=true;
+}
+function nearestPendingArea() {
+  let best=null, distance=Infinity;
+  for (const area of UNDER.areas) if (area.build) {
+    const dx=area.x-controls.target.x,dz=area.z-controls.target.z,d=dx*dx+dz*dz;
+    if(d<distance){distance=d;best=area;}
+  }
+  return best;
+}
+let underFramePending=false;
+function streamUnderAreas() {
+  if(underFramePending||!UNDER.on||!nearestPendingArea())return;
+  underFramePending=true;
+  // Give the destination a painted frame before each remaining district is built.
+  requestAnimationFrame(()=>setTimeout(()=>{
+    underFramePending=false;
+    if(!UNDER.on||UNDER.busy)return;
+    finishUnderArea(nearestPendingArea(),performance.now()+8);
+    streamUnderAreas();
+  },0));
+}
 function goUnder(place) { if (UNDER.busy) return; UNDER.busy = true; fly = null; controls.enabled = true; pace.busy = performance.now() + 3000;
   fadeTo(1, () => { if (!UNDER.grp) buildUnder(); if (!UNDER.on) surfaceShown(false); if (panel.style.display === 'block') $('pClose').click();
     const a = place ? UNDER.areas.find(x => x.src === place) : null;
+    finishUnderArea(a || nearestPendingArea());
+    if(UNDER.shaft && !a?.shaft)exitShaft();
     if (a && a.shaft) enterShaft(a); else if (a) placeView(a.x, -(a.sink || 0), a.z, a.view); else placeView(controls.target.x, 0, controls.target.z, clamp(camera.position.distanceTo(controls.target), 700, 4200));
-    fadeTo(0, () => { UNDER.busy = false; }); }); }
+    fadeTo(0, () => { UNDER.busy = false; streamUnderAreas(); }); }); }
 function goSurface() { if (UNDER.busy || !UNDER.on) return; UNDER.busy = true; fly = null; controls.enabled = true; pace.busy = performance.now() + 3000;
   fadeTo(1, () => { exitShaft(); surfaceShown(true); const tx = controls.target.x, tz = controls.target.z; placeView(tx, Math.max(heightAt(tx, tz), 0), tz, clamp(camera.position.distanceTo(controls.target), 450, 4200)); fadeTo(0, () => { UNDER.busy = false; }); }); }
 function underPick(cx, cy) { if (UNDER.shaft) return null; ray.setFromCamera({ x: cx / innerWidth * 2 - 1, y: -(cy / innerHeight) * 2 + 1 }, camera); const o = ray.ray.origin, d = ray.ray.direction; if (d.y >= -1e-4) return null;
@@ -7032,7 +7110,7 @@ function shaftTarget(cx, cy) { const T = UNDER.tab; let row = -1; if (T) { ray.s
   if (row < 0) { ray.layers.set(3); let best = null; UNDER.doors.forEach((o, i) => { const h = ray.intersectObject(o.grp, true)[0]; if (h && (!best || h.distance < best.d)) best = { d: h.distance, i }; }); ray.layers.set(0); if (!best) return null; row = best.i; } return { hex: hexAt(pd.hexes[0].q, pd.hexes[0].r), label: PD_DOORS[row].name, under: true, door: row }; }
 function underTarget(cx, cy) { if (UNDER.world) return null; if (UNDER.shaft) return shaftTarget(cx, cy); const p = underPick(cx, cy); if (!p) { if (UNDER.hl) UNDER.hl.visible = false; return null; } const sa = inChasm(p.x, p.z, 10) ? UNDER.areas.find(a => a.shaft) : null; if (sa) { if (UNDER.hl) UNDER.hl.visible = false; return { thing: sa, under: true }; } const hx = worldToHex(p.x, p.z), a = UNDER.byHex.get(hexKey(hx.q, hx.r)), h = hexAt(hx.q, hx.r);
   if (UNDER.hl) { UNDER.hl.position.set(h.x, underY(h.x, h.z) + 1.6, h.z); UNDER.hl.visible = true; } return a ? { thing: a, under: true } : { hex: h, under: true }; }
-function underClick(t, dbl) { if (t.door != null) { toDoor(t.door); return; } if (t.thing && t.thing.shaft) { if (UNDER.busy) return; UNDER.busy = true; fadeTo(1, () => { enterShaft(t.thing); controls.update(); fadeTo(0, () => { UNDER.busy = false; }); }); } else if (t.thing || dbl) flyTarget(t); }
+function underClick(t, dbl) { if (t.door != null) { toDoor(t.door); return; } if (t.thing && t.thing.shaft) { if (UNDER.busy) return; UNDER.busy = true; fadeTo(1, () => { enterShaft(t.thing); controls.update(); fadeTo(0, () => { UNDER.busy = false; streamUnderAreas(); }); }); } else if (t.thing || dbl) { finishUnderArea(t.thing); flyTarget(t); } }
 
 // ---- the crew of the Pillardrop: living workers, skeletons, mummies and ghosts, small, and known by how they move more than how they look.
 // People and skeletons walk briskly with arms swinging, some carrying loads; mummies shuffle slowly with arms held out before them, a loose bandage trailing; ghosts are the same
@@ -7480,13 +7558,19 @@ document.getElementById('bConj').onclick = () => glide(new THREE.Vector3((PRISHA
 const loading = document.getElementById('loading');
 loading.textContent = 'Sculpting terrain…';
 setTimeout(async () => {
-  const cache = await terrainCache.get(); if (cache) loading.textContent = 'Raising the campus…';
+  const local = await terrainCache.get();
+  let packed = null;
+  if (!local) {
+    try { const {loadPackedTerrain} = await import('./terrain-pack.js?v=1'); packed = await loadPackedTerrain(terrainCache.key,NX,NZ,DX,DZ); }
+    catch { /* The procedural sculpt also works without packaged terrain. */ }
+  }
+  const cache = local || packed; if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
-  buildGrade(); const kept = buildTerrain(cache); const t1 = performance.now();
+  buildGrade(); const kept = buildTerrain(cache); if (packed && kept) terrainCache.fresh = packed; const t1 = performance.now();
   buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
-  document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? "terrain from cache · " : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
+  document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? (packed ? "prebuilt terrain · " : "terrain from cache · ") : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
   // every material's shader is compiled before the first frame is shown, off the main thread where the browser allows it, so the map does not stutter into view
   loading.textContent = 'Lighting the lamps…'; try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); } catch (e) {}
   // and it is uncovered from the middle outward, from under a bank of cloud

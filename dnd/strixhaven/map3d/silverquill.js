@@ -183,12 +183,12 @@ export function installSilverquillHouses(houses, boxes, ground, scene, camera, r
   const projection=new THREE.Matrix4(),frustum=new THREE.Frustum(),ball=new THREE.Sphere(),matrix=new THREE.Matrix4();
   const previous=new THREE.Vector3(Infinity,0,0),rotation=new THREE.Quaternion();
   let dirty=true,ready=false;
-  async function load(i,far) {
-    const tier=far?'far':'close',key=i+tier;
+  async function load(i,tier) {
+    const key=i+tier;
     if(tiers[i][tier]||pending.has(key)||performance.now()<(retry.get(key)||0))return;
     pending.add(key);
     try{
-      const template=(await asset(houseTypes[i],far)).scene;
+      const template=(await asset(houseTypes[i]+(tier==='distant'?'-distant':''),tier==='far')).scene;
       template.updateMatrixWorld(true);
       const frame=houseFrames[i];
       const unit=new THREE.Matrix4().makeTranslation(-frame.x,0,-frame.z);
@@ -199,22 +199,25 @@ export function installSilverquillHouses(houses, boxes, ground, scene, camera, r
         batch.name=houseTypes[i]+' '+tier;group.add(batch);parts.push({batch,local:unit.clone().multiply(o.matrixWorld)});
       }});
       tiers[i][tier]={parts,width:frame.width};dirty=true;
-      if(!ready&&tiers.every(v=>v.far)){
+      if(!ready&&tiers.every(v=>v.distant||v.far)){
         for(const box of boxes){scene.remove(box);box.dispose();}
         ready=true;window.__sqHouses=houses.length;
         if(driftways)installDriftways(driftways,houses,ground,renderer).catch(error=>console.warn('Silverquill Driftways',error));
       }
-    }catch(e){retry.set(key,performance.now()+30000);console.warn('Silverquill houses '+houseTypes[i],e);}
+    }catch(e){retry.set(key,performance.now()+30000);console.warn('Silverquill houses '+houseTypes[i],e);if(tier==='distant')load(i,'far');}
     finally{pending.delete(key);}
   }
-  houseTypes.forEach((_,i)=>load(i,true));
+  houseTypes.forEach((_,i)=>load(i,'distant'));
+  let prevHeight=0,prevZoom=0;
   const pose=new THREE.Object3D(),origin=new THREE.Vector3();
   const memberships=lots.map(list=>new Uint8Array(list.length));
   anim.push(()=>{
-    if(!ready){houseTypes.forEach((_,i)=>load(i,true));return;}
-    if(!dirty&&camera.position.distanceToSquared(previous)<2&&rotation.angleTo(camera.quaternion)<.008)return;
+    if(!ready){houseTypes.forEach((_,i)=>load(i,'distant'));return;}
+    if(!dirty&&prevHeight===renderer.domElement.clientHeight&&prevZoom===camera.zoom&&camera.position.distanceToSquared(previous)<2&&rotation.angleTo(camera.quaternion)<.008)return;
+    prevHeight=renderer.domElement.clientHeight;prevZoom=camera.zoom;
     previous.copy(camera.position);rotation.copy(camera.quaternion);dirty=false;
     camera.updateMatrixWorld();frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    const midDistance=1650*Math.max(1,renderer.domElement.clientHeight/900)*camera.zoom;
     let changed=false;
     lots.forEach((list,i)=>{
       const members=memberships[i];let rebuild=false;
@@ -222,18 +225,20 @@ export function installSilverquillHouses(houses, boxes, ground, scene, camera, r
         const lot=list[j];origin.set(lot.x,ground,lot.z);ball.center.copy(origin);ball.center.y+=19;ball.radius=44;
         let level=0;
         if(frustum.intersectsSphere(ball)){
-          const near=camera.position.distanceToSquared(ball.center)<780*780;
-          if(near&&!tiers[i].close)load(i,false);
-          level=near&&tiers[i].close?2:1;
+          const distance=camera.position.distanceToSquared(ball.center),near=distance<780*780;
+          const midRange=midDistance*(members[j]>=2?1.12:1);
+          if(near&&!tiers[i].close)load(i,'close');
+          if(distance<(midDistance*1.15)**2&&!tiers[i].far)load(i,'far');
+          level=near&&tiers[i].close?3:tiers[i].far&&(distance<midRange*midRange||!tiers[i].distant)?2:1;
         }
         if(level!==members[j]){members[j]=level;rebuild=true;}
       }
       if(!rebuild)return;
       changed=true;
-      const counts={far:0,close:0};
+      const counts={distant:0,far:0,close:0};
       for(let j=0;j<list.length;j++){
         if(!members[j])continue;
-        const lot=list[j],key=members[j]===2?'close':'far',tier=tiers[i][key];
+        const lot=list[j],key=['','distant','far','close'][members[j]],tier=tiers[i][key];
         origin.set(lot.x,ground,lot.z);
         const scale=houseSpan(lot)/tier.width;
         pose.position.copy(origin);pose.rotation.y=lot.face;pose.scale.setScalar(scale);pose.updateMatrix();
