@@ -105,7 +105,7 @@ function makeLeg(upper,bend,claw,hind,side,anchor){
       // forearms forward of the sternum so the claws remain in silhouette.
       upperPitch=T.MathUtils.lerp(.75+1.46*lift,.08,fold)+.095*stroke;
       lowerPitch=T.MathUtils.lerp(1.06+1.08*lift,2.09,fold)+.11*stroke;
-      elbowSide=side*T.MathUtils.lerp(.77,.68,fold);
+      elbowSide=side*T.MathUtils.lerp(.77,.68+.13*stroke,fold);
       pawSide=side*T.MathUtils.lerp(-.04,.11,fold);
       wristPitch=T.MathUtils.lerp(-2.06,-.70,fold)+.06*stroke;
       wristYaw=T.MathUtils.lerp(.35,.23,fold);wristRoll=T.MathUtils.lerp(.23,-.18,fold);
@@ -142,7 +142,7 @@ function bindGuard(model,thing,ground,yaw,scale,restY){
       const toeX=sign*(hind?34:14),toeZ=hind?-29:37;
       const wx=thing.x+toeX*Math.cos(yaw)+toeZ*Math.sin(yaw),wz=thing.z-toeX*Math.sin(yaw)+toeZ*Math.cos(yaw);
       anchor.y+=ground(wx,wz)-restY+.55;
-      legs.push(makeLeg(upper,bend,claw,hind,sign,anchor));
+      legs.push({hind,pose:makeLeg(upper,bend,claw,hind,sign,anchor)});
     }
   }
   return (t,s,open,beat,tipBeat,bank,flap,drive,actorYaw)=>{
@@ -171,8 +171,10 @@ function bindGuard(model,thing,ground,yaw,scale,restY){
       upper.rotation.set(-.08*open,sign*(.10*open+.04*bank),sign*(shoulder*open-.095*localShrug));
       fan.rotation.set(.06*open,sign*(-.18*open),sign*((outer-shoulder)*open+.14*localShrug));
     }
-    const armStroke=Math.sin(flap-.46)*drive*open;
-    for(const leg of legs)leg(s,armStroke,levelToChest,worldToChest);
+    const hockStroke=Math.sin(flap-.46)*drive*open;
+    // Let the arms rise as the wing descends. The outer fan trails the shoulder.
+    const armLift=-T.MathUtils.lerp(beat,tipBeat,.64)*open*smooth(s,.06,.34);
+    for(const {hind,pose} of legs)pose(s,hind?hockStroke:armLift,levelToChest,worldToChest);
   };
 }
 
