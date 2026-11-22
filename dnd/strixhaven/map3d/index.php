@@ -162,7 +162,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=6';
-import { installVellumGuard } from './vellum-guard.js?motion=4';
+import { installVellumGuard } from './vellum-guard.js?motion=5';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -3569,7 +3569,7 @@ function buildProps() {
       const guardHexes = [[27, 19], [26, 19], [27, 20]], post = cenW(guardHexes);
       const guard = addThing('Vellum Gargoyle', '🦇', post, 1, 30, () => {},
         { y: heightAt(...post), hexes: guardHexes, top: 124, view: 450 });
-      installVellumGuard(guard, GW, heightAt, camera, renderer, anim);
+      installVellumGuard(guard, GW, heightAt, camera, renderer, anim, sun);
     }
 
     // Inkfall Streets (27,16): a knot of streets where black-purple ink dust gathers in every crevice and hangs between the roofs like cobweb

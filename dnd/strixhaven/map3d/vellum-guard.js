@@ -70,7 +70,7 @@ function makeLeg(upper,bend,claw,hind,side,anchor){
   const feather=new T.Euler(),carry=new T.Quaternion();
   // A fixed world-space claw anchors the compression and the extension before toe-off.
   // Release each limb separately into the attack pose.
-  return (s,levelToChest,worldToChest)=>{
+  return (s,stroke,levelToChest,worldToChest)=>{
     direction.copy(anchor);
     if(s>flightTime-2 && s<flightTime)direction.y+=12*(1-smooth(s,flightTime-.75,flightTime));
     direction.applyMatrix4(worldToChest).sub(upper.position);
@@ -85,23 +85,27 @@ function makeLeg(upper,bend,claw,hind,side,anchor){
 
     const released=smooth(s,hind?0:-.17,hind?.19:.24)*(1-smooth(s,flightTime-1.48,flightTime-.28));
     if(!released)return;
-    const gather=smooth(s,.76,2.20);
+    const gather=smooth(s,.64,1.86);
     const flare=smooth(s,flightTime-2.85,flightTime-.65);
-    // Load the heels, extend the entire rear chain through the leap, then
-    // carry bent knees behind the pelvis. Each arm opens outside the rib cage.
-    let upperPitch,lowerPitch,elbowSide,pawSide,wristPitch;
+    const fold=smooth(s,1.28,2.68);
+    let upperPitch,lowerPitch,elbowSide,pawSide,wristPitch,wristYaw,wristRoll;
     if(hind){
-      upperPitch=T.MathUtils.lerp(-.91,.52,gather);
-      lowerPitch=T.MathUtils.lerp(-1.08,-1.46,gather);
-      elbowSide=side*(.47+.17*gather);pawSide=side*.23;
-      wristPitch=.34+.70*gather;
+      // Adduct the thighs after toe-off. Fold the hocks back under the pelvis.
+      upperPitch=T.MathUtils.lerp(-.91,1.18,gather);
+      lowerPitch=T.MathUtils.lerp(-1.08,-1.48,gather);
+      elbowSide=side*T.MathUtils.lerp(.47,-.38,gather);
+      pawSide=side*T.MathUtils.lerp(.23,-.05,gather);
+      wristPitch=.34+.67*gather;wristYaw=.12;wristRoll=.16;
     }else{
-      const lift=smooth(s,-.13,.38);
-      upperPitch=.75+.94*lift;lowerPitch=1.06+1.21*lift;
-      elbowSide=side*.96;pawSide=side*.17;
-      // The pad faces down in bind pose. Tip the talons toward the sky and
-      // expose the palm up and forward; keep the thumb side turned outward.
-      wristPitch=-2.50+.10*gather;
+      const lift=smooth(s,-.13,.40);
+      // Lead with high elbows and upturned palms. As the wings take the load,
+      // sweep the elbows back alongside the ribs and fold the forearms upward.
+      upperPitch=T.MathUtils.lerp(.75+1.46*lift,-.52,fold)+.095*stroke;
+      lowerPitch=T.MathUtils.lerp(1.06+1.08*lift,2.66,fold)+.11*stroke;
+      elbowSide=side*T.MathUtils.lerp(.77,.48,fold);
+      pawSide=-side*T.MathUtils.lerp(.04,.37,fold);
+      wristPitch=T.MathUtils.lerp(-2.06,-1.03,fold)+.06*stroke;
+      wristYaw=T.MathUtils.lerp(.35,-.32,fold);wristRoll=T.MathUtils.lerp(.23,-.70,fold);
     }
     upperPitch=T.MathUtils.lerp(upperPitch,hind?.27:.69,flare);
     lowerPitch=T.MathUtils.lerp(lowerPitch,hind?.19:.38,flare);
@@ -113,7 +117,7 @@ function makeLeg(upper,bend,claw,hind,side,anchor){
     shoulderQ.setFromUnitVectors(thighDir,direction);
     direction.set(pawSide,-Math.cos(lowerPitch),Math.sin(lowerPitch)).normalize().applyQuaternion(carry);
     elbowQ.setFromUnitVectors(shinDir,direction.applyQuaternion(inverse.copy(shoulderQ).invert()));
-    wristQ.setFromEuler(feather.set(wristPitch,side*(hind?.12:.39)*(1-flare),side*(hind?.16:.28)*(1-flare),'YXZ'));
+    wristQ.setFromEuler(feather.set(wristPitch,side*wristYaw*(1-flare),side*wristRoll*(1-flare),'YXZ'));
     wristQ.premultiply(carry).premultiply(inverse.copy(shoulderQ).multiply(elbowQ).invert());
     upper.quaternion.slerp(shoulderQ,released);
     bend.quaternion.slerp(elbowQ,released);
@@ -164,18 +168,35 @@ function bindGuard(model,thing,ground,yaw,scale,restY){
       upper.rotation.set(-.08*open,sign*(.10*open+.04*bank),sign*(shoulder*open-.095*localShrug));
       fan.rotation.set(.06*open,sign*(-.18*open),sign*((outer-shoulder)*open+.14*localShrug));
     }
-    for(const leg of legs)leg(s,levelToChest,worldToChest);
+    const armStroke=Math.sin(flap-.46)*drive*open;
+    for(const leg of legs)leg(s,armStroke,levelToChest,worldToChest);
   };
 }
 
-export function installVellumGuard(thing,gate,ground,camera,renderer,anim){
+export function installVellumGuard(thing,gate,ground,camera,renderer,anim,sun){
   const root=thing.group,home=root.position.clone(),yaw=Math.atan2(home.x-gate[0],home.z-gate[1]);
   const actor=new T.Group();actor.name='Vellum guard patrol';root.add(actor);thing.focusObject=actor;
   const route=guardRoute(yaw);
   const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const tiers={},pending=new Set(),retry={},world=new T.Vector3();
   const before=new T.Vector3(),after=new T.Vector3(),scratch=new T.Vector3(),velocity=new T.Vector3();
-  let initialOffset=32,shadowTime=-1,lastFlight=false,active=null,start=null;
+  const view=new T.Frustum(),viewMatrix=new T.Matrix4(),shadowRegion=new T.Sphere();
+  const lightDirection=new T.Vector3();
+  let initialOffset=32,active=null,start=null,trackingShadow=false;
+
+  // Include the ground down-sun of the flyer: its silhouette can still be
+  // visible after its wings have passed out of the camera frame.
+  function shadowInView(){
+    if(!sun.castShadow || !renderer.shadowMap.enabled || !camera.layers.test(actor.layers))return false;
+    lightDirection.subVectors(sun.position,sun.target.position).normalize();
+    shadowRegion.center.copy(world);shadowRegion.center.y+=55;
+    const drop=Math.max(0,shadowRegion.center.y-ground(world.x,world.z));
+    const rayLength=drop/Math.max(.1,lightDirection.y);
+    shadowRegion.center.addScaledVector(lightDirection,-.5*rayLength);
+    shadowRegion.radius=200+.5*rayLength;
+    view.setFromProjectionMatrix(viewMatrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    return view.intersectsSphere(shadowRegion);
+  }
   function load(tier){
     if(tiers[tier]||pending.has(tier)||performance.now()<(retry[tier]||0))return;
     pending.add(tier);
@@ -192,7 +213,7 @@ export function installVellumGuard(thing,gate,ground,camera,renderer,anim){
       // Include unfolded wing tips in culling and picking at both LODs.
       mesh.boundingSphere=new T.Sphere(new T.Vector3(0,.24,0),2.5);
       mesh.boundingBox=new T.Box3(new T.Vector3(-2.5,-1.2,-1.6),new T.Vector3(2.5,2.2,1.6));
-      tiers[tier]={model,pose:bindGuard(model,thing,ground,yaw,scale,home.y)};
+      tiers[tier]={model,mesh,pose:bindGuard(model,thing,ground,yaw,scale,home.y)};
       model.visible=false;actor.add(model);
     }).catch(e=>{retry[tier]=performance.now()+10000;console.warn('Vellum guard '+tier,e);}).finally(()=>pending.delete(tier));
   }
@@ -238,7 +259,14 @@ export function installVellumGuard(thing,gate,ground,camera,renderer,anim){
       active=choice;active.model.visible=true;renderer.shadowMap.needsUpdate=true;
     }
     active.pose(t,s,open,beat,tipBeat,bank,flap,drive,actor.rotation.y);
-    if((air!==lastFlight||(air&&t-shadowTime>.28))&&d<1200){renderer.shadowMap.needsUpdate=true;shadowTime=t;}
-    lastFlight=air;
+    if(!sun)return;
+    const visible=shadowInView();
+    const moving=(s>=-1.12 && s<=flightTime+1.4) || Math.sin(t*.47)>.73;
+    const track=visible && moving;
+    // The campus caches its sunlight depth map. Recast the current skinned
+    // pose before this frame is drawn, including one last refresh on exit.
+    if(track || trackingShadow || active.mesh.castShadow!==visible)renderer.shadowMap.needsUpdate=true;
+    active.mesh.castShadow=visible;
+    trackingShadow=track;
   });
 }
