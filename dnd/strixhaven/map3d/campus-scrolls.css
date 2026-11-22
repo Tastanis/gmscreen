@@ -12,14 +12,13 @@ body.under #scrollLauncher, body.touring #scrollLauncher { display:none }
 
 #pinnedScroll {
   --seal:#71532f;
-  position:fixed; z-index:7; right:18px; top:40px; box-sizing:border-box;
+  position:fixed; z-index:7; left:18px; top:40px; box-sizing:border-box;
   width:min(370px,34vw); max-height:calc(100dvh - 116px);
   display:flex; flex-direction:column; padding:20px 22px;
   color:#35271b; font:15px/1.25 Georgia,serif;
   background:linear-gradient(95deg,#c4a575,#ecd4a8 7%,#f6e6c6 48%,#e8d2a9 94%,#bf9c68);
   outline:1px solid #ab895b; outline-offset:-7px; box-shadow:0 7px 24px #100b0780;
 }
-#pinnedScroll.pin-left {left:18px; right:auto}
 #pinnedScroll[hidden],body.under #pinnedScroll,body.touring #pinnedScroll {display:none}
 #pinnedScroll::before,#pinnedScroll::after {
   content:''; position:absolute; left:-4px; right:-4px; height:10px; border-radius:4px;
@@ -37,6 +36,6 @@ body.under #scrollLauncher, body.touring #scrollLauncher { display:none }
 #pinnedScroll .scroll-entries button:hover,#pinnedScroll button:focus-visible {background:#ab86482b;color:var(--seal)}
 #pinnedScroll button:focus-visible {outline:2px solid var(--seal);outline-offset:-2px}
 @media(max-width:700px){
-  #pinnedScroll,#pinnedScroll.pin-left {top:auto;bottom:66px;left:10px;right:10px;width:auto;max-height:39dvh;padding:15px 17px}
+  #pinnedScroll {top:auto;bottom:66px;left:10px;right:10px;width:auto;height:39dvh;max-height:39dvh;padding:15px 17px}
   #pinnedScroll h2 {font-size:22px}
 }

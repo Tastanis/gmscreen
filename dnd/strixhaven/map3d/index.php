@@ -89,7 +89,7 @@ require_once '../../includes/strix-nav.php';
 "; ?>
 } }
 </script>
-<link rel="stylesheet" href="campus-scrolls.css?v=3">
+<link rel="stylesheet" href="campus-scrolls.css?v=4">
 </head>
 <body>
 <?php renderStrixNav('map'); ?>
@@ -157,7 +157,7 @@ require_once '../../includes/strix-nav.php';
 <section id="pinnedScroll" aria-labelledby="pinnedSchool" hidden><header><h2 id="pinnedSchool"></h2><button class="scroll-close" type="button" aria-label="Close campus scroll">×</button></header><div class="scroll-entries"></div></section>
 <span id="scrollStatus" class="scroll-a11y" role="status"></span>
 <script type="module">
-import {installCampusTable,tableMargin} from './campus-scrolls.js?v=3';
+import {installCampusTable,tableMargin} from './campus-scrolls.js?v=4';
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';

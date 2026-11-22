@@ -130,24 +130,28 @@ export function installCampusTable({scene, renderer, things, width, depth, trave
       varying vec2 vUv;
       void main(){
         vUv=uv;
-        vec4 p=modelMatrix*vec4(0.,0.,0.,1.);
-        vec2 lateral=cameraPosition.xz-p.xz;
-        lateral=length(lateral)>.001?normalize(lateral):vec2(0.,1.);
-        vec2 right=vec2(lateral.y,-lateral.x);
-        p.xz+=right*position.x*mix(24.,130.,uv.y)+vec2(48.,-36.)*uv.y;
-        p.y+=uv.y*530.;
-        gl_Position=projectionMatrix*viewMatrix*p;
+        vec4 base=modelViewMatrix*vec4(0.,0.,0.,1.);
+        float height=clamp(length(base.xyz)*.65,175.,960.);
+        // Keep the shaft legible even when looking down on its destination.
+        vec3 axis=mat3(viewMatrix)*vec3(0.,height,0.);
+        axis.xy+=height*vec2(.12,.22);
+        vec2 across=normalize(vec2(axis.y,-axis.x));
+        vec4 p=base+vec4(axis*uv.y,0.);
+        p.xy+=across*position.x*height*.29;
+        gl_Position=projectionMatrix*p;
       }`,
     fragmentShader:`
       varying vec2 vUv;
       uniform float strength;
       void main(){
-        float x=(vUv.x-.5)*2.;
-        float core=exp(-18.*x*x);
-        float haze=exp(-4.8*x*x);
-        float ribs=.76+.24*cos(x*23.+vUv.y*.8);
-        float alpha=(.60*core+.34*haze*ribs)*(1.-smoothstep(.42,1.,vUv.y));
-        gl_FragColor=vec4(1.,.78,.40,strength*alpha);
+        // Shape the cone in the fragment shader so both triangles share one smooth gradient.
+        float width=mix(.42,1.,vUv.y);
+        float lateral=(vUv.x-.5)*2./width;
+        float core=exp(-5.*lateral*lateral);
+        float halo=1.-smoothstep(.15,1.,abs(lateral));
+        float ends=smoothstep(0.,.035,vUv.y)*(1.-smoothstep(.56,1.,vUv.y));
+        float alpha=(.62*core+.24*halo)*ends;
+        gl_FragColor=vec4(mix(vec3(1.,.66,.24),vec3(1.,.89,.60),core),strength*alpha);
       }`
   }));
   beam.name='Campus scroll destination ray';
@@ -163,7 +167,7 @@ export function installCampusTable({scene, renderer, things, width, depth, trave
     if(!previewItem)return;
     const t=previewItem.thing;
     if(t.focusObject)t.focusObject.getWorldPosition(beam.position);
-    else beam.position.set(t.x,t.group.position.y,t.z);
+    else beam.position.set(t.x,t.group.position.y+THREE.MathUtils.clamp(t.labelY-t.group.position.y,10,100),t.z);
     beam.material.uniforms.strength.value=Math.min(1,beam.material.uniforms.strength.value+dt*9);
   });
   function endPreview(){menuItem=null;preview(null,null);}
@@ -180,7 +184,6 @@ export function installCampusTable({scene, renderer, things, width, depth, trave
     endPreview();pinned=book;bookIndex=books.indexOf(book);rowIndex=-1;
     heading.textContent=book.college.name;
     panel.style.setProperty('--seal',book.college.color);
-    panel.classList.toggle('pin-left',book.college.side===1);
     list.replaceChildren();
     for(const item of book.entries){
       const button=document.createElement('button');
