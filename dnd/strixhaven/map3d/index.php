@@ -161,7 +161,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=6';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=7';
 import { installVellumGuard } from './vellum-guard.js?motion=7';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
@@ -273,6 +273,12 @@ function makePath(dp, smooth, pad) {
   return { pts: a, cum, len: cum[pts.length - 1], x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad };
 }
 let PD_T = 0;
+// The path bounds already include the width of its influence. Allow four
+// noise amplitudes for the coordinate warp before rejecting a terrain sample.
+function nearWarpedPath(p, x, z, amplitude) {
+  const pad=4*amplitude;
+  return x>=p.x0-pad && x<=p.x1+pad && z>=p.z0-pad && z<=p.z1+pad;
+}
 function polyDist(p, x, z) {
   if (x < p.x0 || x > p.x1 || z < p.z0 || z > p.z1) return 1e9;
   const a = p.pts, n = a.length / 2; let best = 1e18, bt = 0;
@@ -600,7 +606,7 @@ function sample(x, z) {
   { const d = Math.hypot(x - P492[0], z - P492[1]) + 3 * fbm(x / 12, z / 12, 2); if (d < 42) { const k = sstep(40, 31, d); h -= 265 * k; cutK = Math.max(cutK, k); } }
   { const e = Math.hypot((x - HEAP[0]) / 44, (z - HEAP[1]) / 36) + .12 * fbm(x / 30, z / 30, 2); if (e < 1.25) { const q = clamp((1.2 - e) / .7, 0, 1) * 3, fl = Math.floor(q), k = sstep(1.25, 1.1, e); h = lerp(h, Math.min(h, 60 - (fl + sstep(.6, 1, q - fl)) * 12), k); cutK = Math.max(cutK, k * .5); } }
   { const dx = x - COFD[0], dz = z - COFD[1], a = dx * .5 + dz * .866, b = dz * .5 - dx * .866; if (Math.abs(a) < 62 && Math.abs(b + 4) < 28) { const k = sstep(26, 21, Math.abs(b + 4)) * sstep(60, 54, Math.abs(a)); h = lerp(h, Math.min(h, 7 + 34 * sstep(18, 52, a)), k); cutK = Math.max(cutK, k * .5); } }
-  { const wx = x + 14 * fbm(x / 70, z / 70, 2), wz = z + 14 * fbm(x / 70 + 5, z / 70, 2), d = polyDist(WSCAR, wx, wz); if (d < 46) { const wd = 24 + 8 * Math.sin(PD_T * 19); scarK = sstep(wd + 12, wd, d) * sstep(0, .06, PD_T) * sstep(1, .94, PD_T); h -= 8 * scarK * (.7 + .3 * sstep(wd, 0, d)) - 2.2 * scarK * ridged(x / 16, z / 16, 2); } }
+  if (nearWarpedPath(WSCAR, x, z, 14)) { const wx = x + 14 * fbm(x / 70, z / 70, 2), wz = z + 14 * fbm(x / 70 + 5, z / 70, 2), d = polyDist(WSCAR, wx, wz); if (d < 46) { const wd = 24 + 8 * Math.sin(PD_T * 19); scarK = sstep(wd + 12, wd, d) * sstep(0, .06, PD_T) * sstep(1, .94, PD_T); h -= 8 * scarK * (.7 + .3 * sstep(wd, 0, d)) - 2.2 * scarK * ridged(x / 16, z / 16, 2); } }
   { const e = Math.hypot((x - BRKL[0]) / 92, (z - BRKL[1]) / 200) + .16 * fbm(x / 80, z / 80, 2); if (e < 1.15) { brkK = sstep(1.15, .8, e); const rg = ridged(x / 60 + 2, z / 85, 2); brkT = sstep(.80, .93, rg); h = lerp(h, 46 + 6 * fbm(x / 45, z / 45, 2) - 9 * brkT + 3.5 * sstep(.6, .8, rg) * (1 - brkT), brkK * .9); } }
   // --- Pillardrop chasm
   let chF = 0;
@@ -623,8 +629,11 @@ function sample(x, z) {
   obs *= (1 - coneK) * (1 - mtK);
   // --- rivers
   let riv = 0;
-  for (const R of RIVERS) { const wx = x + 16 * fbm(x / 110, z / 110, 2), wz = z + 16 * fbm(x / 110 + 9, z / 110, 2);
-    const d = polyDist(R.p, wx, wz); if (d < R.w * 3.2) { h = lerp(-5, h, Math.max(sstep(R.w, R.w * 3.2, d), plat)); riv = Math.max(riv, sstep(R.w * 2.2, R.w, d) * (1 - plat)); } }
+  let riverX, riverZ;
+  for (const R of RIVERS) {
+    if (!nearWarpedPath(R.p, x, z, 16)) continue;
+    if (riverX === undefined) { riverX=x+16*fbm(x/110,z/110,2); riverZ=z+16*fbm(x/110+9,z/110,2); }
+    const d = polyDist(R.p, riverX, riverZ); if (d < R.w * 3.2) { h = lerp(-5, h, Math.max(sstep(R.w, R.w * 3.2, d), plat)); riv = Math.max(riv, sstep(R.w * 2.2, R.w, d) * (1 - plat)); } }
   { const e = Math.hypot((x - X(.405)) / 52, (z - Z(.633)) / 100) + .2 * fbm(x / 60, z / 60, 2); if (e < 1.3) { h = lerp(-11, h, sstep(.75, 1.3, e)); riv = Math.max(riv, sstep(1.2, .9, e)); } }   // the lake over the Black Coral Copper Reef
   for (const B of BELLS) { const dx = x - B.x, dz = z - B.z, a = -(dx * B.ux + dz * B.uz), bb = Math.abs(dz * B.ux - dx * B.uz);   // the river runs on into each Tidal Bell Mouth
     if (a > -B.ld - 4 && a < 30 && bb < 15) { const k = sstep(15, 8, bb) * sstep(30, 23, a); h = lerp(h, Math.min(h, -4.5), k); riv = Math.max(riv, k * .8); } }
@@ -635,7 +644,7 @@ function sample(x, z) {
       for (const pl of POOLS) { const e = Math.min((pl.half - Math.abs(angDiff(ang, pl.mid))) * dC, dC - POOL_IN, POOL_OUT - dC);
         if (e > -8) { h -= 3.2 * sstep(0, 5, e); poolRim = Math.max(poolRim, sstep(-7, -3.5, e) * sstep(1.5, -.5, e)); } } } }
   // --- flattened building sites
-  const site = (c, rad, y) => { const d = Math.hypot(x - c[0], z - c[1]); if (d < rad * 1.6) h = lerp(h, y, sstep(rad * 1.6, rad, d)); };
+  const site = (c, rad, y) => { const dx = x - c[0], dz = z - c[1], edge = rad * 1.6; if (Math.abs(dx) >= edge || Math.abs(dz) >= edge) return; const d = Math.hypot(dx, dz); if (d < edge) h = lerp(h, y, sstep(edge, rad, d)); };
   // Torus Hall: a wide basin stepping down in rings, with a smooth ramp where the walkway comes in
   let torusB = 0;
   { const d = Math.hypot(x - TORUS[0], z - TORUS[1]); if (d < TB_R + 70) { h = lerp(h, 17, sstep(TB_R + 70, TB_R + 10, d));
@@ -651,7 +660,7 @@ function sample(x, z) {
   { const dx = x - MESA[0], dz = z - MESA[1], d = Math.hypot(dx, dz); if (d < 190) { const a = Math.atan2(dz, dx), tri = v => Math.abs((((v / 6.283) % 1) + 1) % 1 * 2 - 1) * 2 - 1, rr = 92 + 15 * tri(a * 3 + .6) + 8 * tri(a * 9 + 1.3) + 4 * tri(a * 27), pk = sstep(rr + 4, rr - 4, d);   // a mesa with a snowflake's outline, not a square's
       if (pk > 0) { h = lerp(h, 74 + 6 * sstep(60, 20, d) + 3 * fbm(x / 50, z / 50, 2), pk); const dr = Math.abs(dx - 7 * Math.sin(dz / 26)); if (dr < 15 && dz > -20) { const k = sstep(15, 7, dr) * pk; h -= 4 * k; chalkK = k; } }
       const df = Math.hypot(dx / 84, (dz - 142) / 62); if (df < 1.2 && pk < .5) chalkK = Math.max(chalkK, sstep(1.2, .25, df) * (.6 + .4 * Math.sin(Math.atan2(dz - 96, dx) * 7 + df * 13))); } }
-  { const wx = x + 9 * fbm(x / 60, z / 60, 2), wz = z + 9 * fbm(x / 60 + 4, z / 60, 2), d = polyDist(GORGE, wx, wz); if (d < 50) { const pf = sstep(0, .2, PD_T) * sstep(1, .8, PD_T), wd = 8 + 18 * pf; h = lerp(h, Math.min(h, lerp(h - 1.5, -5, pf)), sstep(wd + 12, wd, d)); } }
+  if (nearWarpedPath(GORGE, x, z, 9)) { const wx = x + 9 * fbm(x / 60, z / 60, 2), wz = z + 9 * fbm(x / 60 + 4, z / 60, 2), d = polyDist(GORGE, wx, wz); if (d < 50) { const pf = sstep(0, .2, PD_T) * sstep(1, .8, PD_T), wd = 8 + 18 * pf; h = lerp(h, Math.min(h, lerp(h - 1.5, -5, pf)), sstep(wd + 12, wd, d)); } }
   { const dx = x - VICE[0], dz = z - VICE[1]; if (Math.abs(dx) < 90 && dz > -92 && dz < -36) h += 30 * sstep(90, 62, Math.abs(dx)) * sstep(-36, -50, dz) * sstep(-92, -74, dz) * (.7 + .3 * fbm(x / 25, z / 25, 2)); }   // the quarry face behind the Vice Foundry
   site(VICE, 44, 13); site(MENAG, 34, 17); site(MOBI, 30, 17); site(MAZE, 64, 17);
   let starK = 0; { const e = Math.hypot(x - STAR[0], z - STAR[1]) / 76 + .22 * fbm(x / 50, z / 50, 2); if (e < 1.1) { starK = sstep(1.08, .8, e); h = lerp(h, 22, starK); } }   // an uneven-edged flat of mirror obsidian, wider than its hex
@@ -965,7 +974,10 @@ const terrainCache = { key: null, db: null, fresh: null,
       const src = sec(/\/\/ -{20,} constants/, /\/\/ -{20,} renderer \/ scene/) + sec(/\/\/ -{20,} build terrain/, /\/\/ -{20,} water/) + sec(/\/\/ -{20,} hex helpers/, /\/\/ -{20,} things:/);
       let h = 2166136261; for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); } this.key = 'w' + (h >>> 0) + '-' + src.length + '-' + NX;
       this.db = await this.open(); if (!this.db) return null; const hit = await new Promise(res => { const rq = this.db.transaction('terrain').objectStore('terrain').get(this.key); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); return hit && hit.H && hit.H.length === NX * NZ ? hit : null; } catch (e) { return null; } },
-  put() { try { if (!this.db || !this.fresh) return; const st = this.db.transaction('terrain', 'readwrite').objectStore('terrain'); st.clear(); st.put(this.fresh, this.key); this.fresh = null; } catch (e) {} } };
+  put() { try { const fresh = this.fresh; this.fresh = null; if (!this.db || !fresh) return;
+    const st = this.db.transaction('terrain', 'readwrite').objectStore('terrain'), key = this.key;
+    st.getAllKeys().onsuccess = e => { for (const old of e.target.result) if (old !== key && String(old).endsWith('-' + NX)) st.delete(old); };
+    st.put(fresh, key); } catch (e) {} } };
 // how closely the thinned ground keeps to the full grid: height in world units, and how much a step in colour, shading or material counts against it
 const TERR_ERR = +(params.get('terr') || .8), TERR_KC = 2.5, TERR_KN = 3, TERR_KM = 1.5; let terrainTris = 0;
 function buildTerrain(cache) {
@@ -1168,6 +1180,20 @@ const KM = { s: 210, base: 76, fwd: 110 };   // Kollema's model: its scale; the 
 // the board minis (Valthrex, the cat, the hut, the wanderer) wait until the halls' light copies are in, so the map is up and turning before they start to arrive
 const laterGL = { q: [], go: false, base: null, load(url, ok, pr, er) { const f = () => (this.base = this.base || new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)).load(url, ok, pr, er); this.go ? f() : this.q.push(f); },
   start() { if (this.go) return; this.go = true; this.q.splice(0).forEach(f => f()); } };
+// These source meshes have two consumers. Each makes its own transforms and
+// materials. Release the parsed source as soon as both have subscribed.
+const pairedProps = new Map();
+function readProp(loader, url, ok, progress, fail) {
+  if (!/^models\/(?:skull|crew-skelA(?:-far)?|ghost-(?:delivery|laundress)(?:-far)?)\.glb$/.test(url)) return loader.load(url, ok, progress, fail);
+  let source = pairedProps.get(url);
+  if (source) pairedProps.delete(url);
+  else {
+    source = new Promise((resolve, reject) => loader.load(url, gltf => resolve({ scene: gltf.scene }), progress, reject));
+    pairedProps.set(url, source);
+    source.catch(() => { if (pairedProps.get(url) === source) pairedProps.delete(url); });
+  }
+  source.then(ok).catch(fail || console.warn);
+}
 const HALL_LP = {};   // the lantern lights each hand-built hall hung, [first, end] in lanternPts, taken down when its model replaces it
 function hallsSetup() {
   for (const r of Object.values(HALL_LP).sort((a, b) => b[0] - a[0])) lanternPts.splice(r[0], r[1] - r[0]);
@@ -1711,8 +1737,20 @@ function buildProps() {
           '  transformed.y += (sin(uTime * 6.5 + q) * .028 + sin(uTime * 11.3 + q * 2.3) * .009) * w * uLen;',
           '  transformed.x += sin(uTime * 4.7 + q * 1.4 + 1.3) * .02 * w * uLen; }'].join(String.fromCharCode(10)))].join(String.fromCharCode(10)); };
       mt.customProgramCacheKey = () => 'flier-cape'; mt.needsUpdate = true; });
-    for (const [f, far] of [['models/flier-lo.glb', true], ['models/flier.glb', false]]) laterGL.load(f, gltf => { const m = gltf.scene; m.scale.setScalar(5.2); cape(m); m.visible = far; fl.add(m); flv[far ? 1 : 0] = m; }, undefined, () => console.warn('flier model not loaded: ' + f));
-    const flw = new THREE.Vector3(); anim.push(() => { if (!flv[0] || !flv[1]) return; fl.getWorldPosition(flw); const near = camera.position.distanceTo(flw) < 420; flv[0].visible = near; flv[1].visible = !near; });
+    let highPending = false, retryHigh = 0, lowFailed = false;
+    const loadHighFlier = () => {
+      if (highPending || flv[0] || performance.now() < retryHigh) return;
+      highPending = true;
+      laterGL.load('models/flier.glb', gltf => { const m = gltf.scene; m.scale.setScalar(5.2); cape(m); m.visible = !flv[1]; fl.add(m); flv[0] = m; highPending = false; }, undefined, () => { highPending = false; retryHigh = performance.now() + 30000; });
+    };
+    laterGL.load('models/flier-lo.glb', gltf => { const m = gltf.scene; m.scale.setScalar(5.2); cape(m); fl.add(m); flv[1] = m; }, undefined, () => { lowFailed = true; loadHighFlier(); });
+    const flw = new THREE.Vector3(); anim.push(() => {
+      fl.getWorldPosition(flw); const d = camera.position.distanceTo(flw);
+      if (d < 650 || lowFailed) loadHighFlier();
+      const close = !!flv[0] && (d < 420 || !flv[1]);
+      if (flv[0]) flv[0].visible = close;
+      if (flv[1]) flv[1].visible = !close;
+    });
     noShadow(fl); fl.userData.keepHall = true; g.add(fl);   // it keeps flying once the arena model replaces the hand-built stadium
     anim.push(t => { const a = t * .42, x = Math.sin(a * 1.3 + 1) * 66 + Math.sin(a * 2.9) * 18, z = Math.cos(a * .9) * 46 + Math.sin(a * 3.7 + 2) * 13, y = 44 + Math.sin(a * 2.1) * 13 + Math.sin(a * 5.3) * 4;
       const px = fl.position.x, py = fl.position.y, pz = fl.position.z, dx = x - px, dy = y - py, dz = z - pz; fl.position.set(x, y, z);
@@ -3184,7 +3222,7 @@ function buildProps() {
         pos.push(p[0] - nx, yy, p[1] - nz, p[0] + nx, yy, p[1] + nz); uv.push(0, i / 5, 1, i / 5); if (i) { const q = i * 2; idx.push(q - 2, q, q - 1, q - 1, q, q + 1); } });
       const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals(); const m = new THREE.Mesh(ge, mat); m.raycast = () => {}; scene.add(m); };
     // ready-made animated animals: the horse and birds from three.js's examples (models by Mirada, from ro.me), kept beside this page in models/ and scaled up; if one is missing the map simply goes without it
-    const GL = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder), GLB = 'models/';
+    const GL = laterGL, GLB = 'models/';
     const beast = (file, size, dur, place) => GL.load(GLB + file, gltf => { const m = gltf.scene.children[0] || gltf.scene, sz = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()), holder = new THREE.Group(); m.scale.multiplyScalar(size / Math.max(sz.x, sz.y, sz.z)); holder.add(m);
         holder.traverse(o => { if (o.isMesh) { o.castShadow = false; o.raycast = () => {}; o.frustumCulled = false; } }); scene.add(holder); const mixer = new THREE.AnimationMixer(m); if (gltf.animations[0]) mixer.clipAction(gltf.animations[0]).setDuration(dur).play();
         anim.push((t, dt) => { mixer.update(Math.min(dt || 0, .1)); place(holder, t); }); (window.__beasts = window.__beasts || []).push(file); }, undefined, () => console.warn('animal model not loaded: ' + file));
@@ -3687,7 +3725,7 @@ function buildProps() {
     // a pegasus on the wing over Ewfall Guardens, south of Clarentine's house: the horse from three.js's examples (by Mirada, kept beside this page in models/), turned white and given wings, going round and round. If the model is missing the map goes without.
     // Each wing is built the way a bird's is: an arm and a hand, jointed at the wrist; long primaries fanning from the hand, secondaries along the arm, and two rows of shorter coverts lapping over their roots. The hand trails the arm a little on each beat
     { const ew = Wp(EWF), cx = ew[0], cz = ew[1], RR = 78, FY = 15 * S + 112;
-      new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load('models/Horse.glb', gltf => { const m = gltf.scene.children[0] || gltf.scene, holder = new THREE.Group(), inner = new THREE.Group(), sz = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()); m.scale.multiplyScalar(24 / Math.max(sz.x, sz.y, sz.z)); inner.add(m); holder.add(inner); holder.updateMatrixWorld(true);
+      laterGL.load('models/Horse.glb', gltf => { const m = gltf.scene.children[0] || gltf.scene, holder = new THREE.Group(), inner = new THREE.Group(), sz = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()); m.scale.multiplyScalar(24 / Math.max(sz.x, sz.y, sz.z)); inner.add(m); holder.add(inner); holder.updateMatrixWorld(true);
           const bx = new THREE.Box3().setFromObject(m), cen = bx.getCenter(new THREE.Vector3()), s2 = bx.getSize(new THREE.Vector3()), alongX = s2.x > s2.z, L = Math.max(s2.x, s2.z), top = new THREE.Vector3(0, -1e9, 0), v = new THREE.Vector3();
           m.traverse(o => { if (!o.isMesh) return; o.material = o.material.clone(); o.material.vertexColors = false; o.material.color.set(0xf4f2ec); o.material.roughness = .6; o.castShadow = true; o.raycast = () => {}; o.frustumCulled = false; const pa = o.geometry.attributes.position; for (let i = 0; i < pa.count; i += 3) { v.fromBufferAttribute(pa, i); o.localToWorld(v); if (v.y > top.y) top.copy(v); } });   // the highest point of a standing horse is its head: that tells which way it faces
           const sign = (alongX ? top.x - cen.x : top.z - cen.z) > 0 ? 1 : -1; m.position.x -= cen.x; m.position.z -= cen.z; m.position.y -= bx.min.y; inner.rotation.y = alongX ? (sign > 0 ? 0 : Math.PI) : (sign > 0 ? Math.PI / 2 : -Math.PI / 2);                 // so that it faces along the holder's own x
@@ -5137,7 +5175,7 @@ function ufunnel(o) { const n = o.n || 160, r = mulberry32(o.seed || 7), aP = ne
   const p = new THREE.Points(ge, m); p.frustumCulled = false; p.raycast = () => {}; return p; }
 // the skull off Brandon's skeleton (Oct 24), for every skull the under-areas set down; until it has loaded they keep their round ones
 const UNDER_SKULL = { geo: null };
-laterGL.load('models/skull.glb', gltf => { let geo = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (k !== 'position' && k !== 'normal') { geo.deleteAttribute(k); continue; } const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) { f[i * a.itemSize] = a.getX(i); f[i * a.itemSize + 1] = a.getY(i); f[i * a.itemSize + 2] = a.getZ(i); } geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
+readProp(laterGL, 'models/skull.glb', gltf => { let geo = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (k !== 'position' && k !== 'normal') { geo.deleteAttribute(k); continue; } const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) { f[i * a.itemSize] = a.getX(i); f[i * a.itemSize + 1] = a.getY(i); f[i * a.itemSize + 2] = a.getZ(i); } geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
   if (!geo) return; geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, s = 1 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); UNDER_SKULL.geo = geo.index ? geo.toNonIndexed() : geo; });
 // The Underloft, under Grandloft Hall: the city's old sewers, cut through the rock as a net of brick tunnels, each with a channel of dark water between two walkways,
 // arched over here and there and fed by outfall pipes. They meet at a great round cistern where the crypt stair comes down from the hall, and at the far ends of the net they
@@ -6976,7 +7014,8 @@ function exitWorld() { const W = UNDER.world; if (!W || fly) return; const o = W
     UNDER.shaft.door = UNDER.doors.indexOf(o); fly = { t: 0, dur: 1.6, p0: camera.position.clone(), p1: doorFront(o), t0: controls.target.clone(), t1: Dl(0, 1, 1).sub(doorFront(o)).normalize().add(doorFront(o)) }; controls.enabled = false; };
   const back = () => { fly = { t: 0, dur: .7, p0: camera.position.clone(), p1: Wl(0, 2, 2), t0: controls.target.clone(), t1: Wl(0, 0, -60), done: swap }; controls.enabled = false; };   // backing out: still facing into the world, stepping back over the threshold
   fly = { t: 0, dur: 1.8, p0: camera.position.clone(), p1: Wl(0, 2, -26), t0: controls.target.clone(), t1: Wl(0, 0, -90), done: back }; controls.enabled = false; }
-function exitShaft() { if (!UNDER.shaft) return; camera.near = 5; camera.far = 90000; camera.updateProjectionMatrix(); if (UNDER.world) { scene.fog = UNDER.world.fog; scene.background = UNDER.world.bg; camera.layers.set(3); UNDER.world = null; } UNDER.shaft = null; Object.assign(controls, { enableZoom: true, minDistance: 90, maxDistance: 6500 * S, minPolarAngle: 0, maxPolarAngle: 1.42 }); if (UNDER.sky) UNDER.sky.visible = false; }
+function exitShaft() { if (!UNDER.shaft) return;
+  if (UNDER.portal) { for (const door of UNDER.doors) { const u = door.open.material.uniforms; u.on.value = 0; u.map.value = null; } UNDER.portal.dispose(); UNDER.portal = null; } camera.near = 5; camera.far = 90000; camera.updateProjectionMatrix(); if (UNDER.world) { scene.fog = UNDER.world.fog; scene.background = UNDER.world.bg; camera.layers.set(3); UNDER.world = null; } UNDER.shaft = null; Object.assign(controls, { enableZoom: true, minDistance: 90, maxDistance: 6500 * S, minPolarAngle: 0, maxPolarAngle: 1.42 }); if (UNDER.sky) UNDER.sky.visible = false; }
 const placeView = (tx, ty, tz, d) => { const off = camera.position.clone().sub(controls.target), az = Math.atan2(off.x, off.z), pol = .95; controls.target.set(tx, ty, tz); camera.position.set(tx + Math.sin(az) * Math.sin(pol) * d, ty + Math.cos(pol) * d, tz + Math.cos(az) * Math.sin(pol) * d); camera.lookAt(controls.target); controls.update(); };
 function goUnder(place) { if (UNDER.busy) return; UNDER.busy = true; fly = null; controls.enabled = true; pace.busy = performance.now() + 3000;
   fadeTo(1, () => { if (!UNDER.grp) buildUnder(); if (!UNDER.on) surfaceShown(false); if (panel.style.display === 'block') $('pClose').click();
@@ -7035,7 +7074,7 @@ function loadGhosts(g, GMAX) { const P = UNDER.people, NNEAR = 8, H = 3, NL = St
       for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = a.getComponent ? a.getComponent(i, c) : [a.getX(i), a.getY(i), a.getZ(i), a.getW(i)][c]; ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
   const mk = (geo, mat, n, order) => { const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.renderOrder = order; m.layers.mask = P.body.layers.mask; g.add(m); return m; };   // on the same layer as the rest of the crew (the shaft's camera sees only its own)
   const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  files.forEach((f, mi) => ['', '-far'].forEach(sfx => L.load('models/' + f + sfx + '.glb', gltf => { const sc = gltf.scene, parts = {}; sc.updateMatrixWorld(true);
+  files.forEach((f, mi) => ['', '-far'].forEach(sfx => readProp(L, 'models/' + f + sfx + '.glb', gltf => { const sc = gltf.scene, parts = {}; sc.updateMatrixWorld(true);
     sc.traverse(o => { if (!o.isMesh) return; let n = o; while (n && n.name !== 'body' && n.name !== 'item') n = n.parent; if (n) parts[n.name] = { geo: toF32(o.geometry.clone()).applyMatrix4(o.matrixWorld), mat: o.material }; });
     if (!parts.body || !parts.item) { console.warn('ghost model incomplete: ' + f + sfx); return; }
     const bb = new THREE.Box3().setFromBufferAttribute(parts.body.geo.attributes.position).union(new THREE.Box3().setFromBufferAttribute(parts.item.geo.attributes.position)), s = H / (bb.max.y - bb.min.y);
@@ -7051,7 +7090,7 @@ function loadGhosts(g, GMAX) { const P = UNDER.people, NNEAR = 8, H = 3, NL = St
 // round: Brandon's delivery man and laundress at the Bone Sorter Mill, his two giants and the soldier in the Breakline Trenches. A close copy near the eye, a light one beyond
 const SGH = { list: [], kinds: {}, on: false }; window.__sgh = SGH;   // (for testing from the console)
 function surfGhost(kind, H, path, farD) { SGH.list.push({ kind, H, path, farD: farD || H * 45, g: null }); if (!SGH.kinds[kind]) { const K = SGH.kinds[kind] = { near: null, far: null };
-    for (const sfx of ['', '-far']) laterGL.load('models/ghost-' + kind + sfx + '.glb', gltf => { K[sfx ? 'far' : 'near'] = sghPrep(gltf); sghBuild(); }, undefined, () => console.warn('surface ghost not loaded: ' + kind + sfx)); } }
+    for (const sfx of ['', '-far']) readProp(laterGL, 'models/ghost-' + kind + sfx + '.glb', gltf => { K[sfx ? 'far' : 'near'] = sghPrep(gltf); sghBuild(); }, undefined, () => console.warn('surface ghost not loaded: ' + kind + sfx)); } }
 function sghPrep(gltf) { const NL = String.fromCharCode(10), parts = {}; gltf.scene.updateMatrixWorld(true);
   const toF32 = ge => { for (const k of Object.keys(ge.attributes)) { const a = ge.attributes[k]; if (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute) continue; const f = new Float32Array(a.count * a.itemSize);
       for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
@@ -7068,11 +7107,12 @@ function sghPrep(gltf) { const NL = String.fromCharCode(10), parts = {}; gltf.sc
     '  vec3 col = mix(base * vec3(0.95, 1.1, 1.3), vec3(0.7, 1.0, 1.0), 0.22) + vec3(0.35, 0.85, 1.0) * fr * 1.3;',
     '  float a = (0.34 + 0.6 * fr) * smoothstep(0.0, 0.32, vH) * (0.9 + 0.1 * sin(uTime * 3.0 + vH * 20.0)); gl_FragColor = vec4(col, a); }'].join(NL);
   const bm = parts.body.mat, hasMap = !!bm.map;
+  parts.body.geo.computeBoundingSphere(); parts.body.geo.boundingSphere.radius += .32; // shader sway is at most hypot(.24, .20) in model space
   const out = { body: parts.body.geo, depth: new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }', uniforms: { uTime: U.uTime }, colorWrite: false, depthWrite: true, transparent: true, vertexColors: !hasMap }),
     color: new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { uTime: U.uTime, map: { value: bm.map || null }, uHasMap: { value: hasMap ? 1 : 0 } }, transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, fog: false, vertexColors: !hasMap }) };
   if (parts.item) { const im = parts.item.mat.clone(); im.metalness = 0; im.roughness = .8; out.item = parts.item.geo; out.itemMat = im; } return out; }
 function sghBuild() { for (const e of SGH.list) { if (e.g) continue; const K = SGH.kinds[e.kind]; if (!K.near || !K.far) continue; const g0 = new THREE.Group(); e.lv = [];
-    for (const L of [K.near, K.far]) { const sg = new THREE.Group(), d = new THREE.Mesh(L.body, L.depth), c = new THREE.Mesh(L.body, L.color); d.renderOrder = 1; c.renderOrder = 2; sg.add(d, c); if (L.item) sg.add(new THREE.Mesh(L.item, L.itemMat)); sg.traverse(o => { o.raycast = () => {}; o.frustumCulled = false; }); g0.add(sg); e.lv.push(sg); }
+    for (const L of [K.near, K.far]) { const sg = new THREE.Group(), d = new THREE.Mesh(L.body, L.depth), c = new THREE.Mesh(L.body, L.color); d.renderOrder = 1; c.renderOrder = 2; sg.add(d, c); if (L.item) sg.add(new THREE.Mesh(L.item, L.itemMat)); sg.traverse(o => { o.raycast = () => {}; }); g0.add(sg); e.lv.push(sg); }
     g0.scale.setScalar(e.H / 3); scene.add(g0); e.g = g0; }
   if (!SGH.on) { SGH.on = true; const o = {}; anim.push(t => { for (const e of SGH.list) { if (!e.g) continue; e.path(t, o); e.g.position.set(o.x, o.y, o.z); e.g.rotation.y = Math.atan2(-o.fz, o.fx);
       const near = camera.position.distanceTo(e.g.position) < e.farD; e.lv[0].visible = near; e.lv[1].visible = !near; } }); } }
@@ -7105,7 +7145,7 @@ function loadCrew(g, NMAX) { const P = UNDER.people, NNEAR = 24, NL = String.fro
   const toF32 = ge => { for (const k of Object.keys(ge.attributes)) { const a = ge.attributes[k]; if (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute) continue; const f = new Float32Array(a.count * a.itemSize);
       for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
   const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  CREW_M.forEach((M, mi) => ['', '-far'].forEach(sfx => L.load('models/crew-' + M[0] + sfx + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
+  CREW_M.forEach((M, mi) => ['', '-far'].forEach(sfx => readProp(L, 'models/crew-' + M[0] + sfx + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
     gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = toF32(o.geometry.clone()).applyMatrix4(o.matrixWorld); src = o.material; } });
     geo.computeBoundingBox(); const bb = geo.boundingBox, s = 3 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s).rotateY(Math.PI / 2);   // standing on y = 0, three tall, facing +x
     let mid = 0; { const pa = geo.attributes.position, zs = []; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y > .12 && y < M[2]) zs.push(pa.getZ(i)); } let best = 1e9;   // where the legs part: the emptiest strip near the middle, low on the legs
@@ -7120,7 +7160,7 @@ function loadCrew(g, NMAX) { const P = UNDER.people, NNEAR = 24, NL = String.fro
 // Each model is made one tall, standing on y = 0 and facing +x; s is the height to draw it, the turns are applied z first, then y, then x
 const PLACED = {};
 function placeModel(name, x, y, z, s, rx = 0, ry = 0, rz = 0) { let P = PLACED[name]; if (!P) { P = PLACED[name] = { list: [] };
-    laterGL.load('models/' + name + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); src = o.material;
+    readProp(laterGL, 'models/' + name + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); src = o.material;
         for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
         geo.applyMatrix4(o.matrixWorld); } });
       geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, k = 1 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(k, k, k);
@@ -7133,11 +7173,23 @@ const skullAt = (x, y, z, s, ry = 0) => placeModel('skull', x, y, z, s, 0, ry, 0
 // A gallop: the front pair of legs reach and pull together, then the back pair drive, the body rocking on each bound and lifting clear between; the head nods, a tail sways.
 // A hop: crouched, then the back legs kick out straight behind as it springs and the front legs reach for the ground, the body pitching up and then down into the landing.
 // Each model is made one long (nose to tail along +x), standing on y = 0; len is its length on the map. place(t, o) sets o.x, o.y, o.z, o.fx, o.fz, o.ph (stride), o.air (0..1 through a hop, or -1)
-function beastLoad(file, len, kind, place, opt = {}) { laterGL.load('models/' + file + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
+const beastShapes = new Map();
+function beastShape(file, opt) {
+  const key = JSON.stringify([file, opt.yaw ?? Math.PI / 2, opt.plate || 0]);
+  if (!beastShapes.has(key)) {
+    const task = new Promise((resolve, reject) => laterGL.load('models/' + file + '.glb', resolve, undefined, reject)).then(gltf => {
+      let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
     gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); src = o.material; for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
     geo.rotateY(opt.yaw ?? Math.PI / 2); geo.computeBoundingBox(); let bb = geo.boundingBox; const s = 1 / (bb.max.x - bb.min.x); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); geo.computeBoundingBox(); bb = geo.boundingBox;
     if (opt.plate && geo.index) { const ix = geo.index.array, pa = geo.attributes.position, keep = []; for (let i = 0; i < ix.length; i += 3) { if (Math.max(pa.getY(ix[i]), pa.getY(ix[i + 1]), pa.getY(ix[i + 2])) < bb.max.y * opt.plate) continue; keep.push(ix[i], ix[i + 1], ix[i + 2]); } geo.setIndex(keep); }   // the ground plate it was modelled on, cut away
-    const h = bb.max.y, NL = String.fromCharCode(10), f = v => v.toFixed(4), uni = { uPh: { value: 0 }, uAir: { value: -1 }, uT: { value: 0 } };
+      return { geo, src, h: bb.max.y };
+    }).catch(error => { beastShapes.delete(key); throw error; });
+    beastShapes.set(key, task);
+  }
+  return beastShapes.get(key);
+}
+function beastLoad(file, len, kind, place, opt = {}) { beastShape(file, opt).then(({ geo, src, h }) => {
+    const NL = String.fromCharCode(10), f = v => v.toFixed(4), uni = { uPh: { value: 0 }, uAir: { value: -1 }, uT: { value: 0 } };
     let FX = .15, BX = -.26; if (kind === 'gallop4') { const pa = geo.attributes.position; let sf = 0, nf = 0, sb = 0, nb = 0; for (let i = 0; i < pa.count; i++) { if (pa.getY(i) > h * .12) continue; const x = pa.getX(i); if (x > 0) { sf += x; nf++; } else { sb += x; nb++; } } if (nf) FX = sf / nf; if (nb) BX = sb / nb; }   // where the hooves stand
     const gal = ['uniform float uPh, uAir, uT;', 'vec2 bRot(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }',
       'void jr(inout vec3 p, inout vec3 n, vec2 c, float a){ p.xy = bRot(p.xy - c, a) + c; n.xy = bRot(n.xy, a); }',
@@ -7172,7 +7224,7 @@ function beastLoad(file, len, kind, place, opt = {}) { laterGL.load('models/' + 
     const mat = new THREE.MeshStandardMaterial({ map: src.map || null, normalMap: src.normalMap || null, roughness: .8, vertexColors: !src.map });
     mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, uni); sh.vertexShader = gal + NL + sh.vertexShader.replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(normal); vec3 bP = bMove(vec3(position), objectNormal);' + NL + '#ifdef USE_TANGENT' + NL + 'vec3 objectTangent = vec3(tangent.xyz);' + NL + '#endif').replace('#include <begin_vertex>', 'vec3 transformed = bP;'); }; mat.customProgramCacheKey = () => 'beast-' + file + kind;
     const m = new THREE.Mesh(geo, mat), holder = new THREE.Group(); m.scale.setScalar(len); m.castShadow = true; m.frustumCulled = false; m.raycast = () => {}; holder.add(m); scene.add(holder); const o = {};
-    anim.push(t => { place(t, o); holder.position.set(o.x, o.y, o.z); holder.rotation.y = Math.atan2(-o.fz, o.fx); uni.uPh.value = o.ph || 0; uni.uAir.value = o.air === undefined ? -1 : o.air; uni.uT.value = t; }); }, undefined, () => console.warn('beast not loaded: ' + file)); }
+    anim.push(t => { place(t, o); holder.position.set(o.x, o.y, o.z); holder.rotation.y = Math.atan2(-o.fz, o.fx); uni.uPh.value = o.ph || 0; uni.uAir.value = o.air === undefined ? -1 : o.air; uni.uT.value = t; }); }).catch(() => console.warn('beast not loaded: ' + file)); }
 // round a ring at angle speed w (negative for the other way), galloping at hz strides a second
 function ringRun(cx, cz, R, y, w, a0, hz) { return (t, o) => { const a = a0 + t * w, sg = Math.sign(w); o.x = cx + Math.cos(a) * R; o.z = cz + Math.sin(a) * R; o.y = y; o.fx = -Math.sin(a) * sg; o.fz = Math.cos(a) * sg; o.ph = t * hz * 6.2832 + a0 * 3; }; }
 // hopping round a ring: a spring every 'per' seconds, in the air for 'airT' of them, covering 'step' of the ring and rising 'hgt' at the top

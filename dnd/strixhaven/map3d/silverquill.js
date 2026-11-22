@@ -95,7 +95,7 @@ export function installSilverquill(things, camera, renderer, anim) {
     if (!site && !street) continue;
     const slug=site?.slug || street.slug;
     const base=t.group, fallback=[...base.children], pieces=street?streetPieces(t):null;
-    const state={ far:null, close:null, loading:new Set(), retry:{}, effects:[] };
+    const state={ far:null, close:null, loading:new Set(), retry:{}, effects:[], lastNear:0, closeMaterials:new Set() };
     const range=site?Math.max(680,Math.min(1400,Math.max(site.bounds[2]-site.bounds[0],site.bounds[3]-site.bounds[1])*5.5)):850;
     const center=new THREE.Vector3(t.x,base.position.y+(site?.height||40)*.35,t.z);
     async function mount(far) {
@@ -103,10 +103,11 @@ export function installSilverquill(things, camera, renderer, anim) {
       if(state[tier]||state.loading.has(tier)||performance.now()<(state.retry[tier]||0))return;
       state.loading.add(tier);
       try {
-        const gltf=await asset(slug,far), root=new THREE.Group(), effects=[];
+        const owned=site && !street && !far;
+        const gltf=owned ? await loader.loadAsync('models/silverquill-v3/'+slug+'.glb?city=4') : await asset(slug,far), root=new THREE.Group(), effects=[];
         const placements=pieces||[{x:0,z:0,angle:0,sx:site.scale/base.scale.x,sz:(site.depthScale??site.scale)/base.scale.x}];
         for(const [i,p] of placements.entries()) {
-          const pivot=new THREE.Group(), model=gltf.scene.clone(true);
+          const pivot=new THREE.Group(), model=owned?gltf.scene:gltf.scene.clone(true);
           pivot.position.set(p.x,0,p.z);pivot.rotation.y=p.angle;pivot.scale.set(p.sx,p.sx,p.sz);
           pivot.add(model);root.add(pivot);model.animations=gltf.animations;
           model.traverse(o=>{
@@ -115,15 +116,15 @@ export function installSilverquill(things, camera, renderer, anim) {
           });
           if(!far){
             const fx=await prepareEffects(slug,model,renderer,p.sx);
-            if(fx.moving)effects.push({fx,phase:i*2.31});
+            if(owned||fx.moving)effects.push({fx,phase:i*2.31});
           }
         }
         root.name='Silverquill '+tier+' '+slug;
         const first=!state.far&&!state.close;
-        if(first){for(const o of fallback)base.remove(o);t.mats.length=0;}
+        if(first){for(const o of fallback)base.remove(o);fallback.length=0;t.mats.length=0;}
         base.add(root);state[tier]=root;
-        if(!far)state.effects=effects;
-        root.traverse(o=>{if(o.material?.emissive){o.material.userData.e0=o.material.emissive.clone();t.mats.push(o.material);}});
+        if(!far){state.effects=effects;state.lastNear=performance.now();}
+        root.traverse(o=>{if(o.material?.emissive){o.material.userData.e0=o.material.emissive.clone();t.mats.push(o.material);if(owned)state.closeMaterials.add(o.material);}});
         switchTier(camera.position.distanceTo(center));
         base.updateMatrixWorld(true);renderer.shadowMap.needsUpdate=true;
       }catch(e){state.retry[tier]=performance.now()+30000;console.warn('Silverquill '+slug+' '+tier,e);}
@@ -135,12 +136,33 @@ export function installSilverquill(things, camera, renderer, anim) {
       if(state.close)state.close.visible=near;
       if(state.far)state.far.visible=!near;
     }
+    function releaseClose() {
+      const root=state.close;
+      base.remove(root);
+      t.mats=t.mats.filter(m=>!state.closeMaterials.has(m));
+      state.closeMaterials.clear();
+      for(const {fx} of state.effects)fx.dispose();
+      state.effects=[];
+      const geometry=new Set(),materials=new Set(),textures=new Set();
+      root.traverse(o=>{
+        if(o.geometry)geometry.add(o.geometry);
+        if(o.material)for(const m of [].concat(o.material))materials.add(m);
+      });
+      for(const m of materials){for(const x of Object.values(m))if(x?.isTexture)textures.add(x);m.dispose();}
+      for(const g of geometry)g.dispose();
+      for(const tex of textures)tex.dispose();
+      state.close=null;
+    }
     mount(true);
     anim.push(time=>{
       const d=camera.position.distanceTo(center);
       if(!state.far)mount(true);
       if(d<range*1.2&&!state.close)mount(false);
       switchTier(d);
+      if(site&&!street&&state.close&&state.far){
+        if(d<range*2)state.lastNear=performance.now();
+        else if(performance.now()-state.lastNear>60000)releaseClose();
+      }
       if(state.close?.visible && base.visible)for(const {fx,phase} of state.effects)fx.update(time+phase);
     });
   }
@@ -180,33 +202,46 @@ export function installSilverquillHouses(houses, boxes, ground, scene, camera, r
       if(!ready&&tiers.every(v=>v.far)){
         for(const box of boxes){scene.remove(box);box.dispose();}
         ready=true;window.__sqHouses=houses.length;
+        if(driftways)installDriftways(driftways,houses,ground,renderer).catch(error=>console.warn('Silverquill Driftways',error));
       }
     }catch(e){retry.set(key,performance.now()+30000);console.warn('Silverquill houses '+houseTypes[i],e);}
     finally{pending.delete(key);}
   }
-  if(driftways)installDriftways(driftways,houses,ground,renderer).catch(error=>console.warn('Silverquill Driftways',error));
   houseTypes.forEach((_,i)=>load(i,true));
   const pose=new THREE.Object3D(),origin=new THREE.Vector3();
+  const memberships=lots.map(list=>new Uint8Array(list.length));
   anim.push(()=>{
     if(!ready){houseTypes.forEach((_,i)=>load(i,true));return;}
     if(!dirty&&camera.position.distanceToSquared(previous)<2&&rotation.angleTo(camera.quaternion)<.008)return;
     previous.copy(camera.position);rotation.copy(camera.quaternion);dirty=false;
     camera.updateMatrixWorld();frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    let changed=false;
     lots.forEach((list,i)=>{
+      const members=memberships[i];let rebuild=false;
+      for(let j=0;j<list.length;j++){
+        const lot=list[j];origin.set(lot.x,ground,lot.z);ball.center.copy(origin);ball.center.y+=19;ball.radius=44;
+        let level=0;
+        if(frustum.intersectsSphere(ball)){
+          const near=camera.position.distanceToSquared(ball.center)<780*780;
+          if(near&&!tiers[i].close)load(i,false);
+          level=near&&tiers[i].close?2:1;
+        }
+        if(level!==members[j]){members[j]=level;rebuild=true;}
+      }
+      if(!rebuild)return;
+      changed=true;
       const counts={far:0,close:0};
-      for(const lot of list){
-        origin.set(lot.x,ground,lot.z);ball.center.copy(origin);ball.center.y+=19;ball.radius=44;
-        if(!frustum.intersectsSphere(ball))continue;
-        const near=camera.position.distanceToSquared(ball.center)<780*780;
-        if(near&&!tiers[i].close)load(i,false);
-        const key=near&&tiers[i].close?'close':'far',tier=tiers[i][key];
+      for(let j=0;j<list.length;j++){
+        if(!members[j])continue;
+        const lot=list[j],key=members[j]===2?'close':'far',tier=tiers[i][key];
+        origin.set(lot.x,ground,lot.z);
         const scale=houseSpan(lot)/tier.width;
         pose.position.copy(origin);pose.rotation.y=lot.face;pose.scale.setScalar(scale);pose.updateMatrix();
         for(const part of tier.parts)part.batch.setMatrixAt(counts[key],matrix.multiplyMatrices(pose.matrix,part.local));counts[key]++;
       }
       for(const [key,tier] of Object.entries(tiers[i]))for(const {batch} of tier.parts){batch.count=counts[key];batch.instanceMatrix.needsUpdate=true;}
     });
-    renderer.shadowMap.needsUpdate=true;
+    if(changed)renderer.shadowMap.needsUpdate=true;
   });
 }
 
@@ -214,20 +249,12 @@ export function installSilverquillHouses(houses, boxes, ground, scene, camera, r
 async function installDriftways(thing, houses, ground, renderer) {
   const lots = houses.filter(h => !h.dark && Math.hypot(h.x-thing.x,h.z-thing.z)<106)
     .sort((a,b)=>Math.hypot(a.x-thing.x,a.z-thing.z)-Math.hypot(b.x-thing.x,b.z-thing.z)).slice(0,19);
-  const templates = await Promise.all([asset('angelic-tower',false),asset('angelic-cathedral',false)]);
-  const ray = new THREE.Raycaster(), down = new THREE.Vector3(0,-1,0);
+  // Roof-space attachment points measured on the city=4 close meshes,
+  // with the same off-center downward ray used to lay out these strands.
+  const roofHits=[[.5463867192,4.5420590863,1.11437744],[.811765136,6.033203125,1.02930664]];
   const anchors = lots.map(lot => {
-    const template = templates[lot.tall?0:1].scene;
-    template.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(template), size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
-    const frame=houseFrames[lot.tall?2:3];
-    const scale=houseSpan(lot)/frame.width;
-    // Pick off-center roof pitches, so cables tie into the roof skin.
-    const local = new THREE.Vector3(center.x+size.x*.12,box.max.y+2,center.z+size.z*.08);
-    ray.set(local,down);
-    const hit=ray.intersectObject(template,true)[0];
-    if(!hit)return null;
-    const v=hit.point.clone().sub(new THREE.Vector3(frame.x,0,frame.z)).multiplyScalar(scale);
+    const frame=houseFrames[lot.tall?2:3], scale=houseSpan(lot)/frame.width;
+    const v=new THREE.Vector3().fromArray(roofHits[lot.tall?0:1]).sub(new THREE.Vector3(frame.x,0,frame.z)).multiplyScalar(scale);
     v.applyAxisAngle(new THREE.Vector3(0,1,0),lot.face);
     return {lot, point:v.add(new THREE.Vector3(lot.x-thing.x,ground-thing.group.position.y,lot.z-thing.z))};
   }).filter(Boolean);
