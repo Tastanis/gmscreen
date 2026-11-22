@@ -162,6 +162,8 @@ function streetPieces(t) {
 }
 
 export function installSilverquill(things, camera, renderer, anim) {
+  const view=new THREE.Frustum(), projection=new THREE.Matrix4();
+  anim.push(()=>view.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse)));
   for (const t of things) {
     const site=sites[t.name], street=t.group.userData.silverquillStreet;
     if (!site && !street) continue;
@@ -170,6 +172,8 @@ export function installSilverquill(things, camera, renderer, anim) {
     const state={ far:null, close:null, loading:new Set(), retry:{}, effects:[], lastNear:0, closeMaterials:new Set() };
     const range=site?Math.max(680,Math.min(1400,Math.max(site.bounds[2]-site.bounds[0],site.bounds[3]-site.bounds[1])*5.5)):850;
     const center=new THREE.Vector3(t.x,base.position.y+(site?.height||40)*.35,t.z);
+    const vicinity=site && !street ? new THREE.Sphere(center,Math.hypot(
+      Math.max(Math.abs(site.bounds[0]),site.bounds[2]),Math.max(Math.abs(site.bounds[1]),site.bounds[3]),site.height)+35) : null;
     async function mount(far) {
       const tier=far?'far':'close';
       if(state[tier]||state.loading.has(tier)||performance.now()<(state.retry[tier]||0))return;
@@ -195,6 +199,8 @@ export function installSilverquill(things, camera, renderer, anim) {
         const first=!state.far&&!state.close;
         if(first){for(const o of fallback)base.remove(o);fallback.length=0;t.mats.length=0;}
         base.add(root);state[tier]=root;
+        base.updateWorldMatrix(true,true);
+        root.userData.pickBounds=new THREE.Box3().setFromObject(root).expandByScalar(18);
         if(!far){state.effects=effects;state.lastNear=performance.now();}
         root.traverse(o=>{if(o.material?.emissive){o.material.userData.e0=o.material.emissive.clone();t.mats.push(o.material);if(owned)state.closeMaterials.add(o.material);}});
         switchTier(camera.position.distanceTo(center));
@@ -207,6 +213,7 @@ export function installSilverquill(things, camera, renderer, anim) {
       if(state.close&&state.close.visible!==near)renderer.shadowMap.needsUpdate=true;
       if(state.close)state.close.visible=near;
       if(state.far)state.far.visible=!near;
+      base.userData.pickTier=near?state.close:state.far;
     }
     function releaseClose() {
       const root=state.close;
@@ -229,7 +236,7 @@ export function installSilverquill(things, camera, renderer, anim) {
     anim.push(time=>{
       const d=camera.position.distanceTo(center);
       if(!state.far)mount(true);
-      if(d<range*1.2&&!state.close)mount(false);
+      if(d<range*1.2&&!state.close&&base.layers.test(camera.layers)&&(!vicinity||view.intersectsSphere(vicinity)))mount(false);
       switchTier(d);
       if(site&&!street&&state.close&&state.far){
         if(d<range*2)state.lastNear=performance.now();

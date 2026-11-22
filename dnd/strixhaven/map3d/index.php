@@ -89,6 +89,7 @@ require_once '../../includes/strix-nav.php';
 "; ?>
 } }
 </script>
+<link rel="stylesheet" href="campus-scrolls.css">
 </head>
 <body>
 <?php renderStrixNav('map'); ?>
@@ -139,7 +140,7 @@ require_once '../../includes/strix-nav.php';
   <div id="pathTools"><button data-tool="marker">Destination</button><button data-tool="draw">Draw</button><button id="pathNew">New line</button><button data-tool="delete">Delete</button><button data-tool="terrain" class="gm-only">Terrain</button>
     <span id="pathDiff"><button data-diff="normal">Normal</button><button data-diff="fast">Easy</button><button data-diff="yellow">Yellow</button><button data-diff="red">Red</button><span class="sep">Brush</span><button data-brush="0">Small</button><button data-brush="1">Medium</button><button data-brush="2">Large</button></span>
     <button id="pathUndo">Undo</button><button id="pathClear">Clear all</button><span id="pathTotal"></span></div>
-  <div id="barRow"><button id="pathToggle">Player path</button><button id="tpToggle" title="Show the teleportation circles">Circles</button><button id="underToggle" title="See what lies under the campus">Under</button></div>
+  <div id="barRow"><button id="scrollLauncher" aria-controls="scrollReader" aria-expanded="false">Campus scrolls</button><button id="pathToggle">Player path</button><button id="tpToggle" title="Show the teleportation circles">Circles</button><button id="underToggle" title="See what lies under the campus">Under</button></div>
 </div>
 <div id="imgBig"><button class="nav" id="imgBigPrev" title="Previous image">&lsaquo;</button><img id="imgBigImg" alt=""><button class="nav" id="imgBigNext" title="Next image">&rsaquo;</button><div id="imgBigCount"></div></div>
 <div id="tip"></div>
@@ -152,7 +153,9 @@ require_once '../../includes/strix-nav.php';
     l.textContent = 'Error: ' + (e.message || 'failed to load a script (needs internet for the 3D library)');
   });
 </script>
+<section id="scrollReader" aria-labelledby="scrollHeading" hidden><header><button type="button" class="scroll-back">‹ All campuses</button><button type="button" class="scroll-close" aria-label="Close scroll">×</button></header><h2 id="scrollHeading">Campus scrolls</h2><div class="scroll-entries"></div></section>
 <script type="module">
+import {installCampusTable,tableMargin} from './campus-scrolls.js';
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -161,7 +164,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, courtyardRoads, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=9';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, courtyardRoads, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=10';
 import { installVellumGuard } from './vellum-guard.js?motion=7';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
@@ -759,7 +762,13 @@ renderer.info.autoReset = false;
 canvas.addEventListener('webglcontextrestored', () => location.reload());   // the page lets go of its copies of the ground once the card has them, so a card that has lost everything is answered by loading again
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 5, 90000);
-const HOME_POS = new THREE.Vector3(0, 3300 * S, 3000 * S), HOME_TGT = new THREE.Vector3(0, 15 * S, -80 * S);
+function tableOverviewPosition() {
+  const hw=MAP_W/2+tableMargin.x, hd=MAP_D/2+tableMargin.z, tilt=.38;
+  const tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  const distance=1.035*(Math.max(hd*Math.cos(tilt),hw/camera.aspect)/tangent+hd*Math.sin(tilt));
+  return new THREE.Vector3(0,26+distance*Math.cos(tilt),distance*Math.sin(tilt));
+}
+const HOME_POS=tableOverviewPosition(), HOME_TGT=new THREE.Vector3(0,26,0);
 camera.position.copy(HOME_POS);
 
 const SUN = new THREE.Vector3(-0.55, 0.62, -0.42).normalize();
@@ -1315,6 +1324,12 @@ function mergeKids(g) { const groups = new Map();
   for (const m of [...g.children]) { if (!m.isMesh || m.isInstancedMesh || m.userData.keepSep) continue; const key = m.material.uuid; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(m); }
   for (const [, list] of groups) { if (list.length < 2) continue; const geos = list.map(m => { m.updateMatrix(); const ge = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix); for (const k of Object.keys(ge.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') ge.deleteAttribute(k); return ge; });
     if (geos.some(ge => !ge.attributes.uv)) continue; for (const m of list) g.remove(m); g.add(new THREE.Mesh(mergeGeometries(geos), list[0].material)); } }
+let campusSection='Central Campus';
+const landmarkCampus={
+  'Torus Hall':'Quandrix','Grandloft Hall':'Silverquill','Kollema Hall':'Lorehold','Widdershins Hall':'Witherbloom',
+  'Effigy Row':'Lorehold','Arithmodrome':'Quandrix','Cultivarium':'Quandrix','Esix Fractal Bloom':'Quandrix',
+  'Rose Stage':'Silverquill','Dramatorium':'Silverquill','Wiltroot Hall':'Witherbloom','Conjurot Hall':'Prismari','Prismari Bridge':'Prismari'
+};
 function addThing(name, icon, at, k, foot, build, o = {}) {
   const g = new THREE.Group(); g.position.set(at[0], o.y ?? heightAt(at[0], at[1]), at[1]); g.scale.setScalar(k); if (o.ry) g.rotation.y = o.ry;
   build(g);
@@ -1326,7 +1341,7 @@ function addThing(name, icon, at, k, foot, build, o = {}) {
       if (geos.some(ge => !ge.attributes.uv)) continue;
       for (const m of list) g.remove(m); const mm = new THREE.Mesh(mergeGeometries(geos), mat); mm.userData.noShadow = ns; g.add(mm); } }
   weights(at[0] / S, at[1] / S); texRegion = 0; for (let i = 1; i < 9; i++) if (WT[i] > WT[texRegion]) texRegion = i;
-  const t = { id: thingSeq++, name, icon, group: g, x: at[0], z: at[1], labelY: (o.y ?? g.position.y) + (o.top ?? 40) * k, hexes: [], mats: [], view: o.view ?? 520 };
+  const t = { id: thingSeq++, name, campus: landmarkCampus[name] || campusSection, icon, group: g, x: at[0], z: at[1], labelY: (o.y ?? g.position.y) + (o.top ?? 40) * k, hexes: [], mats: [], view: o.view ?? 520 };
   g.traverse(m => { if (m.isMesh) { m.material = texAuto(m.material.clone()); m.material.userData.e0 = m.material.emissive ? m.material.emissive.clone() : null; t.mats.push(m.material); m.castShadow = !m.userData.noShadow; m.receiveShadow = true; } });
   // every hex whose centre falls inside the footprint is linked to this thing
   if (o.hexes) { for (const [q, r] of o.hexes) { const key = hexKey(q, r); if (!hexOwner.has(key) && t.hexes.length < NH) { hexOwner.set(key, t); t.hexes.push(hexAt(q, r)); } }
@@ -2084,6 +2099,7 @@ function buildProps() {
     }, { y: wy, top: 215, view: 560 });
     for (let i = 0; i < 9; i++) { const a = i * 1.3; lanternPts.push([WL[0] + Math.cos(a) * 46, wy + 30 + i * 15, WL[1] + Math.sin(a) * 46, { c: [1.2, 2.4, .8], size: 7, drift: 4, speed: .5 }]); } }
 
+  campusSection='Prismari';
   // Gravity Orchard (Prismari, live-map hex 8,49): 1 hex. A crater where mossy boulders hang in the air like fruit and stack into columns; falls run down its walls to a glowing pool
   { const GW = Wp(GORCH); let gy = 1e9; for (let i = 0; i < 8; i++) gy = Math.min(gy, heightAt(GW[0] + Math.cos(i * .785) * 84, GW[1] + Math.sin(i * .785) * 84)); const fy = heightAt(GW[0], GW[1]) - gy;   // gy: the ground round the rim; fy: how far below it the floor of the shaft lies
     addThing('Gravity Orchard', '🪨', GW, 1, 30, g => { const k = kit(g), rock = solid(0x5d544b, .95, { flatShading: true }), moss = solid(0x4f7d36, 1), glow = glowM(0x5fffd0, 2.4);
@@ -2749,6 +2765,7 @@ function buildProps() {
       for (const [x, z] of [[-24, 30], [36, -30], [-40, -40], [-50, 6]]) { const y = gy(x, z); k.B(.6, 10, .6, timber, x, y + 5, z); NS(k.S(.9, fire, x, y + 10.6, z)); lanternPts.push([MW[0] + x, y + 11, MW[1] + z, { c: [2.6, 1.4, .4], size: 9, drift: .3, speed: .5 }]); }   // work lamps on the summit
     }, { y: 0, hexes: HX, top: my + 110, view: 700 }); }
 
+  campusSection='Witherbloom';
   // The Thornbriar (five hexes in the south-west corner of Witherbloom): one enormous thorn briar, black and barbed. The Thornbriar Den - an old lecture hall the briar has swallowed - is inside it
   { const HX = [[15, 45], [16, 44], [16, 45], [15, 46], [16, 46]], P = HX.map(([q, r]) => hexW(q, r)), cen = [P.reduce((a, p) => a + p[0], 0) / 5, P.reduce((a, p) => a + p[1], 0) / 5], r2 = mulberry32(4545), parts = [];
     // It is grown the way a briar grows. From sixteen crowns in the ground rise great canes, thick as tree trunks at the root and tapering to a whip: each climbs, arches over and comes down again.
@@ -2822,6 +2839,7 @@ function buildProps() {
       gp.traverse(m => { m.userData.noShadow = true; m.raycast = () => {}; m.frustumCulled = false; }); g.add(gp); const ph = lr() * 6.3, rr = 6 + 14 * lr(), sp = .12 + .2 * lr();
       anim.push(t => { const a = t * sp + ph; gp.position.set(x + Math.cos(a) * rr, y + 2 + Math.sin(t * .7 + ph) * 1.6, z + Math.sin(a * 1.3) * rr); gp.rotation.y = Math.atan2(-Math.cos(a * 1.3) * 1.3, -Math.sin(a)); }); };
 
+  campusSection='Lorehold';
     // Keystone Wall (2,28): cut into the back of the mountain - a sheer wall of seven painted panels with a keystone socket over each, the first three keystones set and glowing
     { const c = Wp(KEYW), y0 = 110 * S, ry0 = Math.atan2(.45, -.89);
       const mural = canvasTex(1024, 320, (cx, w, hgt) => { cx.fillStyle = '#6b5238'; cx.fillRect(0, 0, w, hgt); const pw = w / 7, sky = [['#3a0d08', '#e0621c'], ['#7fb6dc', '#2a7f9a'], ['#f0d48a', '#d09a4a'], ['#9fc48a', '#2f5a2c'], ['#cfe2f0', '#8fa8c0'], ['#b8a8e0', '#e8c8d8'], ['#f0a050', '#f8e0a0']];
@@ -3257,6 +3275,7 @@ function buildProps() {
           ' vec3 w = vec3(uC.x + rd.x * rr + hd.x * p.x - hd.y * p.z, aH.w + abs(sin(uTime * 6.0 + aG.y)) * 0.5 + p.y, uC.z + rd.y * rr + hd.y * p.x + hd.x * p.z); vec3 nn = vec3(hd.x * normal.x - hd.y * normal.z, normal.y, hd.y * normal.x + hd.x * normal.z); vL = 0.5 + 0.7 * max(dot(nn, vec3(-0.59, 0.66, -0.45)), 0.0); gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0); }',
         fragmentShader: 'uniform vec3 uCol; varying float vL; void main(){ gl_FragColor = vec4(uCol * vL, 1.0); }' })); m.frustumCulled = false; m.raycast = () => {}; scene.add(m); };
 
+  campusSection='Quandrix';
     // Deathfall (three hexes): rune-cut cubes hang in the air round a tall pillar, each burning with a different figure, set out like a platformer's course - each a jump from the last.
     // Every ten seconds two of them trade places; every minute the whole course flies apart and reforms as a different one
     { const HX = [[9, 16], [10, 16], [9, 17]], c = cenW(HX), y0 = heightAt(c[0], c[1]), cubes = [], grn = glowM(0x58ffa8, 2.6), NC = 16;
@@ -3621,6 +3640,7 @@ function buildProps() {
         if (o.h0 && o.models) sqSegs.push({ A, B, w: o.w, dark: o.models === 'dark' });   // Meshy houses go along it later, once the places' footprints are known (see the city below)
         for (let d0 = 10; d0 < L; d0 += o.gap || 24) for (const sd of [-1, 1]) { const x = A[0] + ux * d0 + nx * sd * (o.w / 2 - 1.4), z = A[1] + uz * d0 + nz * sd * (o.w / 2 - 1.4); M(g, new THREE.CylinderGeometry(.35, .5, 10, 6), o.post, x - c[0], 5, z - c[1]); NS(M(g, new THREE.SphereGeometry(1.05, 8, 6), o.lit, x - c[0], 10.6, z - c[1])); if (o.lamps) o.lamps.push([x, z]); } } };
 
+  campusSection='Silverquill';
     // Vellum Gargoyle Gate (28,18 27,19 28,19): the one way through the wall - two towers and a pointed arch - and beside it, standing guard outside, a gargoyle of layered, rune-covered parchment
     { const GW = [SQGATE[0] * S, SQGATE[1] * S], out = [Math.cos(SQGATE[2]), Math.sin(SQGATE[2])], ry0 = -Math.atan2(out[1], out[0]);
       addThing('Vellum Gargoyle Gate', '🦇', GW, 1, 30, g => markSilverquillLot(g, 'Vellum Gargoyle Gate'), { y: GY, ry: ry0 + Math.PI / 2, hexes: [[28, 18], [28, 19]], top: 120, view: 560 });
@@ -3990,6 +4010,7 @@ function buildProps() {
           rod(g, timber, [x - c[0], Math.min(heightAt(x, z), 0) - 5, z - c[1]], [x - c[0] + (wr() - .5) * 1.2, y + (tall ? o.post : 3.2), z - c[1] + (wr() - .5) * 1.2], .7, .5); if (tall && o.lamp) o.lamp(g, x - c[0], y + o.post, z - c[1], x, z, sd, ux, uz); }
         if (o.rope) for (const sd of [-1, 1]) for (let d = 3; d + 13 < L; d += 13) { const p = t => [A[0] + ux * (d + 13 * t) + nx * sd * (o.w / 2 - .4) - c[0], y + 3 - 1.2 * Math.sin(Math.PI * t), A[1] + uz * (d + 13 * t) + nz * sd * (o.w / 2 - .4) - c[1]]; for (let q = 0; q < 3; q++) rod(g, rope, p(q / 3), p((q + 1) / 3), .16, .16, 4); } } };
 
+  campusSection='Witherbloom';
     // Greenward Conservatory (22,32): a glasshouse whose frame is grown, not built - living trunks down both sides, their boughs trained over into arches, glass between them, leaf breaking out along the ridge and ivy creeping over the panes.
     // Mossy beds, a pool, a small tree and hanging baskets inside; outside, a planted border, cold frames, urns by the door and stacked pots
     { const c = Wp(GREENW), y0 = 3.4 * S;
@@ -4360,6 +4381,7 @@ function buildProps() {
     { const c = Wp(COLDW), cy = heightAt(c[0], c[1]), gh = (x, z) => heightAt(c[0] + x, c[1] + z) - cy; addThing('Cold Anchor Stones', '🗿', c, 1, 30, g => anchorStone(g, gh), { y: cy, hexes: [[20, 44]], top: 84, view: 360 }); coldField(c[0], cy, c[1]);
       lanternPts.push([c[0], cy + 36, c[1], { c: [.9, 1.8, 2.8], size: 30, drift: .2, speed: .5 }]); }
 
+  campusSection='Central Campus';
     // ---------------- the last two places on the central campus ----------------
     // Condemned building (22,27): a domed hall shut up and left. A third of the dome has come in - jagged at the break, beams sticking out of the hole, the rubble lying where it fell; ivy up one side, scaffolding somebody started and gave up on up the other,
     // a column down, the door and windows boarded, a paling round it and a warning board on the gate
@@ -4812,7 +4834,7 @@ function updateSmoke(dt) { if (smokeT) smokeT.value += dt; }
 const controls = new MapControls(camera, canvas);
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null };   // the right button pans, but by the handlers below, not by the controls' own
 controls.enableDamping = true; controls.dampingFactor = .09; controls.screenSpacePanning = false; controls.zoomToCursor = true;
-controls.minDistance = 90; controls.maxDistance = 6500 * S; controls.maxPolarAngle = 1.42; controls.zoomSpeed = 1.3;
+controls.minDistance = 90; controls.maxDistance = HOME_POS.length()*1.08; controls.maxPolarAngle = 1.42; controls.zoomSpeed = 1.3;
 controls.target.copy(HOME_TGT);
 // Dragging with the right button takes hold of the ground: the spot that was under the cursor when the button went down stays under it as the mouse moves, however far the view is tilted.
 // (The controls' own pan moves the same distance for a given drag whatever the tilt, so looking along the ground the map slid away under the cursor and a full drag went almost nowhere.)
@@ -4825,7 +4847,7 @@ const grabV = new THREE.Vector3();
 addEventListener('pointermove', e => { if (!grab.on || e.pointerId !== grab.id) return; if (!(e.buttons & 2) || !controls.enabled) { grab.on = false; return; }
   groundUnder(e.clientX, e.clientY, grab.y, grabV); const far = camera.position.distanceTo(controls.target) * 4;
   let dx = clamp(grab.p.x - grabV.x, -far, far), dz = clamp(grab.p.z - grabV.z, -far, far);
-  dx = clamp(controls.target.x + dx, -MAP_W / 2, MAP_W / 2) - controls.target.x; dz = clamp(controls.target.z + dz, -MAP_D / 2, MAP_D / 2) - controls.target.z;   // the view stops at the map's edge
+  dx = clamp(controls.target.x + dx, -MAP_W/2-(UNDER.on?0:tableMargin.x), MAP_W/2+(UNDER.on?0:tableMargin.x)) - controls.target.x; dz = clamp(controls.target.z + dz, -MAP_D/2-(UNDER.on?0:tableMargin.z), MAP_D/2+(UNDER.on?0:tableMargin.z)) - controls.target.z;   // the view stops at the map's edge
   camera.position.x += dx; camera.position.z += dz; controls.target.x += dx; controls.target.z += dz; camera.updateMatrixWorld(); });
 addEventListener('pointerup', e => { if (e.pointerId === grab.id) grab.on = false; });
 addEventListener('pointercancel', e => { if (e.pointerId === grab.id) grab.on = false; });
@@ -4852,9 +4874,18 @@ function pick(cx, cy) {
   return null;
 }
 // what is under the cursor: a thing (its model, or any hex linked to it), else a plain hex
+let campusTable=null;
+const pickRoots=[];
 function targetAt(cx, cy) {
   if (UNDER.on) return underTarget(cx, cy);
-  const p = pick(cx, cy), hits = ray.intersectObjects(thingRoots, true); let best = p ? p.dist : 1e9, res = null;
+  const p=pick(cx,cy), scroll=!PS.on && campusTable?.hit(ray,p?.dist??Infinity);
+  if(scroll)return {scroll};
+  pickRoots.length=0;
+  for(const root of thingRoots){
+    const tier=root.userData.pickTier;
+    if(!tier || ray.ray.intersectsBox(tier.userData.pickBounds))pickRoots.push(tier||root);
+  }
+  const hits=ray.intersectObjects(pickRoots,true); let best = p ? p.dist : 1e9, res = null;
   if (hits.length && hits[0].distance < best) { let o = hits[0].object; while (o && !o.userData.thing) o = o.parent; if (o) { best = hits[0].distance; res = { thing: o.userData.thing }; } }
   const now = performance.now(); for (const mv of movers) { if (!mv.box || now - mv.at > 150) { mv.box = (mv.box || new THREE.Box3()).setFromObject(mv.o); mv.at = now; }                // a moving thing is taken by the box round it, refreshed a few times a second
     const hp = ray.ray.intersectBox(mv.box, moverV); if (hp) { const dd = hp.distanceTo(ray.ray.origin); if (dd < best) { const tg = mv.target(); if (tg) { if (!tg.thing) tg.mover = mv.o; best = dd; res = tg; } } } }
@@ -4864,7 +4895,7 @@ function targetAt(cx, cy) {
   return own ? { thing: own } : { hex: hx };
 }
 const moverV = new THREE.Vector3();
-const keyOf = t => !t ? '' : t.thing ? 't' + t.thing.id : 'h' + hexKey(t.hex.q, t.hex.r);
+const keyOf = t => !t ? '' : t.scroll ? 'scroll:'+t.scroll.book.college.name+':'+(t.scroll.item?.thing.id??'') : t.thing ? 't' + t.thing.id : 'h' + hexKey(t.hex.q, t.hex.r);
 const hexesOf = t => t.thing ? t.thing.hexes : [t.hex];
 const setList = (arr, n, list) => { const c = Math.min(list.length, NH); for (let i = 0; i < c; i++) arr.value[i].set(list[i].sx, list[i].sy); n.value = c; };
 const HL = new THREE.Color(0x3a2a0a);
@@ -4874,8 +4905,10 @@ let hover = null, hoverKey = '', selected = null;
 function setHover(t) {
   const k = keyOf(t); if (k === hoverKey) return;
   if (hover && hover.thing) glow(hover.thing, false);
+  campusTable?.hover(t?.scroll);
   hover = t; hoverKey = k;
   if (!t) { U.uHovN.value = 0; tip.style.display = 'none'; canvas.style.cursor = ''; return; }
+  if(t.scroll){U.uHovN.value=0;tip.textContent=t.scroll.item?.label||t.scroll.book.college.name;tip.style.visibility='';tip.style.display='block';canvas.style.cursor='pointer';return;}
   setList(U.uHov, U.uHovN, hexesOf(t)); if (t.thing) glow(t.thing, true);
   tip.textContent = t.thing ? (role.gm ? t.thing.name : `Hex ${t.thing.hexes[0].q},${t.thing.hexes[0].r}`) : t.label && (role.gm || t.hex.q > 50) ? (role.gm ? t.label : '') : `Hex ${t.hex.q},${t.hex.r}`; tip.style.visibility = tip.textContent ? '' : 'hidden';
   tip.style.display = 'block'; canvas.style.cursor = 'pointer';
@@ -7041,6 +7074,7 @@ function renderPortals() { let best = null, bd = 700; for (const o of UNDER.door
   const u = best.open.material.uniforms; u.map.value = UNDER.portal.texture; u.res.value.copy(pSz); u.on.value = 1; }
 
 function surfaceShown(on) {
+  if(!on)campusTable?.close();
   if (!on) { UNDER.saved = { mask: camera.layers.mask, sun: sun.intensity, hemi: hemi.intensity, fog: scene.fog.color.getHex(), bg: scene.background };
     camera.layers.set(3); UNDER.grp.visible = true; sun.intensity = .5; hemi.intensity = .7; scene.fog.color.set(0x0e0a08); scene.background = new THREE.Color(0x050407); }
   else if (UNDER.saved) { camera.layers.mask = UNDER.saved.mask; UNDER.grp.visible = false; sun.intensity = UNDER.saved.sun; hemi.intensity = UNDER.saved.hemi; scene.fog.color.setHex(UNDER.saved.fog); scene.background = UNDER.saved.bg; UNDER.saved = null; renderer.shadowMap.needsUpdate = true; }
@@ -7070,7 +7104,7 @@ function exitWorld() { const W = UNDER.world; if (!W || fly) return; const o = W
   const back = () => { fly = { t: 0, dur: .7, p0: camera.position.clone(), p1: Wl(0, 2, 2), t0: controls.target.clone(), t1: Wl(0, 0, -60), done: swap }; controls.enabled = false; };   // backing out: still facing into the world, stepping back over the threshold
   fly = { t: 0, dur: 1.8, p0: camera.position.clone(), p1: Wl(0, 2, -26), t0: controls.target.clone(), t1: Wl(0, 0, -90), done: back }; controls.enabled = false; }
 function exitShaft() { if (!UNDER.shaft) return;
-  if (UNDER.portal) { for (const door of UNDER.doors) { const u = door.open.material.uniforms; u.on.value = 0; u.map.value = null; } UNDER.portal.dispose(); UNDER.portal = null; } camera.near = 5; camera.far = 90000; camera.updateProjectionMatrix(); if (UNDER.world) { scene.fog = UNDER.world.fog; scene.background = UNDER.world.bg; camera.layers.set(3); UNDER.world = null; } UNDER.shaft = null; Object.assign(controls, { enableZoom: true, minDistance: 90, maxDistance: 6500 * S, minPolarAngle: 0, maxPolarAngle: 1.42 }); if (UNDER.sky) UNDER.sky.visible = false; }
+  if (UNDER.portal) { for (const door of UNDER.doors) { const u = door.open.material.uniforms; u.on.value = 0; u.map.value = null; } UNDER.portal.dispose(); UNDER.portal = null; } camera.near = 5; camera.far = 90000; camera.updateProjectionMatrix(); if (UNDER.world) { scene.fog = UNDER.world.fog; scene.background = UNDER.world.bg; camera.layers.set(3); UNDER.world = null; } UNDER.shaft = null; Object.assign(controls, { enableZoom: true, minDistance: 90, maxDistance: HOME_POS.length()*1.08, minPolarAngle: 0, maxPolarAngle: 1.42 }); if (UNDER.sky) UNDER.sky.visible = false; }
 const placeView = (tx, ty, tz, d) => { const off = camera.position.clone().sub(controls.target), az = Math.atan2(off.x, off.z), pol = .95; controls.target.set(tx, ty, tz); camera.position.set(tx + Math.sin(az) * Math.sin(pol) * d, ty + Math.cos(pol) * d, tz + Math.cos(az) * Math.sin(pol) * d); camera.lookAt(controls.target); controls.update(); };
 function finishUnderArea(area, deadline=Infinity) {
   if (!area?.build) return;
@@ -7464,8 +7498,8 @@ canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.c
 canvas.addEventListener('pointerleave', () => { mouse.inside = false; });
 canvas.addEventListener('pointerdown', e => { mouse.buttons = e.buttons; if (e.button === 0) downAt = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', e => { mouse.buttons = e.buttons; if (e.button !== 0 || !downAt) return;
-  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 5 && !pathClick(e.clientX, e.clientY)) { const t = targetAt(e.clientX, e.clientY); if (t) { if (t.under) underClick(t); else select(t); } } downAt = null; });
-canvas.addEventListener('dblclick', e => { if (PS.on) return; const t = targetAt(e.clientX, e.clientY); if (t) { if (t.under) underClick(t, true); else { select(t); flyTarget(t); } } });
+  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 5 && !pathClick(e.clientX, e.clientY)) { const t = targetAt(e.clientX, e.clientY); if (t) { if(t.scroll)campusTable.activate(t.scroll); else if (t.under) underClick(t); else select(t); } } downAt = null; });
+canvas.addEventListener('dblclick', e => { if (PS.on) return; const t = targetAt(e.clientX, e.clientY); if (t) { if(t.scroll)campusTable.activate(t.scroll); else if (t.under) underClick(t, true); else { select(t); flyTarget(t); } } });
 const keys = new Set(), typing = e => /^(TEXTAREA|INPUT)$/.test(e.target.tagName);
 addEventListener('keydown', e => { if (typing(e)) return; keys.add(e.key.toLowerCase()); if (e.key.toLowerCase() === 'g') document.getElementById('bGrid').click(); });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -7543,7 +7577,10 @@ function setQuality(m) { qMode = QLV[m] ? m : 'auto'; try { localStorage.setItem
   document.querySelectorAll('#qBtns button').forEach(b => b.classList.toggle('on', b.dataset.q === qMode)); }
 document.querySelectorAll('#qBtns button').forEach(b => { b.onclick = () => setQuality(b.dataset.q); });
 setQuality(qMode);
-addEventListener('resize', () => { Q.nudge(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); fxaaSize(); });
+addEventListener('resize', () => { Q.nudge(); const atTable=camera.position.distanceTo(HOME_POS)<90 && Math.hypot(controls.target.x,controls.target.z)<1;
+  camera.aspect = innerWidth / innerHeight; HOME_POS.copy(tableOverviewPosition());
+  if(!UNDER.on){controls.maxDistance=HOME_POS.length()*1.08;if(atTable)camera.position.copy(HOME_POS);}
+  camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); fxaaSize(); });
 
 // ------------------------------------------------------------------ HUD
 const toggle = (id, fn) => { const b = document.getElementById(id); b.onclick = () => { b.classList.toggle('on'); fn(b.classList.contains('on')); }; };
@@ -7572,7 +7609,9 @@ setTimeout(async () => {
   const cache = local || packed; if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); if (packed && kept) terrainCache.fresh = packed; const t1 = performance.now();
-  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
+  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim);
+  campusTable=installCampusTable({scene,renderer,things,width:MAP_W,depth:MAP_D,anim,
+    travel:t=>flyTarget({thing:t}),overview:()=>glide(HOME_POS.clone(),HOME_TGT.clone()),canNavigate:()=>!UNDER.on&&!PS.on&&!document.body.classList.contains('touring')}); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
   document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? (packed ? "prebuilt terrain · " : "terrain from cache · ") : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
@@ -7655,7 +7694,7 @@ setTimeout(async () => {
       if (mv.lengthSq() && !UNDER.shaft) { mv.normalize().multiplyScalar(dist * .9 * dt); camera.position.add(mv); controls.target.add(mv); }
       const turn = (keys.has('q') ? 1 : 0) - (keys.has('e') ? 1 : 0);
       if (turn) { const o = camera.position.clone().sub(controls.target).applyAxisAngle(THREE.Object3D.DEFAULT_UP, turn * dt * 1.2); camera.position.copy(controls.target).add(o); }
-      if (!UNDER.world) { controls.target.x = clamp(controls.target.x, -MAP_W / 2, MAP_W / 2); controls.target.z = clamp(controls.target.z, -MAP_D / 2, MAP_D / 2); }
+      if (!UNDER.world) { controls.target.x = clamp(controls.target.x, -MAP_W/2-(UNDER.on?0:tableMargin.x), MAP_W/2+(UNDER.on?0:tableMargin.x)); controls.target.z = clamp(controls.target.z, -MAP_D/2-(UNDER.on?0:tableMargin.z), MAP_D/2+(UNDER.on?0:tableMargin.z)); }
       const dy = ((UNDER.on ? (UNDER.shaft ? controls.target.y : underY(controls.target.x, controls.target.z)) : Math.max(heightAt(controls.target.x, controls.target.z), 0)) - controls.target.y) * Math.min(1, dt * 5); controls.target.y += dy; camera.position.y += dy;
       controls.update();
     }
