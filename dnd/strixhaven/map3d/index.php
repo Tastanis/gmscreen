@@ -162,7 +162,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=6';
-import { installVellumGuard } from './vellum-guard.js?motion=2';
+import { installVellumGuard } from './vellum-guard.js?motion=3';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
 
@@ -7446,6 +7446,7 @@ setTimeout(async () => {
   const inspectionViews = {
     '#silverquill': ['Grandloft Hall', [0,55,0], [-530,675,650]],
     '#vellum-gargoyle': ['Vellum Gargoyle', [-95,105,-53], [-375,205,330]],
+    '#silverquill-patrol': ['Grandloft Hall', [95,95,-176], [-390,1190,1295]],
     '#arbitration-steps': ['Arbitration Steps', [0,32,0], [-150,160,-174]],
     '#annex-of-addenda': ['Annex of Addenda', [21,42,15], [-91,310,198]]
   };
