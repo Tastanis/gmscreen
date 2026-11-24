@@ -368,6 +368,7 @@ export function evaluate(db, draft) {
   const skillQueue = [],
     languageQueue = [],
     cancelQueue = [],
+    languageCancelQueue = [],
     usedPerks = new Set(),
     usedAbilities = new Set();
   const stats = Object.fromEntries(STATS.map((s) => [s, 0]));
@@ -441,6 +442,10 @@ export function evaluate(db, draft) {
   let domains = [];
   const dramaEvents = new Map();
   const firstDomainAtTier = new Map();
+  const heroSize = () => {
+    const size = grants.find((g) => g.kind === 'Size') || former?.features.find((x) => x.kind === 'Size');
+    return size ? String(size.sizeValue) + (size.sizeMod || '') : '1M';
+  };
   function visit(f, step, source, prefix = '', earnedAt = 1) {
     const key = prefix + (f.id || f.ability?.id || f.kind);
     const title = featureName(f),
@@ -532,6 +537,10 @@ export function evaluate(db, draft) {
     }
     if (f.kind === 'SkillCancelChoice') {
       cancelQueue.push({ f, key, source });
+      return;
+    }
+    if (f.kind === 'LanguageCancelChoice') {
+      languageCancelQueue.push({ f, key, source });
       return;
     }
     if (f.kind === 'Ancestry') {
@@ -754,7 +763,10 @@ export function evaluate(db, draft) {
         ),
         {
           ...config,
-          count: isBudget ? ancestry.ancestryPoints : f.count || 1,
+          // A budget can depend on size: a revenant whose former life was size 1S has 3 points, not 2.
+          count: isBudget
+            ? (ancestry.ancestryPointsBySize?.[heroSize()] ?? ancestry.ancestryPoints)
+            : f.count || 1,
           points: isBudget,
           ...(f.id === 'conduit-prayer' && level >= 10 ? { count: 3, minimum: 1 } : {}),
         },
@@ -985,7 +997,14 @@ export function evaluate(db, draft) {
       visit(f, 'Class', subclass.name + ' · Level ' + tier.level, '', tier.level),
     );
   }
-  for (const f of grants.filter((g) => g.kind === 'CharacteristicBonus')) stats[f.characteristic] += f.value;
+  // A later feature can take over an earlier one's number ("replaces": the earlier feature's id). The earlier
+  // feature keeps its card, and its number is no longer counted (Master of Fire takes over Acolyte of Fire's bonus).
+  for (const g of grants.filter((g) => g.replaces)) {
+    const earlier = grants.find((x) => x.id === g.replaces);
+    if (earlier) earlier.replacedBy = g.id;
+  }
+  for (const f of grants.filter((g) => g.kind === 'CharacteristicBonus' && !g.replacedBy))
+    stats[f.characteristic] += f.value;
   const trainingChoices = (list, already, allowed, why) =>
     list
       .filter((o) => !already.has(o.name))
@@ -1104,6 +1123,26 @@ export function evaluate(db, draft) {
       flexible: true,
     }))
       languages.add(id);
+  }
+  // A drawback that makes the hero forget a language they know (Shipwrecked). Caelian is offered last.
+  for (const q of languageCancelQueue) {
+    const known = [...languages].sort((a, b) => (a === 'Caelian') - (b === 'Caelian'));
+    for (const id of choose(
+      'Training',
+      q.key,
+      q.f.name || 'Forget a language',
+      known.map((name) => option(name, name, db.languages.find((l) => l.name === name)?.type || '')),
+      { source: q.source, description: q.f.description || '' },
+    )) {
+      languages.delete(id);
+      grants.push({
+        id: q.key,
+        name: featureName(q.f),
+        description: q.f.description + ' Forgotten language: ' + id,
+        source: q.source,
+        kind: 'Text',
+      });
+    }
   }
   return {
     slots,

@@ -13,8 +13,10 @@ const points = (f, r) =>
   (f.valuePerLevel || 0) * (r.level - 1) +
   (f.valuePerEchelon || 0) * Math.ceil(r.level / 3) +
   (f.valueCharacteristics?.length ? Math.max(...f.valueCharacteristics.map((c) => r.stats[c])) : 0);
+// The grants whose numbers count. A feature a later one has replaced keeps its card but not its number.
+const counted = (r) => r.grants.filter((f) => !f.replacedBy);
 function total(r, field, base = 0) {
-  return r.grants
+  return counted(r)
     .filter((f) => f.kind === 'Bonus' && f.field === field)
     .reduce((v, f) => v + points(f, r), base);
 }
@@ -67,10 +69,10 @@ function matches(f, a) {
   return (f.keywords || []).every((k) => a.keywords?.includes(k));
 }
 function action(a, r, group) {
-  const bonus = r.grants
+  const bonus = counted(r)
     .filter((f) => f.kind === 'AbilityDamage' && matches(f, a))
     .reduce((sum, f) => sum + f.value, 0);
-  const rangeBonus = r.grants
+  const rangeBonus = counted(r)
     .filter((f) => f.kind === 'AbilityDistance' && matches(f, a))
     .reduce((sum, f) => sum + f.value, 0);
   // The published kit signature card already includes that kit's bonuses.
@@ -398,7 +400,7 @@ function resourceSummary(r) {
         ' Piety once per encounter. Lose remaining Piety when combat ends.'
     : 'Start combat with ' +
         resource +
-        ' equal to Victories. ' +
+        ' equal to Victories. Gain ' +
         (r.level >= 10 ? 4 : r.level >= 7 ? 3 : 2) +
         ' at the start of each turn. Gain ' +
         (r.level >= 4 ? 2 : 1) +
@@ -469,7 +471,9 @@ export function buildSheet(db, draft) {
     ['Weakness', 'vulnerability'],
   ]) {
     const values = new Map();
-    for (const m of r.grants.flatMap((f) => f.modifiers || []).filter((m) => m.modifierType === type)) {
+    for (const m of counted(r)
+      .flatMap((f) => f.modifiers || [])
+      .filter((m) => m.modifierType === type)) {
       const n =
         m.kind === 'DamagePerLevel'
           ? m.value * r.level
@@ -487,7 +491,16 @@ export function buildSheet(db, draft) {
   const feature = (id, title, text, tags = []) => ({ id, title, text: html(text), tags, useWhen: '' });
   sheet.features = r.grants
     .filter((f) => f.kind !== 'Multiple' || f.description)
-    .map((f) => feature('builder-' + f.id, f.name, f.description || featureText(f), [f.source]));
+    .map((f) => {
+      const text = f.description || featureText(f);
+      const later = f.replacedBy && r.grants.find((g) => g.id === f.replacedBy);
+      return feature(
+        'builder-' + f.id,
+        f.name,
+        later ? text + '\nReplaced by ' + (later.source || later.name) + '.' : text,
+        [f.source],
+      );
+    });
   const potency = r.stats[r.heroClass.potency];
   sheet.features.push(
     feature(

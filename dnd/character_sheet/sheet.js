@@ -22,7 +22,6 @@ const SKILL_GROUPS = {
     "Navigate",
     "Ride",
     "Swim",
-    "Track",
   ],
   "Interpersonal Skills": [
     "Brag",
@@ -51,6 +50,7 @@ const SKILL_GROUPS = {
     "Sabotage",
     "Search",
     "Sneak",
+    "Track",
   ],
   "Lore Skills": [
     "Culture",

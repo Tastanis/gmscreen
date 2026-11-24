@@ -14,7 +14,7 @@ const SKILLS_LIST = {
     ],
     'Exploration Skills': [
         'Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump',
-        'Lift', 'Navigate', 'Ride', 'Swim', 'Track'
+        'Lift', 'Navigate', 'Ride', 'Swim'
     ],
     'Interpersonal Skills': [
         'Brag', 'Empathize', 'Flirt', 'Gamble', 'Handle Animals', 'Interrogate',
@@ -22,7 +22,7 @@ const SKILLS_LIST = {
     ],
     'Intrigue Skills': [
         'Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist',
-        'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search'
+        'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search', 'Track'
     ],
     'Lore Skills': [
         'Culture', 'Criminal Underworld', 'History', 'Magic', 'Monsters',

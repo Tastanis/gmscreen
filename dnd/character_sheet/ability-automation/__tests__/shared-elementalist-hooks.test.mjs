@@ -156,8 +156,12 @@ test('Translated Through Flame chooses an ally, measures from the caster, and re
     applyTeleport: () => ({ skipped: true }),
     getActiveScenePlacements: () => actors, getDistanceBetween: () => 1,
   } });
+  // No teleport, so nobody is next to a landing: nothing is damaged, but the roll window still opens and chat says why.
   assert.equal(skipped.calls.applyDamage.length, 0);
-  assert.equal(rollEvents(skipped).length, 0);
+  assert.equal(rollEvents(skipped).length, 1);
+  assert.equal(rollEvents(skipped)[0].targetResults, undefined);
+  assert.ok(skipped.calls.postChat.some(line => /no teleport was made/.test(line.message)));
+  assert.ok(skipped.calls.postChat.some(line => /no targets were picked/.test(line.message)));
 });
 
 test('Practical Magic can use each printed option, including a confirmed unfunded teleport', async t => {
@@ -226,6 +230,14 @@ test('a spent action warns before any damage and honors the player’s answer', 
       assert.equal(result.calls.applyDamage.length, Number(answer), actionType);
     }
   }
+  // Off its own turn there is no question (Brandon, November 23, 2026): the ability goes through.
+  for (const actionType of ['mains', 'maneuvers']) {
+    const offTurn = await run(t, cards, {
+      actionType, action: { name: 'Practice action', actionLabel: actionType }, promptAnswers: [false],
+      contextOverrides: { isTurnOf: () => false, getPlacementById: () => ({ ...caster, mainActionUsedThisTurn: true, maneuverUsedThisTurn: true }) },
+    });
+    assert.equal(offTurn.calls.applyDamage.length, 1, actionType + ' off turn: not asked, so the "no" waiting is never used');
+  }
   const missing = await run(t, cards, {
     actionType: 'triggers', action: { name: 'Practice reaction', actionLabel: 'Triggered Action' },
     contextOverrides: { manualTriggerResolution: true, consumeTriggeredAction: () => ({ blocked: true, reason: 'not-found' }) },
@@ -240,4 +252,122 @@ test('Grasp of Beyond teleports the caster after damaging its selected target', 
   });
   assert.deepEqual(result.calls.applyDamage.map(hit => [hit.placementId, hit.amount]), [[a.id, 5]]);
   assert.deepEqual(result.calls.applyTeleport.map(move => [move.placementId, move.distance]), [[caster.id, 2]]);
+});
+
+// November 23, 2026 review fixes: a row's effects stay on that row's target, a spend is one question per roll, and a
+// per-target roll with nobody picked still opens its window.
+const third = { id: 'third', name: 'Third enemy', team: 'enemy', column: 8, row: 2 };
+function perTargetCards(effects, roll = {}) {
+  const tiers = Object.fromEntries(['tier1', 'tier2', 'tier3'].map(key => [key, { effects: typeof effects === 'function' ? effects(key) : effects }]));
+  return [
+    { type: 'target', name: 'targets', mode: 'token', predicate: 'creature', count: { value: 3, mode: 'exact' }, distance: { form: 'ranged', value: 10 } },
+    { type: 'powerRoll', attribute: 'Reason', target: 'targets', targetTiers: true, tiers, ...roll },
+  ];
+}
+const hit = [{ kind: 'damage', amount: 3 }];
+
+for (const [label, wrapped, roll] of [
+  ['ifKeyword', [{ kind: 'ifKeyword', any: ['Magic'], then: hit, else: hit }]],
+  ['ifStrained', [{ kind: 'ifStrained', then: hit, else: hit }]],
+  ['ifPrompt', [{ kind: 'ifPrompt', question: 'Burn {target}?', then: hit }]],
+  ['ifScopedFlag', [{ kind: 'ifScopedFlag', scope: 'round', key: 'probe', mode: 'unset', then: hit, else: hit }]],
+  ['ifRoll on a roll card with no target of its own', [{ kind: 'ifRoll', tier: ['tier1', 'tier2', 'tier3'], then: hit, else: hit }], { target: undefined }],
+]) {
+  test('a per-target row applies an effect inside ' + label + ' to its own target only, once', async t => {
+    const result = await run(t, perTargetCards(wrapped, roll), { targetSelections: [a, b, third], action: { name: 'Probe', keywords: 'Magic' }, strictValidation: false });
+    assert.deepEqual(result.calls.applyDamage.map(d => d.placementId), [a.id, b.id, third.id]);
+    assert.equal(rollEvents(result).length, 1);
+    assert.equal(rollEvents(result)[0].targetResults.length, 3);
+  });
+}
+
+test('a spend inside per-target tiers is asked and charged once for the roll, and each row keeps to its own target', async t => {
+  const spend = [{ kind: 'spend', resource: 'Essence', amount: 1, effects: hit }];
+  for (const [answer, damaged] of [[{ spent: 1, resource: 'Essence' }, [a.id, b.id, third.id]], [{ canceled: true }, []]]) {
+    const result = await run(t, perTargetCards(spend), { targetSelections: [a, b, third], spendHeroicResourceResults: [answer] });
+    assert.equal(result.calls.spendHeroicResource.length, 1);
+    assert.deepEqual(result.calls.applyDamage.map(d => d.placementId), damaged);
+  }
+  // The same question written into each tier with that tier's own effect is still one question for the roll: the
+  // second target's row is moved up a tier (one edge), and both rows honour the single answer with their own amount.
+  const perTier = key => [{ kind: 'spend', resource: 'Essence', amount: 1, effects: [{ kind: 'damage', amount: { tier1: 1, tier2: 2, tier3: 3 }[key] }] }];
+  const mixed = await run(t, perTargetCards(perTier).map(card => card.type === 'target' ? { ...card, count: { value: 2, mode: 'exact' } } : card),
+    { rollRowClick: { row: 1, kind: 'edge' } });
+  assert.equal(mixed.calls.spendHeroicResource.length, 1);
+  assert.deepEqual(mixed.calls.applyDamage.map(d => [d.placementId, d.amount]), [[a.id, 1], [b.id, 2]]);
+  // Two spends asking the same thing in one tier are two questions (and then no more for the later rows).
+  const twice = [...spend, { kind: 'spend', resource: 'Essence', amount: 1, effects: [{ kind: 'damage', amount: 5 }] }];
+  const two = await run(t, perTargetCards(twice), { targetSelections: [a, b, third] });
+  assert.equal(two.calls.spendHeroicResource.length, 2);
+  assert.deepEqual(two.calls.applyDamage.map(d => [d.placementId, d.amount]), [[a.id, 3], [a.id, 5], [b.id, 3], [b.id, 5], [third.id, 3], [third.id, 5]]);
+});
+
+test('a roll without per-target results still asks a spend once, as it always did', async t => {
+  const cards = perTargetCards([{ kind: 'spend', resource: 'Essence', amount: 1, effects: hit }], { targetTiers: undefined });
+  const result = await run(t, cards, { targetSelections: [a, b, third] });
+  assert.equal(result.calls.spendHeroicResource.length, 1);
+  assert.deepEqual(result.calls.applyDamage.map(d => d.placementId), [a.id, b.id, third.id]);
+});
+
+test('named groups are whole again after a per-target roll', async t => {
+  const cards = [...perTargetCards([{ kind: 'ifKeyword', any: ['Magic'], then: hit, else: hit }]),
+    { type: 'effect', target: 'targets', effects: [{ kind: 'damage', amount: 1 }] }];
+  const result = await run(t, cards, { targetSelections: [a, b, third], action: { name: 'Probe', keywords: 'Magic' } });
+  assert.deepEqual(result.calls.applyDamage.map(d => [d.placementId, d.amount]),
+    [[a.id, 3], [b.id, 3], [third.id, 3], [a.id, 1], [b.id, 1], [third.id, 1]]);
+});
+
+test('a per-target roll with nobody picked still opens the roll window and says so in chat', async t => {
+  const said = result => result.calls.postChat.map(line => line.message);
+  // Done with none.
+  const none = await run(t, perTargetCards(hit), { targetSelections: [{ done: true }] });
+  assert.equal(rollEvents(none).length, 1);
+  assert.equal(none.calls.applyDamage.length, 0);
+  assert.ok(said(none).some(line => /no targets were picked/.test(line)));
+  assert.ok(said(none).some(line => /rolled/.test(line)));
+  // A count read from an attribute that is 0.
+  const cards = perTargetCards(hit);
+  cards[0].count = { value: { source: 'attribute', name: 'Reason' }, mode: 'exact' };
+  const zero = await run(t, cards, { hero: { stats: { reason: 0 } } });
+  assert.equal(zero.calls.selectTarget.length, 0);
+  assert.equal(rollEvents(zero).length, 1);
+  assert.ok(said(zero).some(line => /Target count 0 from Reason \(0\), so no targets were picked/.test(line)));
+  assert.ok(said(zero).some(line => /Roll, then apply the result by hand/.test(line)));
+  // Separate rolls for each target, with no target: one roll, not none.
+  const separate = await run(t, perTargetCards(hit, { targetTiers: undefined, rollMode: 'individual' }), { targetSelections: [{ done: true }] });
+  assert.equal(rollEvents(separate).length, 1);
+  assert.ok(said(separate).some(line => /no targets were picked/.test(line)));
+  // A roll without per-target results says nothing new.
+  const classic = await run(t, perTargetCards(hit, { targetTiers: undefined }), { targetSelections: [{ done: true }] });
+  assert.equal(rollEvents(classic).length, 1);
+  assert.ok(!said(classic).some(line => /no targets were picked/.test(line)));
+});
+
+test('the pick prompt names creatureOrObject in words and leaves the other predicates as they were', async t => {
+  const pick = (predicate, count, extra = {}) => [{ type: 'target', name: 'targets', mode: 'token', predicate, count, distance: { form: 'ranged', value: 10 }, ...extra },
+    { type: 'powerRoll', attribute: 'Reason', target: 'targets', tiers: { tier1: { effects: hit }, tier2: { effects: hit }, tier3: { effects: hit } } }];
+  const two = await run(t, pick('creatureOrObject', { value: 2, mode: 'exact' }));
+  assert.deepEqual(two.calls.selectTarget.map(c => c.promptText),
+    ['Pick 2 creatures or objects within 10 (1/2).', 'Pick 2 creatures or objects within 10 (2/2).']);
+  assert.deepEqual(two.calls.selectTarget.map(c => [c.creature, c.predicate]), [['creatureOrObject', 'creatureOrObject'], ['creatureOrObject', 'creatureOrObject']]);
+  const upTo = await run(t, pick('selfOrAlly', { value: 2, mode: 'upTo' }, { distance: { form: 'melee', value: 1 } }));
+  assert.equal(upTo.calls.selectTarget[0].promptText, 'Pick up to 2 allies (or yourself) within reach (1) (1/2).');
+  // One pick with no board prompt: nothing is sent, so the board shows no second prompt.
+  const one = await run(t, pick('creatureOrObject', { value: 1, mode: 'exact' }), { targetSelections: [a] });
+  assert.equal(one.calls.selectTarget[0].promptText, '');
+  assert.equal(one.calls.selectTarget[0].showPrompt, false);
+  // A card's own wording wins.
+  const own = await run(t, pick('creatureOrObject', { value: 2, mode: 'exact' }, { promptText: 'Two things to burn.' }));
+  assert.equal(own.calls.selectTarget[0].promptText, 'Two things to burn.');
+  // Predicates that are already words: untouched.
+  for (const predicate of ['creature', 'enemy', 'ally', 'object']) {
+    const plain = await run(t, pick(predicate, { value: 2, mode: 'exact' }));
+    assert.equal(plain.calls.selectTarget[0].promptText, '', predicate);
+  }
+  const h = await createAbilityAutomationHarness();
+  t.after(() => h.close());
+  const summarize = h.window.AbilityAutomationSchema.summarizeBlock;
+  assert.equal(summarize({ type: 'target', mode: 'token', predicate: 'creatureOrObject', count: { value: 2, mode: 'exact' }, distance: { value: 10 } }), 'Pick 2 creatures or objects within 10.');
+  assert.equal(summarize({ type: 'target', mode: 'token', predicate: 'creatureOrObject', count: { value: 1, mode: 'exact' }, distance: { value: 10 } }), 'Pick 1 creature or object within 10.');
+  assert.equal(summarize({ type: 'target', mode: 'token', predicate: 'enemy', count: { value: 2, mode: 'exact' }, distance: { value: 10 } }), 'Pick 2 enemy within 10.');
 });

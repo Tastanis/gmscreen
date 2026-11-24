@@ -4,10 +4,13 @@ import { readFileSync } from 'node:fs';
 import { newDraft, evaluate, setPick } from '../../../../../character_sheet/builder/rules.mjs';
 import { buildSheet } from '../../../../../character_sheet/builder/build-sheet.mjs';
 import {
+  SKILL_GROUPS,
   effectiveKit,
+  getSkillGroup,
   heroResourceFloor,
   mergeWithDefaults,
 } from '../../../../../character_sheet/parts/sheet-model.js';
+import { parseDefenseText } from '../automation-resistance.js';
 import {
   normalizeHeroicResourceAutomation,
   resolveHeroicResourceAmount,
@@ -2387,4 +2390,164 @@ test('Troubadour rejects other acts, late abilities and stale class choices, and
     );
   }
   for (const a of db.ancestries) assert.ok(troubadour('Virtuoso', 1, {}, a.name).model.complete);
+});
+
+// ---------------------------------------------------------------- rules audit, November 23, 2026
+const damageOf = (sheet, name) => {
+  const tiers = Object.values(sheet.actions)
+    .flat()
+    .find((a) => a.name === name).tests[0].tiers;
+  return [tiers.low.damage, tiers.mid.damage, tiers.high.damage].map(Number);
+};
+
+test('a Null chooses an exploration, interpersonal or intrigue perk at levels 2, 6 and 10, and any perk at 4 and 8', () => {
+  const { model } = build({ classId: 'null', level: 10 });
+  const lists = (key) => [
+    ...new Set(
+      model.slots.find((s) => s.key === key).choices.map((o) => db.perks.find((p) => p.id === o.id).list),
+    ),
+  ];
+  for (const key of ['null-2-1', 'null-6-3', 'null-10-5'])
+    assert.deepEqual(lists(key).sort(), ['Exploration', 'Interpersonal', 'Intrigue'], key);
+  for (const key of ['null-4-3', 'null-8-1']) assert.equal(lists(key).length, 6, key);
+});
+
+test('Master of Fire raises the Acolyte of Fire bonus to +5 for every magic ability, and replaces the +1', () => {
+  const preferences = { 'elementalist-1-9': ['Viscous Fire', 'Unquiet Ground'] };
+  const nine = build({ specialization: 'Fire', level: 9, preferences }).sheet;
+  const ten = build({ specialization: 'Fire', level: 10, preferences }).sheet;
+  // Reason is 4 at level 9 and 5 at level 10. Level 9: +1, on abilities with Fire and Magic only.
+  assert.deepEqual(damageOf(nine, 'Viscous Fire'), [2 + 4 + 1, 5 + 4 + 1, 7 + 4 + 1]);
+  assert.deepEqual(damageOf(nine, 'Unquiet Ground'), [2, 5, 7]);
+  assert.deepEqual(damageOf(nine, 'Hurl Element'), [2 + 4, 4 + 4, 6 + 4]);
+  // Level 10: +5 on every magic ability, and the +1 is not added on top of it.
+  assert.deepEqual(damageOf(ten, 'Viscous Fire'), [2 + 5 + 5, 5 + 5 + 5, 7 + 5 + 5]);
+  assert.deepEqual(damageOf(ten, 'Unquiet Ground'), [2 + 5, 5 + 5, 7 + 5]);
+  assert.deepEqual(damageOf(ten, 'Hurl Element'), [2 + 5 + 5, 4 + 5 + 5, 6 + 5 + 5]);
+  // A weapon free strike is not a magic ability.
+  const strike = (sheet) =>
+    damageOf(sheet, 'Melee Weapon Free Strike')[0] - Math.max(sheet.hero.stats.might, sheet.hero.stats.agility);
+  assert.equal(strike(nine), 2);
+  assert.equal(strike(ten), 2);
+  const acolyte = (sheet) => sheet.features.find((f) => f.id === 'builder-elementalist-sub-2-1-1').text;
+  assert.doesNotMatch(acolyte(nine), /Replaced by/);
+  assert.match(acolyte(ten), /Replaced by One: Master of Fire\./);
+  // The other specializations gain nothing from it.
+  for (const specialization of ['Earth', 'Green', 'Void'])
+    assert.deepEqual(
+      damageOf(build({ specialization, level: 10, preferences }).sheet, 'Unquiet Ground'),
+      [2, 5, 7],
+    );
+});
+
+test('Master of Green adds 2 Recoveries and Master of Earth adds damage immunity 5, at level 10 only', () => {
+  for (const sub of db.elementalist.subclasses)
+    for (const level of [9, 10]) {
+      const { sheet } = build({ specialization: sub.name, level });
+      const green = sub.name === 'Green' && level === 10;
+      const earth = sub.name === 'Earth' && level === 10;
+      assert.equal(sheet.hero.vitals.recoveriesMax, 8 + (green ? 2 : 0), sub.name);
+      assert.equal(sheet.hero.vitals.currentRecoveries, sheet.hero.vitals.recoveriesMax);
+      assert.equal(sheet.sidebar.lists.immunity.includes('Damage 5'), earth, sub.name);
+    }
+  // The map reads "Damage 5" as immunity 5 to all damage.
+  assert.deepEqual(parseDefenseText('Damage 5'), { type: '', value: 5 });
+});
+
+test('a Revenant whose former life was size 1S has 3 ancestry points, and 2 otherwise', () => {
+  const revenant = (former) =>
+    build({ ancestry: 'Revenant', preferences: { 'revenant-feature-1': former } });
+  const traits = (model) => model.slots.find((s) => s.key === 'revenant-feature-4');
+  const small = revenant('Polder');
+  assert.equal(small.sheet.hero.vitals.size, '1S');
+  assert.equal(traits(small.model).count, 3);
+  assert.equal(traits(small.model).total, 3);
+  for (const former of ['Human', 'Hakaan', 'Dwarf'])
+    assert.equal(traits(revenant(former).model).count, 2, former);
+  // Changing the former life to a larger ancestry takes the third point away again.
+  const changed = structuredClone(small.draft);
+  changed.picks['revenant-feature-1'] = ['ancestry-human'];
+  const again = traits(evaluate(db, changed));
+  assert.equal(again.count, 2);
+  assert.ok(again.total <= 2);
+});
+
+test('Corrupted Mentor puts holy weakness 1 on the sheet', () => {
+  const { sheet } = build({ complication: 'Corrupted Mentor' });
+  assert.deepEqual(sheet.sidebar.lists.vulnerability, ['Holy 1']);
+  assert.deepEqual(parseDefenseText('Holy 1'), { type: 'holy', value: 1 });
+});
+
+test('Shipwrecked makes the hero forget one language they know, of their choice', () => {
+  const plain = build({ career: 'Agent' });
+  const { draft, model, sheet } = build({ career: 'Agent', complication: 'Shipwrecked' });
+  const slot = model.slots.find((s) => s.key === 'comp-shipwrecked-d');
+  assert.equal(slot.step, 'Training');
+  assert.equal(slot.count, 1);
+  // Every language the hero knows is offered, Caelian last.
+  assert.deepEqual(
+    slot.choices.map((o) => o.name).sort(),
+    [...sheet.sidebar.lists.languages, ...slot.selected].sort(),
+  );
+  assert.equal(slot.choices.at(-1).name, 'Caelian');
+  assert.equal(sheet.sidebar.lists.languages.length, plain.sheet.sidebar.lists.languages.length - 1);
+  assert.ok(!sheet.sidebar.lists.languages.includes(slot.selected[0]));
+  assert.match(
+    sheet.features.find((f) => f.id === 'builder-comp-shipwrecked-d').text,
+    new RegExp('Forgotten language: ' + slot.selected[0]),
+  );
+  // The hero is not finished until the language is chosen, and may choose any of them.
+  const open = structuredClone(draft);
+  delete open.picks['comp-shipwrecked-d'];
+  assert.equal(evaluate(db, open).complete, false);
+  open.picks['comp-shipwrecked-d'] = ['Caelian'];
+  assert.ok(!buildSheet(db, open).sidebar.lists.languages.includes('Caelian'));
+});
+
+test('Track is an intrigue skill on the sheet, the classic sheet, the map panel and when a test is asked for', () => {
+  assert.equal(getSkillGroup('Track'), 'Intrigue');
+  // The sheet's groups are the rulebook's: every skill the builder can grant is in the group the rules give it.
+  for (const skill of db.skills) assert.equal(getSkillGroup(skill.name), skill.list, skill.name);
+  assert.equal(Object.values(SKILL_GROUPS).flat().length, db.skills.length);
+  const file = (path) => readFileSync(new URL('../../../../../' + path, import.meta.url), 'utf8');
+  const groupsIn = (source, end) =>
+    new Function(
+      source.slice(source.indexOf('const SKILL_GROUPS = {'), end(source)) + '\nreturn SKILL_GROUPS;',
+    )();
+  const lists = [
+    groupsIn(file('character_sheet/sheet.js'), (s) => s.indexOf('const SORTED_SKILL_GROUPS')),
+    groupsIn(
+      file('vtt/assets/js/ui/character-summary-panel.js'),
+      (s) => s.indexOf('};', s.indexOf('const SKILL_GROUPS = {')) + 2,
+    ),
+  ];
+  for (const groups of lists)
+    for (const [group, skills] of Object.entries(groups))
+      assert.deepEqual([...skills].sort(), [...SKILL_GROUPS[group.replace(/ Skills$/, '')]].sort(), group);
+  const php = file('includes/ask-test.php');
+  assert.match(php, /'Intrigue' => \[[^\]]*'Track'[^\]]*\]/);
+  assert.doesNotMatch(php, /'Exploration' => \[[^\]]*'Track'[^\]]*\]/);
+  // A Stormwight's Track is filed under Intrigue.
+  const { sheet } = fury('Stormwight', 1);
+  assert.ok('Track' in sheet.sidebar.skills);
+  assert.equal(getSkillGroup('Track', sheet.sidebar.skills.Track), 'Intrigue');
+});
+
+test('the resource text of the Censor, Null and Elementalist says what is gained each turn', () => {
+  for (const [classId, resource] of [
+    ['censor', 'Wrath'],
+    ['null', 'Discipline'],
+    ['elementalist', 'Essence'],
+  ])
+    for (const [level, gain] of [
+      [1, 2],
+      [7, 3],
+      [10, 4],
+    ]) {
+      const specialization = classId === 'censor' ? 'Paragon' : undefined;
+      const text = build({ classId, level, specialization }).sheet.sidebar.resource.text;
+      const opening =
+        'Start combat with ' + resource + ' equal to Victories. Gain ' + gain + ' at the start of each turn. Gain ';
+      assert.ok(text.startsWith(opening), text);
+    }
 });

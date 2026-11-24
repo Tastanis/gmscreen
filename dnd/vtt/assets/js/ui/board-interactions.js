@@ -1547,7 +1547,17 @@ export function mountBoardInteractions(store, routes = {}) {
     const a = height(from), b = height(to);
     if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
     const planar = placementSquareDistance({ ...from, levelId: BASE_MAP_LEVEL_ID }, { ...to, levelId: BASE_MAP_LEVEL_ID }, {});
-    return Number.isFinite(planar) ? Math.max(planar, Math.abs(a - b)) : null;
+    const lower = a <= b ? from : to;
+    return Number.isFinite(planar) ? Math.max(planar, squaresApartInHeight(Math.abs(a - b), Math.max(Number(lower.width) || 1, Number(lower.height) || 1))) : null;
+  }
+
+  // How many squares apart two creatures are in height. A creature fills the squares above its feet, so one whose
+  // ground is 1.3 up is still within 1 of a creature on the ground: it has to be a full 2 up to be 2 away (Brandon,
+  // November 23, 2026). A height that is all but a whole number is that number (1.999 is 2): heights are taken to the
+  // nearest quarter first. A big creature below reaches as high as it is wide.
+  function squaresApartInHeight(difference, lowerSize = 1) {
+    const whole = Math.floor(Math.round(Math.max(0, difference) * 4) / 4 + 1e-9);
+    return Math.max(0, whole - (Math.max(1, Math.floor(lowerSize)) - 1));
   }
 
   function promptTeleport(from,to,range=null,preferredSurface=null,rangeOrigin=null){
@@ -4962,19 +4972,30 @@ export function mountBoardInteractions(store, routes = {}) {
         const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
         if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
         if (isController || (rule.autoApply && !rule.maintenanceOffer && isGmUser())) {
-          await offerHeroicResourceRule({
-            eventType,
-            timing,
-            payload,
-            placement,
-            profileId,
-            sheet,
-            resource,
-            freshSheet: encounterBoundary && rule.autoApply && rule === matching[0],
-            rule,
-            eventTargetId,
-            undoGroup,
-          });
+          // A question asked on this page at the start of a turn is also written on the hero's token until it is
+          // answered: a page reloaded while it is open shows it again (Brandon, November 23, 2026). It is already
+          // this page's, so no other page takes it up.
+          const kept = isController && eventType === 'turnStart' && (!rule.autoApply || rule.maintenanceOffer)
+            ? keepHeroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId: currentUserId, rule, eventTargetId, undoGroup, timing, claimedBy: currentUserId })
+            : null;
+          try {
+            await offerHeroicResourceRule({
+              eventType,
+              timing,
+              payload,
+              placement,
+              profileId,
+              sheet,
+              resource,
+              freshSheet: encounterBoundary && rule.autoApply && rule === matching[0],
+              rule,
+              eventTargetId,
+              undoGroup,
+              stillOffered: kept ? () => heroResourcePromptRecordStands(placement.id, kept.id) : null,
+            });
+          } finally {
+            if (kept) removePendingHeroResourcePromptRecord(placement.id, kept.id);
+          }
         } else {
           routeHeroicResourcePromptToOwner({
             eventType,
@@ -5027,11 +5048,12 @@ export function mountBoardInteractions(store, routes = {}) {
     return trimmed;
   }
 
-  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
+  // The question as it is written on the hero's token for another page (or this one, after a reload) to show.
+  function heroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
     const rulePayload = cloneJsonSafe(rule);
-    if (!rulePayload) return false;
+    if (!rulePayload) return null;
     pendingHeroResourcePromptCounter += 1;
-    const record = {
+    return {
       id: `hrp_${Date.now()}_${pendingHeroResourcePromptCounter}_${Math.random().toString(36).slice(2, 7)}`,
       // Whose CHARACTER the resource belongs to (the sheet that gets written).
       profileId: normalizeProfileId(profileId),
@@ -5049,6 +5071,30 @@ export function mountBoardInteractions(store, routes = {}) {
       timing,
       createdAt: Date.now(),
     };
+  }
+
+  // This page's own open question, kept on the token while it is open. Null when it could not be written.
+  function keepHeroResourcePromptRecord({ claimedBy, ...details }) {
+    const record = heroResourcePromptRecord(details);
+    if (!record) return null;
+    record.claimedBy = claimedBy;
+    handledHeroResourcePromptIds.add(record.id);
+    const written = updatePlacementById(details.placement.id, (target) => {
+      const existing = Array.isArray(target.pendingHeroResourcePrompts) ? target.pendingHeroResourcePrompts : [];
+      target.pendingHeroResourcePrompts = [...existing, record];
+    });
+    return written ? record : null;
+  }
+
+  /** Whether a kept question is still waiting on the token: false once any page has answered it. */
+  function heroResourcePromptRecordStands(placementId, recordId) {
+    const records = getPlacementFromStore(placementId)?.pendingHeroResourcePrompts;
+    return Array.isArray(records) && records.some((record) => record?.id === recordId);
+  }
+
+  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
+    const record = heroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId, rule, eventTargetId, undoGroup, timing });
+    if (!record) return false;
     // Mark offered-limits on the routing client — it is the only client that
     // sees this event, so this is what prevents duplicate records for
     // once-per-round/turn rules.
@@ -5081,24 +5127,31 @@ export function mountBoardInteractions(store, routes = {}) {
         if (typeof record.id !== 'string' || !record.id) continue;
         const recipient = normalizeProfileId(record.recipientUserId) ?? normalizeProfileId(record.profileId);
         const mine = recipient === currentUserId;
+        // A page that shows the question puts its user's name on the record and leaves it on the token until it is
+        // answered, so the same user's page shows it again after a reload (Brandon, November 23, 2026). It used to
+        // be taken off as it was shown, and a reload lost the gain. Another user's open question is left alone.
+        const claimedBy = normalizeProfileId(record.claimedBy);
+        if (claimedBy && claimedBy !== currentUserId) continue;
         // Nobody took it up (the player is not on): the Director is asked instead.
-        const unclaimed = !mine && isGmUser() && Date.now() - (Number(record.createdAt) || 0) > HERO_PROMPT_DIRECTOR_AFTER_MS;
-        if (!mine && !unclaimed) continue;
+        const unclaimed = !mine && !claimedBy && isGmUser() && Date.now() - (Number(record.createdAt) || 0) > HERO_PROMPT_DIRECTOR_AFTER_MS;
+        if (!mine && !unclaimed && claimedBy !== currentUserId) continue;
         if (handledHeroResourcePromptIds.has(record.id)) continue;
         handledHeroResourcePromptIds.add(record.id);
-        removePendingHeroResourcePromptRecord(placement.id, record.id);
+        if (!claimedBy) claimPendingHeroResourcePromptRecord(placement.id, record.id, currentUserId);
         runPendingHeroResourcePrompt(placement.id, record).catch((err) => {
           console.warn('[VTT] pending heroic resource prompt failed', err);
         });
       }
     }
   }
-  // The Director's page looks again now and then for records nobody took up.
+  // Every page looks again now and then. The Director's, for records nobody took up. A player's, because a page
+  // that has just loaded reads its tokens once, before the scene's saved tokens have arrived: its own question,
+  // still open when it was reloaded, was never seen again (November 23, 2026).
   if (typeof window !== 'undefined') {
     window.setInterval(() => {
       try {
+        processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
         if (isGmUser()) {
-          processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
           getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => { if (placement?.readyTriggerPayloads && !placement.monster) maybePromptHeroTriggerPopups(placement); });
         }
       } catch (error) { /* not ready */ }
@@ -5139,10 +5192,19 @@ export function mountBoardInteractions(store, routes = {}) {
         undoGroup: record.undoGroup || '',
         sentence: record.sentence || '',
         routed: true,
+        stillOffered: () => heroResourcePromptRecordStands(placementId, record.id),
       });
     } finally {
       removePendingHeroResourcePromptRecord(placementId, record.id);
     }
+  }
+
+  function claimPendingHeroResourcePromptRecord(placementId, recordId, userId) {
+    if (!placementId || !recordId || !userId) return;
+    updatePlacementById(placementId, (target) => {
+      if (!Array.isArray(target.pendingHeroResourcePrompts)) return;
+      target.pendingHeroResourcePrompts = target.pendingHeroResourcePrompts.map((r) => (r && r.id === recordId && !r.claimedBy ? { ...r, claimedBy: userId } : r));
+    });
   }
 
   function removePendingHeroResourcePromptRecord(placementId, recordId) {
@@ -5156,7 +5218,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false, freshSheet = false }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false, freshSheet = false, stillOffered = null }) {
     // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
     const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
     const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
@@ -5166,13 +5228,15 @@ export function mountBoardInteractions(store, routes = {}) {
     if (limitKey && !reservedBySender && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
     if (lockKey) pendingResourceLimitKeys.add(lockKey);
     try {
-      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed });
+      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed, stillOffered });
     } finally {
       if (lockKey) pendingResourceLimitKeys.delete(lockKey);
     }
   }
 
-  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed }) {
+  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed, stillOffered = null }) {
+    // The same question open on two pages (a reload, a second window): the first answer is the answer.
+    const answeredElsewhere = () => typeof stillOffered === 'function' && !stillOffered();
     // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
     // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
     // the gain itself was right, being an amount).
@@ -5230,7 +5294,7 @@ export function mountBoardInteractions(store, routes = {}) {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
     if (maintained.length) {
-      const sceneId = getActiveSceneId(), offeredRound = combatRound, offeredTurn = activeCombatantId;
+      const sceneId = getActiveSceneId(), offeredEncounter = combatEncounterId;
       if (shouldRollAfterPrompt) {
         const roll = await queueHeroicResourcePrompt({ title: resourceName, message: 'Roll ' + preview.label + ' for the gain available before upkeep?', applyLabel: 'Roll', dismissLabel: 'Cancel' }, isCurrent);
         if (!roll?.applied) return;
@@ -5238,7 +5302,12 @@ export function mountBoardInteractions(store, routes = {}) {
         shouldRollAfterPrompt = false;
       }
       const choice = await queueMaintainPrompt({ placement, maintained, gain: amount, resourceName, current: change.current });
-      if (!choice?.applied || !combatActive || sceneId !== getActiveSceneId() || offeredRound !== combatRound || offeredTurn !== activeCombatantId) return;
+      if (!choice?.applied) return;
+      // People take a while to answer, and the Director moves on meanwhile (Brandon, November 23, 2026: "there has to
+      // be account for pause"): the answer counts for as long as this fight goes on, whoever's turn it now is. It
+      // was dropped without a word once the next creature's turn had begun. After the fight it is said, not hidden.
+      if (!combatActive || sceneId !== getActiveSceneId() || offeredEncounter !== combatEncounterId) { updateStatus('The fight is over: that start-of-turn choice was not applied.'); return; }
+      if (answeredElsewhere()) return;
       const fresh = getPlacementFromStore(placement.id);
       if (!fresh) return;
       const { remaining, dropped, upkeep } = reconcileMaintenanceChoice(getMaintainedAbilities(fresh), maintained, choice.kept);
@@ -5268,6 +5337,7 @@ export function mountBoardInteractions(store, routes = {}) {
         dismissLabel: rule.cancelLabel || 'Cancel',
       }, isCurrent);
       if (!promptResult?.applied) return;
+      if (answeredElsewhere()) return;
     }
     if (!isCurrent()) { updateStatus('That resource offer has expired.'); return; }
     return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName, opening }));
@@ -15266,6 +15336,10 @@ export function mountBoardInteractions(store, routes = {}) {
     getStandFirmState: function (placementId, context) {
       return resolveStandFirmForPlacement(placementId, context && typeof context === 'object' ? context : {});
     },
+    /** Whether a fight is on and it is this token's turn (the "already used your action" question is asked only then). */
+    isTurnOf: function (placementId) {
+      return Boolean(combatActive && placementId && activeCombatantId === placementId);
+    },
     // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
     // between occupied squares, including floor height; null for missing tokens/floors.
     getDistanceBetween: function (idA, idB) {
@@ -20914,7 +20988,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const listed = cellsOnMap(candidates, clampPlacementToBounds, targetSnapshot);
     // A push, pull or slide offers only the squares it really reaches along its own straight line (Brandon, November 8,
     // 2026): one a wall or a rising face would stop it short of is not offered. Any square can still be picked, with a warning.
-    const forcedLine = request.movementKind !== 'teleport' && (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
+    // A teleport too (Brandon, November 23, 2026: warn, allow anyway): a square behind a wall is not offered, and
+    // picking it asks first.
+    const forcedLine = (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
     const onMap = forcedLine ? listed.filter((cell) => { try { return !globalThis.wallPrototype.forcedBlockedMove(targetSnapshot, { ...targetSnapshot, column: cell.column, row: cell.row }); } catch (error) { return true; } }) : listed;
     pendingAutomationMove = {
       ...request,
@@ -21730,7 +21806,9 @@ export function mountBoardInteractions(store, routes = {}) {
       : (Number.parseInt(targetConfig.count, 10) || 1);
     const upTo = (typeof targetConfig.count === 'object' && targetConfig.count?.mode === 'upTo');
     const countLabel = countVal > 1 ? `${upTo ? 'up to ' : ''}${countVal}` : (upTo ? 'up to 1' : 'one');
-    const creature = String(targetConfig.creature || targetConfig.predicate || 'target');
+    // Plain words for the joined kinds ("creatureOrObject" reads "creature or object"); the others as written.
+    const rawCreature = String(targetConfig.creature || targetConfig.predicate || 'target');
+    const creature = window.AbilityAutomationPrimitives?.targetPredicateWords?.(rawCreature, countVal) ?? rawCreature;
     const distance = targetConfig.distance && typeof targetConfig.distance === 'object'
       ? targetConfig.distance
       : null;

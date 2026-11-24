@@ -15,7 +15,9 @@ test('a heroic resource offer reads the sheet as it stands before it shows any n
   const fresh = offer.indexOf('characterSummaryCache.delete(profileId);');
   const shown = offer.indexOf('const context = getSheetHeroicResourceContext(sheet, resource);');
   assert.ok(fresh > 0 && shown > fresh, 'the copy this page kept is dropped before the offer is worked out');
-  assert.match(offer, /const latest = await getAutomationSheetForPlacement\(placement\.id\)\.catch\(\(\) => null\);\s*if \(latest\?\.hero\?\.resource && typeof latest\.hero\.resource === 'object'\) \{\s*sheet = latest;\s*resource = latest\.hero\.resource;/);
+  // Skipped only for a sheet read a moment ago for this very event (the start or end of a fight).
+  assert.match(offer, /let latest = sheet;\s*if \(!freshSheet\) \{\s*characterSummaryCache\.delete\(profileId\);\s*latest = await getAutomationSheetForPlacement\(placement\.id\)\.catch\(\(\) => null\);\s*\}/);
+  assert.match(offer, /if \(latest\?\.hero\?\.resource && typeof latest\.hero\.resource === 'object'\) \{\s*sheet = latest;\s*resource = latest\.hero\.resource;/);
 });
 
 test('Use Recovery says what it will really heal, on the sheet and in the map\'s panel', () => {

@@ -42,7 +42,6 @@ const SKILL_GROUPS = {
     'Navigate',
     'Ride',
     'Swim',
-    'Track',
   ],
   Interpersonal: [
     'Brag',
@@ -71,6 +70,7 @@ const SKILL_GROUPS = {
     'Sabotage',
     'Search',
     'Sneak',
+    'Track',
   ],
   Lore: [
     'Culture',

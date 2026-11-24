@@ -1649,7 +1649,10 @@
           "count": "ancestry"
         }
       ],
-      "ancestryPoints": 2
+      "ancestryPoints": 2,
+      "ancestryPointsBySize": {
+        "1S": 3
+      }
     },
     {
       "id": "ancestry-time-raider",
@@ -4073,6 +4076,18 @@
           "id": "comp-corruptedMentor-d",
           "name": "Corrupted Mentor Drawback",
           "description": "You have holy weakness 1. Each time you use Corrupt Spirit, your holy weakness increases by 1, to a maximum equal to your recovery value. Whenever you take holy damage, this weakness resets to 1."
+        },
+        {
+          "kind": "DamageModifier",
+          "id": "comp-corruptedMentor-mod1",
+          "modifiers": [
+            {
+              "kind": "DamageText",
+              "damageType": "Holy",
+              "modifierType": "Weakness",
+              "value": 1
+            }
+          ]
         }
       ]
     },
@@ -5896,7 +5911,7 @@
           "count": 2
         },
         {
-          "kind": "Text",
+          "kind": "LanguageCancelChoice",
           "id": "comp-shipwrecked-d",
           "name": "Shipwrecked Drawback",
           "description": "You have forgotten one language you know of your choice."
@@ -10208,7 +10223,21 @@
             "level": 10,
             "features": [
               {
-                "kind": "Text",
+                "kind": "Multiple",
+                "features": [
+                  {
+                    "kind": "DamageModifier",
+                    "id": "elementalist-sub-1-8-1a",
+                    "modifiers": [
+                      {
+                        "kind": "DamageText",
+                        "damageType": "Damage",
+                        "modifierType": "Immunity",
+                        "value": 5
+                      }
+                    ]
+                  }
+                ],
                 "id": "elementalist-sub-1-8-1",
                 "name": "One: Master of Earth",
                 "description": "\nYou become the embodiment of the element of your chosen specialization. Whenever you use magic, elemental motes flit around you and your skin changes to reflect your element, taking on an earthen or stony appearance for earth, appearing like flickering flame for fire, gaining a leaf pattern for green, and becoming a starry expanse for void.\n\nYou have damage immunity 5.\n\nAdditionally, as a respite activity, you can shape the mundane earth around you in a 1-mile radius. You can open sinkholes, form mountains, level mundane structures or whole settlements, create canyons, raise islands or sink them in the sea, and perform similar feats. You can’t use this respite activity if another creature within 1 mile is already using it. Once you use this respite activity, you can’t use it again for 10 days."
@@ -10400,7 +10429,18 @@
             "level": 10,
             "features": [
               {
-                "kind": "Text",
+                "kind": "Multiple",
+                "features": [
+                  {
+                    "kind": "AbilityDamage",
+                    "id": "elementalist-sub-2-8-1b",
+                    "keywords": [
+                      "Magic"
+                    ],
+                    "value": 5,
+                    "replaces": "elementalist-sub-2-1-1"
+                  }
+                ],
                 "id": "elementalist-sub-2-8-1a",
                 "name": "One: Master of Fire",
                 "description": "\nYou become the embodiment of the element of your chosen specialization. Whenever you use magic, elemental motes flit around you and your skin changes to reflect your element, taking on an earthen or stony appearance for earth, appearing like flickering flame for fire, gaining a leaf pattern for green, and becoming a starry expanse for void.\n\nThe damage bonus of your Acolyte of Fire feature increases to +5 and applies to all your magic abilities.\n\nAdditionally, your Return to Formlessness ability can be used on supernatural objects (but not on artifacts). When you melt a treasure, you gain breath equal to its echelon."
@@ -10575,7 +10615,15 @@
             "level": 10,
             "features": [
               {
-                "kind": "Text",
+                "kind": "Multiple",
+                "features": [
+                  {
+                    "kind": "Bonus",
+                    "id": "elementalist-sub-3-8-1a",
+                    "field": "Recoveries",
+                    "value": 2
+                  }
+                ],
                 "id": "elementalist-sub-3-8-1",
                 "name": "One: Master of Green",
                 "description": "\nYou become the embodiment of the element of your chosen specialization. Whenever you use magic, elemental motes flit around you and your skin changes to reflect your element, taking on an earthen or stony appearance for earth, appearing like flickering flame for fire, gaining a leaf pattern for green, and becoming a starry expanse for void.\n\nThe number of Recoveries you have increases by 2, and each time you finish a respite, you can grant each ally who finished the respite with you 2 additional Recoveries. Your allies’ additional Recoveries disappear when they finish their next respite.\n\nAdditionally, as a respite activity, you can perform a ritual that causes a fruit tree to spring from the ground, grow, mature, and produce 1d6 of a treasure called Life Fruit. You can use a respite activity to cause an existing tree to produce another 1d6 Life Fruit, but it does not grow these magic consumables on its own.\n\nAs a maneuver, a creature can consume a Life Fruit or feed it to an adjacent willing ally. When a creature eats a Life Fruit, they restore all their Stamina, they can end all conditions or effects on themself, and they can stand up if prone. Additionally, if the creature desires, their aging pauses for 1d10 years. If the creature eats additional Life Fruit and chooses to pause their aging, the effects don’t stack. Instead, the creature gains the benefit from the Life Fruit that pauses their aging for the longest time."
@@ -12028,7 +12076,12 @@
           },
           {
             "kind": "Perk",
-            "id": "null-10-5"
+            "id": "null-10-5",
+            "lists": [
+              "Exploration",
+              "Interpersonal",
+              "Intrigue"
+            ]
           },
           {
             "kind": "SkillChoice",

@@ -704,11 +704,13 @@
       const targetName = candidate.target || "";
       if ((targetName || "primary") !== groupName) continue;
       if (effectListContainsKind(candidate.effects, "damage")) {
-        const predicate = titleCaseWord(block.predicate || "target");
+        // A predicate whose name is not a word ("creatureOrObject") is shown in words; the others as they always were.
+        const many = block.count?.mode === "all" ? 2 : asInt(block.count && typeof block.count === "object" ? block.count.value : block.count, 1);
+        const predicate = titleCaseWord(P.targetPredicateWords(block.predicate || "target", 1));
         const count = describeTargetCount(block);
         return {
           promptTitle: `Pick ${predicate} to Damage`,
-          promptText: `Choose ${count} ${block.predicate || "target"} to damage.`,
+          promptText: `Choose ${count} ${P.targetPredicateWords(block.predicate || "target", many)} to damage.`,
         };
       }
       break;
@@ -754,6 +756,30 @@
     if (!count) return 1;
     if (count.mode === "all") return Infinity;
     return Math.max(1, asInt(count.value, 1));
+  }
+
+  // The board words its own pick prompt from the predicate's name ("Pick 2 creatureOrObject within range 10.").
+  // For a name that is not a word, the same sentence is sent to it in words ("Pick 2 creatures or objects within
+  // 10 (1/2)."). Empty for every other predicate: the board's wording for those is left as it was.
+  function plainPickPromptText(block, pickNumber, pickTotal) {
+    if (!P.hasTargetPredicateWords(block?.predicate)) return "";
+    const count = block.count && typeof block.count === "object" ? block.count : null;
+    const value = Math.max(1, asInt(count ? count.value : block.count, 1));
+    const upTo = count?.mode === "upTo";
+    const every = count?.mode === "all";
+    const countLabel = every ? "any number of" : value > 1 ? `${upTo ? "up to " : ""}${value}` : upTo ? "up to 1" : "one";
+    const distance = block.distance && typeof block.distance === "object" ? block.distance : null;
+    const form = String(distance?.form || "").toLowerCase();
+    const reach = asInt(distance?.value, 0);
+    let rangeText = "";
+    if (form === "melee" && reach > 0) rangeText = ` within reach (${reach})`;
+    else if (form === "ranged" && reach > 0) rangeText = ` within ${reach}`;
+    else if (form === "meleeorranged") rangeText = ` (melee ${reach} or ranged ${asInt(distance.secondary, 0)})`;
+    else if (form === "self") rangeText = " (self)";
+    else if (form === "burst" && reach > 0) rangeText = ` in ${reach}-burst`;
+    else if (form === "aura" && reach > 0) rangeText = ` in ${reach}-aura`;
+    const progress = pickTotal > 1 ? ` (${pickNumber}/${pickTotal})` : "";
+    return `Pick ${countLabel} ${P.targetPredicateWords(block.predicate, every ? 2 : value)}${rangeText}${progress}.`;
   }
 
   function getRangeOriginPlacement(state, block) {
@@ -905,6 +931,8 @@
       block = { ...block, [section]: { ...block[section], [key]: result.value } };
       labels.push(result.label);
       if (section === "count" && result.value === 0 && block.count.mode !== "all") {
+        // Said in chat, never in silence: the cards after this one still run (a roll still opens its window).
+        await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${result.label}, so no targets were picked.` });
         setTargetGroup(state, block.name, []);
         return;
       }
@@ -1041,16 +1069,21 @@
       );
 
       for (let pickIndex = 0; pickIndex < desired; pickIndex += 1) {
+        const showPrompt = Boolean(block.promptTitle || block.promptText || block.optional || upTo || desired > 1);
+        const pickTotal = Number.isFinite(desired) ? desired : 0;
+        // Only where the board's prompt is already shown and the card has no wording of its own.
+        const plainText = showPrompt && !block.promptText ? plainPickPromptText(block, pickIndex + 1, pickTotal) : "";
         const promptConfig = {
           ...block,
+          ...(plainText ? { promptText: plainText } : {}),
           // Send predicate under the v2 field name the board still reads.
           creature: block.predicate,
           affects: block.predicate,
           pickIndex: pickIndex + 1,
-          pickTotal: Number.isFinite(desired) ? desired : 0,
+          pickTotal,
           // Multi-pick flows need the board prompt even when authors did not
           // provide custom wording; that prompt owns the early Done button.
-          showPrompt: Boolean(block.promptTitle || block.promptText || block.optional || upTo || desired > 1),
+          showPrompt,
           // "Done" finishes early with the targets picked so far without
           // cancelling the ability. Always offer it once at least one target
           // is locked in, so a multi-target ability can hit a single target.
@@ -1924,7 +1957,14 @@
   }
 
   async function runPowerRollBlock(state, block) {
-    if (block.targetTiers && block.target && !getTargetGroup(state, block.target).length) return;
+    // A per-target roll with nobody picked (Done with none, a count that came to 0, a skipped teleport) is still
+    // rolled, as a roll without per-target results is: the window opens and chat says why nothing is applied.
+    if ((block.targetTiers || block.rollMode === "individual") && !getTargetGroup(state, block.target).length) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: no targets were picked. Roll, then apply the result by hand.`,
+      });
+      if (block.rollMode === "individual") block = { ...block, rollMode: "shared" };
+    }
     if (block.rollMode === "individual") {
       const targets = getTargetGroup(state, block.target);
       const originalGroup = state.currentGroup;
@@ -1987,6 +2027,16 @@
         const eligible = state.rollTargets.filter(row => block.tiers?.[rollTargetResult(state, block, row).tier]?.effects?.some(fx => fx.kind === "damage"));
         if (eligible.length) surgeBudget.allocated = await consumePowerRollSurgeBonus(state, { powerRollSurges: surgeBudget }, eligible.map(row => row.target));
       }
+      // While a row's effects run, the roll's target group holds that row's target alone, and is the current group.
+      // An effect inside a wrapper (spend, ifPrompt, ifStrained, ifKeyword, ifScopedFlag, ifRoll, ...) falls back to
+      // the current group, so it too lands on that one target, once. The groups are put back afterwards.
+      const rowGroupNames = [].concat(block.target || originalGroup || "primary");
+      const rowGroupMembers = new Map(rowGroupNames.map(name => [name, getTargetGroup(state, name)]));
+      const rowGroupsBefore = new Map(rowGroupNames.map(name => [name,
+        Object.prototype.hasOwnProperty.call(state.groups, name) ? { tokens: state.groups[name] } : null]));
+      // A spend inside the tiers is the caster's one decision for this roll: asked and charged once, then honoured
+      // for every row (applySpendEffect).
+      const rollSpends = new Map();
       try {
         for (const row of state.rollTargets) {
           const outcome = rollTargetResult(state, block, row);
@@ -1995,13 +2045,23 @@
           state.lastPowerRoll = { ...acceptedRoll, total: outcome.total, tier: outcome.tier, net: outcome.edge - outcome.bane };
           state.rollPotencyBonus = bonuses.potency;
           const effects = bonuses.damage ? withDamageBonus(tier?.effects || [], bonuses.damage) : tier?.effects || [];
+          for (const name of rowGroupNames) {
+            state.groups[name] = rowGroupMembers.get(name).filter(member => member?.id === row.target.id);
+          }
+          state.currentGroup = rowGroupNames.find(name => state.groups[name].length) || rowGroupNames[0];
           await applyEffects(state, effects, block.target, {
             sourceLabel: (state.action.name || "Ability") + " (" + P.tierLabel(outcome.tier) + ")",
             tierTarget: row.target, tierGroup: block.target, powerRollSurges: surgeBudget,
+            rollSpends, rowSpendCounts: new Map(),
           });
           if (state.aborted) break;
         }
       } finally {
+        for (const name of rowGroupNames) {
+          const before = rowGroupsBefore.get(name);
+          if (before) state.groups[name] = before.tokens;
+          else delete state.groups[name];
+        }
         state.lastPowerRoll = acceptedRoll;
         state.rollPotencyBonus = 0;
         state.currentGroup = originalGroup;
@@ -4539,7 +4599,24 @@
   async function applySpendEffect(state, effect, targets, ctx) {
     // Decided before the roll: its effects run now if it was spent, nothing if not, with no second question.
     const decided = effect.timing === "preRoll" ? state.preRollSpends?.get(spendSignature(effect)) : null;
-    const outcome = decided || await askSpend(state, effect, "");
+    // In a per-target roll (ctx.rollSpends) the question belongs to the roll, not to each target: the first row to
+    // reach it is asked and charged, later rows reuse that answer and only apply the effects to their own target.
+    // It is known by what is asked (resource, amount, wording), not by its effects, so the same spend written into
+    // each tier with that tier's own effects is still one question; a second spend with the same question in one
+    // tier is its own (counted per row).
+    let rollKey = "";
+    if (!decided && ctx?.rollSpends instanceof Map) {
+      const question = JSON.stringify([effect.resource || "", effect.amount || 1, effect.maxAmount || 0, effect.prompt || ""]);
+      const seen = ctx.rowSpendCounts instanceof Map ? ctx.rowSpendCounts : null;
+      const nth = seen ? (seen.get(question) || 0) : 0;
+      if (seen) seen.set(question, nth + 1);
+      rollKey = `${question}#${nth}`;
+    }
+    let outcome = decided || (rollKey && ctx.rollSpends.has(rollKey) ? ctx.rollSpends.get(rollKey) : null);
+    if (!outcome) {
+      outcome = await askSpend(state, effect, "");
+      if (rollKey) ctx.rollSpends.set(rollKey, outcome || { spent: 0 });
+    }
     if (!outcome?.spent) return;
     await applyEffects(state, effect.effects || [], effect.target || null, ctx);
   }
@@ -5873,7 +5950,13 @@
         const actor = liveTokenFor(state, state.sourcePlacement);
         const kind = getActionKind(state);
         const used = kind === "main" ? actor?.mainActionUsedThisTurn : kind === "maneuver" && actor?.maneuverUsedThisTurn;
-        if (used && !await askAutomationPrompt(state, { question: "You already used your " + kind + " action this turn. Use this ability anyway?", yesLabel: "Use anyway", noLabel: "Cancel" }, [])) return;
+        // Asked on the creature's own turn only (Brandon, November 23, 2026): off its turn (an ability an ally grants,
+        // a second use the Director allows) it goes through without a question. A page that cannot tell whose turn
+        // it is asks, as before.
+        const isTurnOf = typeof state.context.isTurnOf === "function" ? state.context.isTurnOf
+          : (typeof window !== "undefined" && typeof window.VTTBoardCallbacks?.isTurnOf === "function" ? window.VTTBoardCallbacks.isTurnOf : null);
+        const ownTurn = !isTurnOf || isTurnOf(actor?.id || state.sourcePlacement?.id) !== false;
+        if (used && ownTurn && !await askAutomationPrompt(state, { question: "You already used your " + kind + " action this turn. Use this ability anyway?", yesLabel: "Use anyway", noLabel: "Cancel" }, [])) return;
       }
       if (!isArmingOnly && typeof state.context.spendResource === "function") {
         const spendResult = await state.context.spendResource(state.action);

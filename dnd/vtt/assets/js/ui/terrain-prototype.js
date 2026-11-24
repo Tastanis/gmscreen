@@ -111,7 +111,11 @@ function importedDesign(){return window.wallPrototype?.model||sharedField('walls
 function levelConfig(){return ctx?.state.boardState.sceneState?.[ctx.state.boardState.activeSceneId]?.mapLevels;}
 function groundFor(placement,point=null){
  if(!placement)return 0;
+ // Asked before this file's first frame has run (the 3D board opening in the middle of a turn asks at once for the
+ // turn's starting square): the board is read now. With no board yet, the floor's own height is the answer.
+ if(!ctx)ctx=window.terrainContext?.()||null;
  const level=placement.levelId||'level-0',base=floorElevations(levelConfig()).get(level)??0;
+ if(!ctx?.view)return base;
  if(['fly','hover'].includes(placement.movementMode))return Math.max(base,flight.height(placement,(x,y)=>flightGround(x,y,placement)));
  // A token carried by a stair stands at the stair's height, even while the floor it came from still
  // lies under it (WallMovement::height has the same rule). Otherwise the plate it stands on decides.

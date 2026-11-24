@@ -105,7 +105,7 @@ test('the start-of-turn question (Essence / keep persistent abilities) is asked 
   const now = section('  async function offerHeroicResourceRuleNow({', '  // The gain (or loss, or damage) taken:');
   assert.ok(now.indexOf("if (rule.limit?.markOn === 'offered') {") < now.indexOf('queueMaintainPrompt('), 'marked before the start-of-turn question shows');
   assert.match(section('  function routeHeroicResourcePromptToOwner(', '  // Prompt-record ids this client'), /if \(rule\.limit\?\.markOn === 'offered'\) \{\s*markHeroicResourceRuleLimit\(rule, placement\.id, eventTargetId\);/);
-  assert.match(section('  async function runPendingHeroResourcePrompt(', '  function removePendingHeroResourcePromptRecord('), /routed: true,/);
+  assert.match(section('  async function runPendingHeroResourcePrompt(', '  function claimPendingHeroResourcePromptRecord('), /routed: true,/);
 });
 
 test('"Start Zepha\'s turn?" itself is still once a round', () => {
@@ -222,7 +222,7 @@ test('classes with rolled gains or no turn-start gain get one upkeep decision', 
       formatHeroicResourcePrompt: () => '', heroicResourceEventSentence: () => '', markHeroicResourceRuleLimit() {},
       queueMaintainPrompt: async ({gain, maintained}) => { offers.push(gain); return {applied:true,kept:maintained,again:[]}; },
       queueHeroicResourcePrompt: async () => ({applied:true}),
-      getActiveSceneId: () => 'practice', combatRound:1, activeCombatantId:'caster',combatActive:true,
+      getActiveSceneId: () => 'practice', combatRound:1, activeCombatantId:'caster',combatActive:true, combatEncounterId:'practice',
       setMaintainedAbilities() {},endZonesOfDroppedMaintenance() {}, updateStatus() {}, tokenLabel: () => 'Caster',
       inCausingUndoGroup: (_group,_label,take) => take(), takeHeroicResourceRule: data => applied.push(data.amount),
     };
@@ -233,6 +233,61 @@ test('classes with rolled gains or no turn-start gain get one upkeep decision', 
     assert.deepEqual(offers, [hasDice ? 3 : 0]);
     assert.deepEqual(applied, hasDice ? [2] : []);
   }
+});
+
+// Brandon, November 23, 2026: "triggered actions have to happen after because we cant click to activate them instantly.
+// So there has to be account for pause." The Director had moved on to the next creature before the player pressed
+// Apply, and the answer was dropped without a word: no gain, no upkeep, the casts neither kept nor let go.
+test('a slow answer to the start-of-turn choice still counts after the Director has moved on', async () => {
+  const gain = { id: 'gain', effect: { kind: 'gain', amount: 2 }, maintenanceOffer: true, limit: { scope: 'round', key: 'gain', markOn: 'offered' } };
+  const cast = { id: 'test', value: 1 };
+  async function answer(during, extra = {}) {
+    const placement = { id: 'caster', maintainedAbilities: [cast] };
+    const timing = { active: true, encounterId: 'practice', round: 1, turnId: 'caster' };
+    const applied = [], kept = [], said = [];
+    const deps = {
+      heroicResourceTimingAllows, heroicResourceCombatTiming: () => ({ active: deps.combatActive, encounterId: deps.combatEncounterId, round: deps.combatRound, turnId: deps.activeCombatantId }),
+      characterSummaryCache: new Map(), getAutomationSheetForPlacement: async () => ({ hero: { resource: { value: 1 } } }),
+      noteResourceLevel() {}, getSheetHeroicResourceContext: () => ({}), resourceOpeningEncounterId: null,
+      previewHeroicResourceAmount: () => ({ amount: 2, hasDice: false }), resolveHeroicResourceAmount: () => ({ amount: 2 }),
+      normalizeHeroicResourceChange: (_rule, _sheet, amount) => ({ current: 1, next: 1 + amount, resourceName: 'Essence' }),
+      getPlacementFromStore: () => placement, getMaintainedAbilities: (token) => token.maintainedAbilities,
+      formatHeroicResourcePrompt: () => '', heroicResourceEventSentence: () => '', markHeroicResourceRuleLimit() {},
+      queueMaintainPrompt: async ({ maintained }) => { during(deps); return { applied: true, kept: maintained, again: [] }; },
+      queueHeroicResourcePrompt: async () => ({ applied: true }),
+      getActiveSceneId: () => 'practice', combatRound: 1, activeCombatantId: 'caster', combatActive: true, combatEncounterId: 'practice',
+      setMaintainedAbilities: (_id, list) => kept.push(list), endZonesOfDroppedMaintenance() {}, updateStatus: (text) => said.push(text), tokenLabel: () => 'Caster',
+      inCausingUndoGroup: (_group, _label, take) => take(), takeHeroicResourceRule: (data) => applied.push(data.amount),
+    };
+    const offer = new Function('deps', `with(deps) { ${section('  function reconcileMaintenanceChoice(', '  function setMaintainedAbilities(')}
+      ${section('  async function offerHeroicResourceRuleNow(', '  // The gain (or loss, or damage) taken:')}
+      return offerHeroicResourceRuleNow; }`)(deps);
+    await offer({ eventType: 'turnStart', rule: gain, placement, timing, sheet: { hero: {} }, resource: { value: 1 }, ...extra });
+    return { applied, kept, said };
+  }
+  const late = await answer((deps) => { deps.activeCombatantId = 'goblin'; });
+  assert.deepEqual(late.applied, [1], 'the next creature\'s turn has begun: the gain less the upkeep is still given');
+  assert.deepEqual(late.kept, [[cast]], 'and the casts chosen are kept');
+  const over = await answer((deps) => { deps.combatActive = false; });
+  assert.deepEqual(over.applied, []);
+  assert.match(over.said.join(' '), /fight is over/, 'after the fight it is said, not hidden');
+  const elsewhere = await answer(() => {}, { stillOffered: () => false });
+  assert.deepEqual([elsewhere.applied, elsewhere.kept], [[], []], 'answered on another page first (a reload, a second window): this answer does nothing');
+});
+
+test('a question open at the start of a turn stays on the token until it is answered, so a reloaded page shows it again', () => {
+  const pending = section('  function processPendingHeroResourcePrompts(', '  // Every page looks again now and then.');
+  // A page that has just loaded reads its tokens before the saved ones arrive: every page, not only the Director's, looks again.
+  assert.match(board, /window\.setInterval\(\(\) => \{\s*try \{\s*processPendingHeroResourcePrompts\(boardApi\.getState\?\.\(\) \?\? \{\}\);\s*if \(isGmUser\(\)\) \{/);
+  assert.doesNotMatch(pending, /removePendingHeroResourcePromptRecord/, 'showing it no longer takes it off the token');
+  assert.match(pending, /if \(claimedBy && claimedBy !== currentUserId\) continue;/, 'another user\'s open question is left alone');
+  assert.match(pending, /const unclaimed = !mine && !claimedBy && isGmUser\(\)/, 'the Director is asked only when nobody has it open');
+  assert.match(section('  async function runPendingHeroResourcePrompt(', '  function claimPendingHeroResourcePromptRecord('),
+    /stillOffered: \(\) => heroResourcePromptRecordStands\(placementId, record\.id\),\s*\}\);\s*\} finally \{\s*removePendingHeroResourcePromptRecord\(placementId, record\.id\);/, 'it goes when the question is answered or dismissed');
+  // The page that starts the turn asks at once and keeps the same record, already its own.
+  const local = section('  async function processHeroicResourceAutomationEvent(', '  let pendingHeroResourcePromptCounter = 0;');
+  assert.match(local, /const kept = isController && eventType === 'turnStart' && \(!rule\.autoApply \|\| rule\.maintenanceOffer\)\s*\? keepHeroResourcePromptRecord\(/);
+  assert.match(local, /\} finally \{\s*if \(kept\) removePendingHeroResourcePromptRecord\(placement\.id, kept\.id\);/);
 });
 
 test('a turn-start decision preserves new casts and charges only chosen casts still on the board', () => {

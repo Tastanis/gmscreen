@@ -742,9 +742,29 @@
     return Math.max(0, ref.min ?? 0, Math.min(ref.max ?? Infinity, number * (ref.multiply ?? 1) + (ref.add ?? 0)));
   }
 
+  // What a target predicate is shown as in a prompt. Only the names that are not words themselves are reworded
+  // ("creatureOrObject"); "creature", "enemy", "ally", "object" and "self" are shown exactly as before.
+  const TARGET_PREDICATE_WORDS = {
+    creatureOrObject: ["creature or object", "creatures or objects"],
+    selfOrAlly: ["ally (or yourself)", "allies (or yourself)"],
+    selfAndAlly: ["ally (and yourself)", "allies (and yourself)"],
+  };
+
+  function hasTargetPredicateWords(predicate) {
+    return Object.prototype.hasOwnProperty.call(TARGET_PREDICATE_WORDS, String(predicate ?? ""));
+  }
+
+  function targetPredicateWords(predicate, count = 1) {
+    if (!hasTargetPredicateWords(predicate)) return String(predicate ?? "");
+    const words = TARGET_PREDICATE_WORDS[predicate];
+    return Number(count) > 1 ? words[1] : words[0];
+  }
+
   global.AbilityAutomationPrimitives = {
     actionNumberSource,
     adjustActionNumber,
+    hasTargetPredicateWords,
+    targetPredicateWords,
     BLOCK_TYPES,
     EFFECT_KINDS,
     TRIGGER_VALUE_SOURCES,

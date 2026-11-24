@@ -2875,12 +2875,12 @@
                 ? `${block.length || block.size}-square ${block.shape}`
                 : `${block.size}-square ${block.shape}`;
           const within = block.distance?.within ? ` within ${block.distance.within}` : "";
-          return `Place ${sizeText}${within} affecting ${block.predicate}${block.optional ? " (optional)" : ""}.`;
+          return `Place ${sizeText}${within} affecting ${P.targetPredicateWords(block.predicate, 2)}${block.optional ? " (optional)" : ""}.`;
         }
         const count = block.count?.mode === "upTo" ? `up to ${block.count.value}` : `${block.count?.value ?? 1}`;
         const distance = block.distance?.value ? ` within ${block.distance.value}` : "";
         const origin = block.rangeOrigin && block.rangeOrigin !== "self" ? ` from ${block.rangeOrigin}` : "";
-        return `Pick ${count} ${block.predicate}${distance}${origin}${block.optional ? " (optional)" : ""}.`;
+        return `Pick ${count} ${P.targetPredicateWords(block.predicate, block.count?.mode === "all" ? 2 : block.count?.value)}${distance}${origin}${block.optional ? " (optional)" : ""}.`;
       }
       case "powerRoll":
         return `Roll ${block.rollFormula || "2d10"} + ${block.attribute || "Strongest"}${block.bonus ? ` ${block.bonus >= 0 ? "+" : ""}${block.bonus}` : ""}.`;
