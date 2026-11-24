@@ -166,7 +166,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, courtyardRoads, isReserved, installSilverquill, installSilverquillHouses } from './silverquill.js?city=10';
+import { configureArbitrationSteps, footprintHexes, markSilverquillLot, reserveSilverquill, courtyardRoads, isReserved, registerSilverquillHexes, installSilverquill, installSilverquillHouses } from './silverquill.js?city=11';
 import { installVellumGuard } from './vellum-guard.js?motion=7';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
@@ -4888,16 +4888,21 @@ function targetAt(cx, cy) {
     if(!tier || ray.ray.intersectsBox(tier.userData.pickBounds))pickRoots.push(tier||root);
   }
   const hits=ray.intersectObjects(pickRoots,true); let best = p ? p.dist : 1e9, res = null;
-  if (hits.length && hits[0].distance < best) { let o = hits[0].object; while (o && !o.userData.thing) o = o.parent; if (o) { best = hits[0].distance; res = { thing: o.userData.thing }; } }
+  if (hits.length && hits[0].distance < best) { let o = hits[0].object; while (o && !o.userData.thing) o = o.parent; if (o) { best = hits[0].distance; res = pickedThing(o.userData.thing, worldToHex(hits[0].point.x, hits[0].point.z)); } }
   const now = performance.now(); for (const mv of movers) { if (!mv.box || now - mv.at > 150) { mv.box = (mv.box || new THREE.Box3()).setFromObject(mv.o); mv.at = now; }                // a moving thing is taken by the box round it, refreshed a few times a second
     const hp = ray.ray.intersectBox(mv.box, moverV); if (hp) { const dd = hp.distanceTo(ray.ray.origin); if (dd < best) { const tg = mv.target(); if (tg) { if (!tg.thing) tg.mover = mv.o; best = dd; res = tg; } } } }
   if (res) return res;
   if (!p) return null;
   const hx = worldToHex(p.x, p.z), own = hexOwner.get(hexKey(hx.q, hx.r));
-  return own ? { thing: own } : { hex: hx };
+  return own ? pickedThing(own, hx) : { hex: hx };
+}
+function pickedThing(thing, hex) {
+  if (!thing.recordHexes) return {thing};
+  const mapHex = thing.hexes.find(h => h.q === hex.q && h.r === hex.r) || thing.hexes[0];
+  return {thing, mapHex};
 }
 const moverV = new THREE.Vector3();
-const keyOf = t => !t ? '' : t.scroll ? 'scroll:'+t.scroll.book.college.name+':'+(t.scroll.item?.thing.id??'') : t.thing ? 't' + t.thing.id : 'h' + hexKey(t.hex.q, t.hex.r);
+const keyOf = t => !t ? '' : t.scroll ? 'scroll:'+t.scroll.book.college.name+':'+(t.scroll.item?.thing.id??'') : t.thing ? 't' + t.thing.id + (t.mapHex ? '/' + hexKey(t.mapHex.q, t.mapHex.r) : '') : 'h' + hexKey(t.hex.q, t.hex.r);
 const hexesOf = t => t.thing ? t.thing.hexes : [t.hex];
 const setList = (arr, n, list) => { const c = Math.min(list.length, NH); for (let i = 0; i < c; i++) arr.value[i].set(list[i].sx, list[i].sy); n.value = c; };
 const HL = new THREE.Color(0x3a2a0a);
@@ -4912,7 +4917,8 @@ function setHover(t) {
   if (!t) { U.uHovN.value = 0; tip.style.display = 'none'; canvas.style.cursor = ''; return; }
   if(t.scroll){U.uHovN.value=0;tip.style.display='none';canvas.style.cursor='pointer';return;}
   setList(U.uHov, U.uHovN, hexesOf(t)); if (t.thing) glow(t.thing, true);
-  tip.textContent = t.thing ? (role.gm ? t.thing.name : `Hex ${t.thing.hexes[0].q},${t.thing.hexes[0].r}`) : t.label && (role.gm || t.hex.q > 50) ? (role.gm ? t.label : '') : `Hex ${t.hex.q},${t.hex.r}`; tip.style.visibility = tip.textContent ? '' : 'hidden';
+  const hoverHex = t.mapHex || t.thing?.hexes[0];
+  tip.textContent = t.thing ? (role.gm ? t.thing.name : `Hex ${hoverHex.q},${hoverHex.r}`) : t.label && (role.gm || t.hex.q > 50) ? (role.gm ? t.label : '') : `Hex ${t.hex.q},${t.hex.r}`; tip.style.visibility = tip.textContent ? '' : 'hidden';
   tip.style.display = 'block'; canvas.style.cursor = 'pointer';
 }
 let fly = null;
@@ -4933,12 +4939,22 @@ const DATA_HEX = { 'Inkwell Lake': [[29, 10], [28, 11], [29, 11]], 'Damatha Inkf
 const DATA_AT = { '35,4': [34, 6], '11,28': [11, 27] };   // the same, for things that share a name (Cold Anchor Stones, Large Pillar): keyed by the hex the 3D one stands on
 const panel = document.getElementById('panel'), $ = id => document.getElementById(id), pNotes = $('pNotes'), pGm = $('pGmNotes'); let cur = null;
 const filled = d => !!d && ['player', 'gm'].some(k => d[k] && (d[k].title || d[k].notes || (d[k].images || []).length)), last = a => (a && a.length ? a[a.length - 1] : null);
-const candidates = t => { const list = []; if (t.thing) { for (const h of DATA_HEX[t.thing.name] || []) list.push(h); for (const h of t.thing.hexes) { const m = DATA_AT[h.q + ',' + h.r]; if (m) list.push(m); } for (const h of t.thing.hexes) list.push([h.q, h.r]); } else list.push([t.hex.q, t.hex.r]); return list; };
+const candidates = t => {
+  if (!t.thing) return [[t.hex.q, t.hex.r]];
+  const records = t.thing.recordHexes || t.thing.hexes;
+  const list = [...(DATA_HEX[t.thing.name] || [])];
+  for (const h of records) {
+    const alias = DATA_AT[hexKey(h.q, h.r)];
+    if (alias) list.push(alias);
+  }
+  for (const h of records) list.push([h.q, h.r]);
+  return list;
+};
 const FIELDS = ['pNotes', 'pGmNotes', 'pGmTitle', 'pPlTitle'];
 const HALL_IMG = { 'Vellum Gargoyle': 'vellum-gargoyle.webp', 'Kollema Hall': 'kollema-hall.webp', 'Torus Hall': 'torus-hall.webp', 'Conjurot Hall': 'conjurot-hall.webp', 'Grandloft Hall': 'grandloft-hall.webp', 'Widdershins Hall': 'widdershins-hall.webp' };   // the colleges' main halls: their paintings live beside this page in images/
 const imgList = () => { const d = (cur && cur.data) || {}, pl = (d.player || {}).images || [], gm = (d.gm || {}).images || [], hall = cur && cur.t && cur.t.thing && HALL_IMG[cur.t.thing.name], base = hall ? [{ f: hall, sec: 'hall', url: 'images/' + hall }] : [];
   return base.concat(role.gm ? [...gm.map(x => ({ f: x.filename, sec: 'gm' })), ...pl.filter(x => x.shared_from !== 'gm').map(x => ({ f: x.filename, sec: 'player' }))] : pl.map(x => ({ f: x.filename, sec: 'player' }))); };
-function render() { const d = cur.data || {}, pl = d.player || {}, gm = d.gm || {}, list = imgList(), where = cur.q > 50 ? '' : `Hex ${cur.q},${cur.r}`; cur.i = clamp(cur.i == null ? (list[0] && list[0].sec === 'hall' ? 0 : list.length - 1) : cur.i, 0, Math.max(list.length - 1, 0)); const img = list[cur.i];
+function render() { const d = cur.data || {}, pl = d.player || {}, gm = d.gm || {}, list = imgList(), shown = cur.t.mapHex || (cur.t.thing?.recordHexes && cur.t.thing.hexes[0]) || cur, where = shown.q > 50 ? '' : `Hex ${shown.q},${shown.r}`; cur.i = clamp(cur.i == null ? (list[0] && list[0].sec === 'hall' ? 0 : list.length - 1) : cur.i, 0, Math.max(list.length - 1, 0)); const img = list[cur.i];
   $('pTitle').textContent = role.gm ? (gm.title || pl.title || (cur.t.thing ? cur.t.thing.name : cur.t.label || where)) : (pl.title || where || '\u2014');
   $('pSub').textContent = where + (role.gm && cur.t.thing && cur.t.thing.hexes.length > 1 ? ' · ' + cur.t.thing.hexes.length + ' hexes' : '');
   const im = $('pImg'); if (img && img.f) { im.src = img.url || API + 'hex-images/' + encodeURIComponent(img.f); im.style.display = 'block'; $('pNoImg').style.display = 'none'; } else { im.removeAttribute('src'); im.style.display = 'none'; $('pNoImg').style.display = 'block'; $('pNoImg').textContent = role.gm ? 'No image yet' : 'Nothing has been revealed here'; }
@@ -7611,7 +7627,7 @@ setTimeout(async () => {
   const cache = local || packed; if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); if (packed && kept) terrainCache.fresh = packed; const t1 = performance.now();
-  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); hallsSetup(); installSilverquill(things, camera, renderer, anim);
+  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); registerSilverquillHexes(things, hexOwner, hexAt, hexKey); hallsSetup(); installSilverquill(things, camera, renderer, anim);
   campusTable=installCampusTable({scene,renderer,things,width:MAP_W,depth:MAP_D,anim,
     travel:t=>flyTarget({thing:t}),overview:()=>glide(HOME_POS.clone(),HOME_TGT.clone()),canNavigate:()=>!UNDER.on&&!PS.on&&!document.body.classList.contains('touring')}); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };

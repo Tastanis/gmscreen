@@ -161,6 +161,57 @@ function streetPieces(t) {
   return pieces;
 }
 
+// Ground footprints surveyed from the detailed models. Street sections follow their
+// routes, the Driftways follow the web canopy, and the gargoyle uses its guard post.
+// Ignore grazes smaller than both 6% of a cell and 10% of the location. In a shared
+// cell, false includes the highlight but leaves bare-ground picking to the main occupant.
+const districtHexes = {
+  "Grandloft Hall": [[29,17], [28,18], [30,17], [29,16], [30,16], [29,18], [28,17]],
+  "Rose Stage": [[25,23], [26,23], [24,23], [25,24], [25,22], [24,24], [26,22]],
+  "Dramatorium": [[23,21], [24,21], [24,20]],
+  "Vellum Gargoyle Gate": [[27,19,false], [27,18], [28,19], [28,18,false]],
+  "Vellum Gargoyle": [[27,19], [26,20]],
+  "Inkfall Streets": [[27,16]],
+  "Hecklebox Balcony": [[27,15]],
+  "Annex of Addenda": [[28,13], [28,14], [29,13], [27,14]],
+  "Umbral Blade Loom": [[29,14]],
+  "Whispertube Tenements": [[29,15]],
+  "Spotlight Lance Plaza": [[31,15]],
+  "Illumination Hall": [[33,15]],
+  "Vainglory": [[32,14]],
+  "Clause Net Driftways": [[32,16], [31,16,false], [31,17], [32,17]],
+  "Strixhaven Star": [[25,19]],
+  "Arbitration Steps": [[27,21], [26,21]],
+  "Sealwright Foundry": [[31,19]],
+  "Meterworks Stage": [[34,17], [34,16], [34,18]],
+  "Ashgrave Mannor": [[28,21], [29,21], [28,22]],
+  "Clarentine's House": [[24,16]],
+  "Ewfall Guardens": [[24,17], [25,16], [25,17], [24,18], [24,16,false]],
+  "Inkling Hatchery Vats": [[32,6]],
+  "Damatha Inkfountains": [[30,9], [31,8], [31,9], [30,10], [30,8], [29,9], [29,10], [32,8], [31,7], [31,10]],
+  "Inkwell Lake": [[28,10], [27,10], [27,11], [28,9], [28,11], [29,9,false], [29,10,false], [27,9]],
+  "Cold Anchor Stones": [[35,4]],
+  "Duskwalk": [[28,15], [28,16], [28,14,false]],
+  "Ray Promenade": [[31,16], [32,15], [30,17,false], [29,18,false]],
+};
+
+export function registerSilverquillHexes(things, hexOwner, hexAt, hexKey) {
+  const district = things.filter(t => t.campus === 'Silverquill' && districtHexes[t.name]);
+  for (const t of district) {
+    t.recordHexes = t.hexes;
+    for (const h of t.recordHexes) {
+      const key = hexKey(h.q, h.r);
+      if (hexOwner.get(key) === t) hexOwner.delete(key);
+    }
+  }
+  for (const t of district) {
+    t.hexes = districtHexes[t.name].map(([q, r, primary = true]) => {
+      if (primary) hexOwner.set(hexKey(q, r), t);
+      return hexAt(q, r);
+    });
+  }
+}
+
 export function installSilverquill(things, camera, renderer, anim) {
   const view=new THREE.Frustum(), projection=new THREE.Matrix4();
   anim.push(()=>view.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse)));
