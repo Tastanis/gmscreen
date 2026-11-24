@@ -68,7 +68,7 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | `filter.minAmount` / `maxAmount` | Damage amount band. |
 | `filter.minDistance` / `maxDistance` | Forced movement distance band. |
 | `filter.actionKind`, `costIncludes`, `keywordsAny`, `verb` | Additional event filters. |
-| `limit.scope` | `round`, `turn`, or `encounter` (one fight). Marks are kept on the hero's token (every page sees them, a reload keeps them) and belong to the fight they were made in. While a popup for the rule is open no second one opens for it. |
+| `limit.scope` | `round`, `turn`, or `encounter` (one fight). A limited rule needs active combat when its event happens. Its offer expires when that scope ends, including while waiting for the player. Explicit `combatStart` and `combatEnd` rules run at their respective boundaries. Marks are saved on the hero's token and shared across pages. |
 | `limit.key` | Scoped flag key. |
 | `limit.markOn` | `applied` by default: the limit is used when the gain is taken, so Cancel leaves it free (Brandon, November 2026). `offered` uses it when the popup shows. |
 | `limit` on `turnStart` / `turnEnd` | Left out, it is `{ "scope": "round", "key": <rule id>, "markOn": "offered" }`: the start (or end) of a hero's turn is offered once a round, even if the turn is cancelled and started again (Brandon, November 10, 2026). `"limit": false` offers it at every start. |
@@ -77,9 +77,11 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | `prompt` | Template using `{action}`, `{amount}`, `{resource}`, `{reason}`, `{current}`, `{next}`, `{round}`, `{target}` and `{source}` (creature names). The popup puts what happened first ("Goblin was force moved.") unless the prompt names {target} or {source}, and asks it as a question. Buttons are Yes / Cancel (`applyLabel`, `cancelLabel` change them). |
 | `autoApply` | Optional boolean. `true` skips the confirmation popup and applies the rule immediately (keep it for combat start and end). |
 
-Who is asked: the hero's player, the start of their turn too; when the player's page does not take the popup up within about 25 seconds (not on), the Director is asked instead. A gain is undone with the action that caused it (one Ctrl+Z), and its limit with it.
+At turn start the Table checks who is connected. The hero’s player receives the resource and upkeep question when present, and the Director receives it immediately when running the hero alone. A question stays on the hero’s token until it is answered: the page showing it puts its user’s name on it, and that user’s page shows it again after a reload. The Director picks up an offer only when no page has shown it after about 25 seconds. An answer given late still counts: the gain while its round lasts, and the choice of which casts to keep for as long as the fight goes on, whoever’s turn it now is. A gain and its limit are undone with the action that caused them (one Ctrl+Z).
 
 ## Amount Examples
+
+When combat starts with one unconditional automatic `set` rule using a fixed amount or Victories, the Table records that opening balance once per hero and encounter. A first-turn gain accepted while the Director is still saving can initialize the balance and add the gain in the same write.
 
 ```json
 { "amount": 2 }

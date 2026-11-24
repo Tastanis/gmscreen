@@ -123,11 +123,3 @@ test('a click on a stair seen from the floor at its top lands on the stair', () 
   const onFloor = pickDrawn(slanted(8.5, 5, 6, slant), { slant, surfaces: [upper, lower, far], ramps: [arch, vine], view });
   assert.equal(onFloor?.floor?.id, 'upper');
 });
-
-test('the plate layer uses these rules for the stair picture and its arrows', () => {
-  const source = readFileSync(new URL('../roof-renderer.js', import.meta.url), 'utf8');
-  assert.equal((source.match(/seesRampTop\(viewer,head\(token,viewerGround\),(?:mid|p),z,gradient,s\.height\)/g) || []).length, 2);
-  assert.equal((source.match(/if\(lighting&&!see\((?:mid|p),z\)\)continue;/g) || []).length, 2);
-  assert.match(source, /const ownFloor=inspectionHeight===null\?standingFloor\(surfaces,viewer,viewerGround,onSurface\):null;/);
-  assert.match(source, /const level=rampSightHeight\(s,ownFloor,-Infinity,onSurface\),see=\(p,z\)=>sight\(p,Math\.max\(z,level\)\);/);
-});

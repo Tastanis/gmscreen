@@ -10,6 +10,20 @@ A flat reference of every value the JSON schema accepts, every runtime hook, and
 
 For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 
+## Shared action hooks
+
+| JSON field | Supported values and behavior |
+|---|---|
+| Target distance or count, teleport distance, trigger proximity | A literal integer or a reference with `source` of `attribute`, `abilityRange`, `victories`, `rollTotal`, `rollTier` or `triggerAmount`. The first two take a `name`. Integer modifiers are `multiply`, `add`, `min` and `max`. |
+| `target.eligible[]` | Alternative sets of required facts. Facts include `kind` (creature or object), `relation` (self, ally or enemy), `condition`, `role`, `casterSizeOrSmaller` and `maxSizeFrom` with an attribute and minimum score. |
+| `teleport.rangeOrigin`, `teleport.previewTargets` | Measure from self or a named target or area. Preview uses a numeric `within` and a target `predicate`. |
+| `powerRoll.targetTiers`, `rollMode`, `allowCritical`, `oncePerRoll` | Per-target outcomes on shared dice, individually rolled targets when specified, critical eligibility and tier-keyed effects once per roll. A shared roll emits one `powerRoll` event carrying `targetResults[]` (`id`, `total`, `tier`, `edge`, `bane` per target); a trigger filter on `tier`, `minTotal` or `maxTotal` reads the watcher’s own row, or the rows of its `targetWhose` targets, and the shared values when neither is among them. Each row’s effects, wrapped ones included, go to that row’s target only. A `spend` inside the tiers is asked and charged once per roll. A roll with no targets still opens and says so in chat. |
+| `automation.maintenance` | Positive `cost`, mode of `extend`, `repeat`, `targets` or `steps`, and optional reuse `action`. Successful opening uses emit `maintenanceCastResolved` with a cast ID. Linked zones, target markings and upkeep belong to that instance. |
+
+A maintenance plan can set `breakOnTurnDamage` to a numeric threshold or action-value reference. A turn’s cumulative damage prompts only for instances that have reached their threshold.
+
+[Authoring examples](../../ai-reference/vtt-json/elementalist-shared-hooks.json)
+
 ## Normalization metadata
 
 ### Power-roll execution and board modifiers
@@ -231,6 +245,8 @@ picking until **Done**.
 ## Target predicates — `target.predicate`
 
 `creature`, `enemy`, `ally`, `object`, `creatureOrObject`, `self`, `selfOrAlly`, `selfAndAlly`
+
+Prompts show `creatureOrObject`, `selfOrAlly` and `selfAndAlly` in words ("Pick 2 creatures or objects within 10"), through `AbilityAutomationPrimitives.targetPredicateWords(predicate, count)`. The other predicates are shown as written.
 
 For effect resolution, `target: "self"` is a special target group resolved directly to the source token. It does not require a preceding target card.
 

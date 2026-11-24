@@ -6,7 +6,7 @@
 // handler.php (save-fields). onSave answers true when the save went in; the form stays open (with the reason) when not.
 
 import {
-  ATTRIBUTES, TEST_TIERS, ACTION_LABELS, ALL_SKILLS, SKILL_GROUPS, KIT_FIELD_LABELS, MAX_HIRELING_SKILLS, MAX_HIRELING_BONUS,
+  ATTRIBUTES, TEST_TIERS, ACTION_LABELS, ALL_SKILLS, SKILL_GROUPS, SKILL_GROUP_NAMES, KIT_FIELD_LABELS, MAX_HIRELING_SKILLS, MAX_HIRELING_BONUS,
   deepClone, createId, defaultTest, normalizeTest, normalizeAutomationBlock, hasAbilityAutomation, effectiveKit,
   sanitizeRichText, normalizeRichText, parseImport, IMPORT_GROUP_LABELS, getSkillGroup,
 } from './sheet-model.js';
@@ -301,17 +301,19 @@ export function customSkillName(typed, have = []) {
 
 export function openSkillsEditor({ sheet, onSave, onActivity, onClose, dark, doc = document }) {
   const skills = deepClone(sheet.sidebar?.skills || {});
-  const row = (name, data) => `<div class="sp-row" data-row="skill" data-skill="${esc(name)}" style="grid-template-columns:1fr 120px auto;align-items:center"><b>${esc(name)} <small class="sp-hint">${esc(getSkillGroup(name))}</small></b>${fText('bonus', 'Bonus', data?.bonus ?? '')}<button type="button" class="sp-fbtn" data-remove-row>Remove</button></div>`;
+  // A custom skill's group can be chosen here, and changed (Brandon, November 17, 2026); a book skill's is the book's.
+  const groupSelect = (current) => `<select data-skill-group title="Shown under this group">${[...SKILL_GROUP_NAMES, 'Other'].map((g) => `<option value="${esc(g)}"${g === current ? ' selected' : ''}>${esc(g)}</option>`).join('')}</select>`;
+  const row = (name, data) => `<div class="sp-row" data-row="skill" data-skill="${esc(name)}" style="grid-template-columns:1fr 120px auto;align-items:center"><b>${esc(name)} ${ALL_SKILLS.includes(name) ? `<small class="sp-hint">${esc(getSkillGroup(name))}</small>` : groupSelect(getSkillGroup(name, data))}</b>${fText('bonus', 'Bonus', data?.bonus ?? '')}<button type="button" class="sp-fbtn" data-remove-row>Remove</button></div>`;
   // A custom skill (Brandon, November 10, 2026: "make a custom skill where if clicked you can type in the name of the
   // skill and make it a skill"): any name; it shows under "Other" on the sheet and can be rolled in Ask for a test.
-  const custom = `<div><b>Custom</b><button type="button" data-custom-open>+ Custom skill</button><span class="sp-skillcustom" data-custom-box hidden><input type="text" data-custom-name placeholder="Skill name" maxlength="40"><button type="button" data-custom-add>Add</button><span class="sp-hint" data-custom-hint></span></span></div>`;
+  const custom = `<div><b>Custom</b><button type="button" data-custom-open>+ Custom skill</button><span class="sp-skillcustom" data-custom-box hidden><input type="text" data-custom-name placeholder="Skill name" maxlength="40">${groupSelect('Other').replace('data-skill-group', 'data-custom-group')}<button type="button" data-custom-add>Add</button><span class="sp-hint" data-custom-hint></span></span></div>`;
   const picker = () => `<div class="sp-skillpick">${Object.entries(SKILL_GROUPS).map(([group, list]) => `<div><b>${esc(group)}</b>${list.filter((s) => !skills[s]).map((s) => `<button type="button" data-pick="${esc(s)}">+ ${esc(s)}</button>`).join('') || '<span class="sp-hint">All taken.</span>'}</div>`).join('')}${custom}</div>`;
-  const addSkill = (body, name) => { skills[name] = { level: 'Trained', bonus: '' }; body.querySelector('[data-skills]').insertAdjacentHTML('beforeend', row(name, {})); body.querySelector('[data-picker]').innerHTML = picker(); };
+  const addSkill = (body, name, group = '') => { skills[name] = { level: 'Trained', bonus: '', ...(group && group !== 'Other' ? { group } : {}) }; body.querySelector('[data-skills]').insertAdjacentHTML('beforeend', row(name, skills[name])); body.querySelector('[data-picker]').innerHTML = picker(); };
   const addCustom = (body) => {
     const input = body.querySelector('[data-custom-name]'), hint = body.querySelector('[data-custom-hint]');
     const typed = customSkillName(input.value, Object.keys(skills));
     if (typed.error) { hint.textContent = typed.error; input.focus(); return; }
-    addSkill(body, typed.name);
+    addSkill(body, typed.name, ALL_SKILLS.includes(typed.name) ? '' : body.querySelector('[data-custom-group]')?.value || '');
   };
   return openPanel({
     title: 'Skills', dark, doc, onActivity, onClose,
@@ -329,7 +331,10 @@ export function openSkillsEditor({ sheet, onSave, onActivity, onClose, dark, doc
     },
     save(body) {
       const out = {};
-      body.querySelectorAll('[data-row="skill"]').forEach((r) => { out[r.dataset.skill] = { level: 'Trained', bonus: r.querySelector('[data-f="bonus"]').value }; });
+      body.querySelectorAll('[data-row="skill"]').forEach((r) => {
+        const group = r.querySelector('[data-skill-group]')?.value || '';
+        out[r.dataset.skill] = { level: 'Trained', bonus: r.querySelector('[data-f="bonus"]').value, ...(group && group !== 'Other' ? { group } : {}) };
+      });
       return { sidebar: { skills: out } };
     },
     onSave,

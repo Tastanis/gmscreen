@@ -223,13 +223,15 @@
   const PAGES = {
     'Students': ['/dnd/strixhaven/students/', 'people', [760, 580]], 'Staff': ['/dnd/strixhaven/staff/', 'people', [760, 580]], 'Other NPCs': ['/dnd/strixhaven/othernpcs/', 'people', [760, 580]],
     'Campus map': ['/dnd/strixhaven/map3d/index.php', 'campus', [820, 600]], 'Locations': ['/dnd/strixhaven/locations/', 'campus', [700, 560]], 'Schedule': ['/dnd/schedule/', 'campus', [820, 600]],
-    'GM notes': ['/dnd/strixhaven/gm/', 'notes', [860, 620]], 'Monster Creator': ['/dnd/strixhaven/monster-creator/', 'workshop', [960, 660]], 'Templates': ['/dnd/strixhaven/templates/', 'workshop', [800, 600]],
-    'Arcane Construction': ['/dnd/strixhaven/arcaneconstruction/', 'workshop', [800, 600]], 'Players': ['/dnd/players.php', 'heroes', [640, 540]], 'Campaign record': ['/dnd/dashboard.php', 'heroes', [960, 660]],
+    'Character builder': ['/dnd/character_sheet/builder/', 'heroes', [1020, 720]], 'My Characters': ['/dnd/character_sheet/builder/library.php', 'heroes', [980, 700]],
+    'Submitted PCs': ['/dnd/character_sheet/builder/library.php?scope=pcs', 'heroes', [980, 700]],
+    'Monster Creator': ['/dnd/strixhaven/monster-creator/', 'workshop', [960, 660]], 'Templates': ['/dnd/strixhaven/templates/', 'workshop', [800, 600]],
+    'Arcane Construction': ['/dnd/strixhaven/arcaneconstruction/', 'workshop', [800, 600]], 'Players': ['/dnd/players.php', 'heroes', [640, 540]],
     'Projects': ['/dnd/campaign/index.php?view=projects&character=all', 'projects', [980, 680]], 'Relationships': ['/dnd/campaign/index.php?view=relationships&character=all', 'relations', [980, 680]],
     'Conditions': ['/dnd/rules/conditions/index.html'], 'Tests & Studying': ['/dnd/rules/tests-studying/index.html'], 'Project rules': ['/dnd/rules/projects/index.html'], 'Skills': ['/dnd/rules/skills/index.html'],
     'Falling & Jumping': ['/dnd/rules/fall-jump/index.html'], 'Breakthrough': ['/dnd/rules/breakthrough/index.html'], 'Respites': ['/dnd/rules/respites/index.html'], 'Negotiation': ['/dnd/rules/negotiation/index.html'], 'Universal Actions': ['/dnd/rules/universal-actions/index.html'],
   };
-  const PAGE_CHROME = '.strix-mini-nav,.strix-mini-nav-spacer,.nav-btn,.logout-btn,.version-footer,.back-btn,.dice-roller-launch,#chat-panel,#chat-panel-toggle,.chat-panel-toggle,#chat-whisper-popouts,button.close-btn[onclick*="window.close"]{display:none!important}body{padding-top:0!important}';
+  const PAGE_CHROME = '.nav-btn,.logout-btn,.version-footer,.back-btn,.dice-roller-launch,#chat-panel,#chat-panel-toggle,.chat-panel-toggle,#chat-whisper-popouts,button.close-btn[onclick*="window.close"]{display:none!important}body{padding-top:0!important}';
   function framePage(c, url) {
     c.innerHTML = `<iframe src="${url}" class="page-frame" style="opacity:0"></iframe><div class="loading">Opening…</div>`;
     const f = $('iframe', c);
@@ -260,9 +262,16 @@
     } else { w.sleptAt = 0; if (w.unloaded) { const url = w.unloaded; w.unloaded = null; f.style.opacity = 0; f.src = url; } }
   }
   apps.page = (title) => {
+    if (title === 'Campaign record') title = 'Projects';
+    if (!Object.hasOwn(PAGES, title)) return null;
     const known = PAGES[title], url = SERVED && known?.[0];
     return T.openWindow({ id: 'page-' + title, app: 'page', arg: title, title, icon: I[known?.[1] || 'rules'], size: known?.[2] || [600, 560],
       heavy: HEAVY_PAGES.has(title), onWork: HEAVY_PAGES.has(title) ? pageWork : undefined,
+      onReopen(w) {
+        if (!url || !['Character builder', 'My Characters', 'Submitted PCs'].includes(title)) return;
+        const frame = w.node.querySelector('iframe');
+        if (frame && (title !== 'Character builder' || frame.contentWindow.location.pathname.endsWith('/library.php'))) frame.src = url;
+      },
       build(c) { if (url) { framePage(c, url); return; } c.innerHTML = `<div class="pad"><h3 style="margin:0 0 6px;font-family:Georgia">${esc(title)}</h3><p class="muted">The real page opens here when the Table is served by the site.</p></div>`; } });
   };
 
@@ -606,7 +615,6 @@
     { k: 'relations', t: 'Relationships', d: 'Who each hero is close to or at odds with.', open: () => apps.page('Relationships') },
     { k: 'people', t: 'People', d: 'Students, staff and other NPCs.', open: flyPeople },
     { k: 'campus', t: 'Campus', d: 'The campus map and the schedule.', open: flyCampus },
-    { k: 'notes', t: 'GM notes', gm: true, d: 'Your GM screen notes.', open: () => apps.page('GM notes') },
     { k: 'rules', t: 'Rules', d: 'Rules pages, each in its own window.', open: flyRules },
     { k: 'arcane', t: 'Arcane Construction', only: 'zepha', d: 'Your arcane construction.', open: () => apps.page('Arcane Construction') },
     { label: 'Prep', gm: true },
@@ -667,6 +675,12 @@
       f.querySelectorAll('.item').forEach((n) => { const h = HEROES.find((x) => x.id === n.dataset.key);
         n.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-mock]')) return; T.dragOut(e, { click: () => { apps.sheet(h.id); T.closeFlyout(); }, onTable: (x, y) => apps.heroCard(h.id, x, y), onDropTarget: (target, ev) => { if (target.dataset.drop !== 'map') return false; placeHero(h, ev.clientX, ev.clientY, target); return true; } },
           `<div class="card" style="position:static"><div class="art" style="background:${portrait(h)}"></div><div class="name">${h.name}</div><div style="height:8px"></div></div>`); }); });
+      if (me.gm && !playerView) {
+        const submissions = el('button', 'chip-btn');
+        submissions.textContent = 'Submitted PCs';
+        submissions.onclick = () => { apps.page('Submitted PCs'); T.closeFlyout(); };
+        f.querySelector('.body').append(submissions);
+      }
     });
   }
   function flyScenes(btn) {
@@ -816,6 +830,8 @@
   function flyTable(btn) {
     const tb = () => $('#table').getBoundingClientRect();
     menuFly(btn, 'The table', [
+      { t: 'Character builder', icon: 'heroes', go: () => apps.page('Character builder') },
+      { t: 'My Characters', icon: 'heroes', go: () => apps.page('My Characters') },
       { html: '<div class="menu-label">Arrange</div>' },
       { t: 'Prep', gm: true, icon: 'workshop', note: 'creatures beside the map', go: () => { const b = tb(); place(apps.creatures(), 0, 0, b.width * .36, b.height); place(apps.map(), b.width * .36, 0, b.width * .64, b.height); } },
       { t: 'Clear the table', icon: 'layouts', go: () => T.clearLayout() },
@@ -916,5 +932,12 @@
     place(apps.map(), 270, 16, b.width - 270 - 40, b.height - 32);   // clear of the right-hand drawer tabs
     if (SERVED) T.dock(apps.chat(), 'right', false, .24);
   }
+  function openLinkedBuilder() {
+    if (location.hash !== '#character-builder') return;
+    apps.page('Character builder');
+    history.replaceState(history.state, '', location.pathname + location.search);
+  }
+  window.addEventListener('hashchange', openLinkedBuilder);
+  openLinkedBuilder();
   })();
 })();

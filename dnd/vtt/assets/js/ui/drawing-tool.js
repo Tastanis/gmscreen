@@ -1,7 +1,6 @@
 import { diffDrawings, applyDrawingEdits, invertDrawingEdits, canEditDrawing } from './drawing-edits.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { rampHeight } from './imported-ramps.mjs';
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
 let onDrawingChange = null;
@@ -10,7 +9,6 @@ let getIsGM = () => false;
 
 export function mountDrawingTool(options = {}) {
   const drawButton = document.querySelector('[data-action="toggle-draw"]');
-  const drawingLayer = document.getElementById('vtt-drawing-layer');
   const settingsPanel = document.getElementById('vtt-drawing-settings');
   const colorInput = document.getElementById('vtt-draw-color');
   const strokeInput = document.getElementById('vtt-draw-stroke');
@@ -19,7 +17,7 @@ export function mountDrawingTool(options = {}) {
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
 
-  if (!drawButton || !drawingLayer || !mapSurface || !mapTransform) {
+  if (!drawButton || !mapSurface || !mapTransform) {
     return;
   }
 
@@ -43,15 +41,12 @@ export function mountDrawingTool(options = {}) {
     eraseDidChange: false,
     needsFullSync: false,
     pointerId: null,
-    currentPath: null,
     currentPoints: [],
     color: colorInput?.value || '#ff0000',
     strokeWidth: parseInt(strokeInput?.value || '3', 10),
     drawings: [],
     undoStack: [],
-    cursorIndicator: null,
     drawButton,
-    drawingLayer,
     settingsPanel,
     colorInput,
     strokeInput,
@@ -62,7 +57,6 @@ export function mountDrawingTool(options = {}) {
     colorRow,
     mapSurface,
     mapTransform,
-    layerSize: { width: 0, height: 0 },
     pendingSync: false,
     syncTimeout: null,
     sceneId: options.getContext?.()?.sceneId || '_default',
@@ -82,12 +76,6 @@ export function mountDrawingTool(options = {}) {
 
   drawButton.setAttribute('aria-pressed', 'false');
 
-  const resizeObserver =
-    typeof ResizeObserver === 'function'
-      ? new ResizeObserver(() => syncLayerSize(state))
-      : null;
-  resizeObserver?.observe(mapTransform);
-
   if (typeof MutationObserver === 'function') {
     const visibilityObserver = new MutationObserver(() => {
       if (mapTransform.hasAttribute('hidden')) {
@@ -104,7 +92,7 @@ export function mountDrawingTool(options = {}) {
   if (colorInput) {
     colorInput.addEventListener('input', () => {
       state.color = colorInput.value;
-      updateCursorIndicatorStyle(state);
+      bumpView();
     });
   }
 
@@ -112,7 +100,7 @@ export function mountDrawingTool(options = {}) {
     strokeInput.addEventListener('input', () => {
       state.strokeWidth = parseInt(strokeInput.value, 10);
       strokeValue.textContent = strokeInput.value;
-      updateCursorIndicatorSize(state);
+      bumpView();
     });
   }
 
@@ -267,7 +255,6 @@ export function mountDrawingTool(options = {}) {
     }
   });
 
-  syncLayerSize(state);
 }
 
 function toggleDrawMode(state, nextActive) {
@@ -283,28 +270,27 @@ function toggleDrawMode(state, nextActive) {
     state.drawButton.setAttribute('aria-pressed', state.active ? 'true' : 'false');
   }
 
-  if (state.drawingLayer) {
-    state.drawingLayer.setAttribute('data-drawing-active', state.active ? 'true' : 'false');
+  if (state.mapSurface) {
+    state.mapSurface.setAttribute('data-drawing-active', state.active ? 'true' : 'false');
   }
 
   if (state.settingsPanel) {
     state.settingsPanel.hidden = !state.active;
   }
 
-  if (state.active) {
-    createCursorIndicator(state);
-  } else {
+  if (!state.active) {
     cancelDrawing(state);
     if (state.erasing) {
       endErasing(state);
     }
     setEraseMode(state, false);
-    removeCursorIndicator(state);
+    state.cursor3d = null;
+    bumpView();
   }
 }
 
 function beginDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event, state);
+  const point = map3dPoint(state, event);
   if (!point) {
     return;
   }
@@ -317,17 +303,11 @@ function beginDrawing(state, event) {
   state.currentRamp = Boolean(point.hit?.rampId);
   bumpView();
 
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('stroke', state.color);
-  path.setAttribute('stroke-width', String(state.strokeWidth));
-  path.setAttribute('d', `M ${point.x} ${point.y}`);
-  state.drawingLayer.appendChild(path);
-  state.currentPath = path;
 }
 
 function continueDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event, state);
-  if (!point || !state.currentPath) {
+  const point = map3dPoint(state, event);
+  if (!point || !state.drawing) {
     return;
   }
 
@@ -336,20 +316,18 @@ function continueDrawing(state, event) {
   const last = state.currentPoints[state.currentPoints.length - 1];
   if (last && Math.hypot(point.x - last.x, point.y - last.y) < MIN_POINT_STEP) return;
   state.currentPoints.push(point);
-  updatePathFromPoints(state.currentPath, state.currentPoints);
   bumpView();
 }
 
 const MIN_POINT_STEP = 2;
 
 function endDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event, state);
-  if (point && state.currentPath) {
+  const point = map3dPoint(state, event);
+  if (state.drawing && point) {
     state.currentPoints.push(point);
-    updatePathFromPoints(state.currentPath, state.currentPoints);
   }
 
-  if (state.currentPath && state.currentPoints.length >= 2) {
+  if (state.drawing && state.currentPoints.length >= 2) {
     // Save current state to undo stack before adding new drawing
     pushToUndoStack(state);
 
@@ -366,27 +344,20 @@ function endDrawing(state, event) {
       drawing.authorId = authorId;
     }
     state.drawings.push(drawing);
-    state.currentPath.dataset.drawingId = drawing.id;
     scheduleSyncDrawings(state);
-  } else if (state.currentPath) {
-    state.currentPath.remove();
   }
 
   state.drawing = false;
   state.pointerId = null;
-  state.currentPath = null;
   state.currentPoints = [];
   bumpView();
 }
 
 function cancelDrawing(state) {
-  if (state.currentPath) {
-    state.currentPath.remove();
-  }
+
 
   state.drawing = false;
   state.pointerId = null;
-  state.currentPath = null;
   state.currentPoints = [];
   bumpView();
 }
@@ -404,15 +375,15 @@ function setEraseMode(state, eraseMode) {
   if (state.colorRow) {
     state.colorRow.hidden = eraseMode;
   }
-  if (state.drawingLayer) {
-    state.drawingLayer.setAttribute('data-erase-active', eraseMode ? 'true' : 'false');
+  if (state.mapSurface) {
+    state.mapSurface.setAttribute('data-erase-active', eraseMode ? 'true' : 'false');
   }
-  updateCursorIndicatorStyle(state);
+  bumpView();
   bumpView();
 }
 
 function beginErasing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event, state);
+  const point = map3dPoint(state, event);
   if (!point) {
     return;
   }
@@ -430,7 +401,7 @@ function beginErasing(state, event) {
 }
 
 function continueErasing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event, state);
+  const point = map3dPoint(state, event);
   if (!point) {
     return;
   }
@@ -617,7 +588,7 @@ function adjustStrokeSize(state, delta) {
   if (state.strokeValue) {
     state.strokeValue.textContent = String(newValue);
   }
-  updateCursorIndicatorSize(state);
+  bumpView();
 }
 
 function isEditable(state, drawing) {
@@ -637,12 +608,10 @@ function isEditable(state, drawing) {
 // a stroke is seen exactly when the thing it was drawn on is seen. A stroke with no height (a map with no built
 // floors, or one drawn before this) keeps the old rule.
 function floorHeightUnder(point) {
-  const height = Number(globalThis.terrainPrototype?.floorUnder?.(point) ?? NaN);
-  if (!Number.isFinite(height)) return null;
-  // 3D board: the floor is the one the pointer actually touched (a floating plate), else the ground (0). A stroke
-  // begun on a vine or stair keeps the height it began at, and is shown as a floor of that height would be.
-  if (point?.hit) return (point.hit.surfaceId || point.hit.rampId) ? Math.round(point.hit.height * 100) / 100 : 0;
-  return Math.round(height * 100) / 100;
+  const hit = point?.hit;
+  if (!hit || !Number.isFinite(hit.height)) return null;
+  if (hit.surfaceId || hit.rampId) return Math.round(hit.height * 100) / 100;
+  return globalThis.terrainPrototype?.design ? 0 : null;
 }
 
 /** True or false where the stroke's height decides; null where the floor it was given does. */
@@ -652,7 +621,7 @@ function shownByHeight(drawing) {
   return typeof shown === 'boolean' ? shown : null;
 }
 
-function shownOnThisPage(state, drawing) {
+export function shownOnThisPage(state, drawing) {
   return shownByHeight(drawing) ?? ((drawing.levelId || 'level-0') === state.levelId);
 }
 
@@ -689,64 +658,6 @@ function undoLastDrawing(state) {
   state.drawings = applyDrawingEdits(state.drawings, invertDrawingEdits(edits));
   renderDrawings(state);
   scheduleSyncDrawings(state, false);
-}
-
-function updatePathFromPoints(pathElement, points) {
-  if (points.length < 2) {
-    pathElement.setAttribute('d', `M ${points[0].x} ${points[0].y}`);
-    return;
-  }
-
-  let d = `M ${points[0].x} ${points[0].y}`;
-
-  if (points.length === 2) {
-    d += ` L ${points[1].x} ${points[1].y}`;
-  } else {
-    for (let i = 1; i < points.length - 1; i++) {
-      const p0 = points[i - 1];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-
-      const midX1 = (p0.x + p1.x) / 2;
-      const midY1 = (p0.y + p1.y) / 2;
-      const midX2 = (p1.x + p2.x) / 2;
-      const midY2 = (p1.y + p2.y) / 2;
-
-      if (i === 1) {
-        d += ` L ${midX1} ${midY1}`;
-      }
-
-      d += ` Q ${p1.x} ${p1.y} ${midX2} ${midY2}`;
-    }
-
-    const lastPoint = points[points.length - 1];
-    d += ` L ${lastPoint.x} ${lastPoint.y}`;
-  }
-
-  pathElement.setAttribute('d', d);
-}
-
-function getMapCoordinates(mapTransform, event, state = null) {
-  if (globalThis.vtt3d?.active) {
-    return map3dPoint(state, event);
-  }
-  const rect = mapTransform.getBoundingClientRect();
-  const baseWidth = mapTransform.offsetWidth;
-  const baseHeight = mapTransform.offsetHeight;
-  if (!baseWidth || !baseHeight) {
-    return null;
-  }
-
-  const scaleX = rect.width / baseWidth;
-  const scaleY = rect.height / baseHeight;
-  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || scaleX === 0 || scaleY === 0) {
-    return null;
-  }
-
-  return {
-    x: (event.clientX - rect.left) / scaleX,
-    y: (event.clientY - rect.top) / scaleY,
-  };
 }
 
 function isPointerOverToken(event) {
@@ -790,21 +701,6 @@ function isPointerOverToken(event) {
   return false;
 }
 
-function syncLayerSize(state) {
-  const width = state.mapTransform.offsetWidth || 0;
-  const height = state.mapTransform.offsetHeight || 0;
-  if (state.layerSize.width === width && state.layerSize.height === height) {
-    return;
-  }
-
-  const safeWidth = Math.max(width, 1);
-  const safeHeight = Math.max(height, 1);
-  state.drawingLayer.setAttribute('viewBox', `0 0 ${safeWidth} ${safeHeight}`);
-  state.drawingLayer.setAttribute('width', String(safeWidth));
-  state.drawingLayer.setAttribute('height', String(safeHeight));
-  state.layerSize = { width, height };
-}
-
 function scheduleSyncDrawings(state, remember = true) {
   const edits = diffDrawings(state.editBefore || [], state.drawings);
   state.editBefore = null;
@@ -819,7 +715,7 @@ function scheduleSyncDrawings(state, remember = true) {
   const pending = { sceneId: state.sceneId, edits };
   state.pendingList.push(pending);
   state.pendingSync = true;
-  state.drawingLayer.setAttribute('aria-busy', 'true');
+  state.mapSurface.setAttribute('aria-busy', 'true');
   state.sendChain = state.sendChain.then(() => {
     if (!onDrawingChange) throw new Error('Drawing command connection is unavailable.');
     return onDrawingChange(edits, { sceneId: pending.sceneId });
@@ -833,7 +729,7 @@ function scheduleSyncDrawings(state, remember = true) {
     if (at < 0) return;                                              // the scene changed meanwhile
     state.pendingList.splice(at, 1);
     state.pendingSync = state.pendingList.length > 0;
-    state.drawingLayer.setAttribute('aria-busy', String(state.pendingSync));
+    state.mapSurface.setAttribute('aria-busy', String(state.pendingSync));
     // A stroke or an erasure in hand is finished first; it is brought up to date when it ends.
     if (state.drawing || state.erasing) return;
     state.drawings = withPending(state);
@@ -857,74 +753,9 @@ function round(value, precision) {
 
 // --- Cursor indicator (circle showing brush/eraser radius) ---
 
-function createCursorIndicator(state) {
-  if (state.cursorIndicator) {
-    return;
-  }
-
-  const circle = document.createElementNS(SVG_NS, 'circle');
-  circle.setAttribute('class', 'vtt-cursor-indicator');
-  circle.setAttribute('r', String(state.strokeWidth / 2));
-  circle.setAttribute('cx', '0');
-  circle.setAttribute('cy', '0');
-  circle.style.display = 'none';
-  updateCursorIndicatorStyle(state);
-  state.drawingLayer.appendChild(circle);
-  state.cursorIndicator = circle;
-}
-
-function removeCursorIndicator(state) {
-  if (state.cursorIndicator) {
-    state.cursorIndicator.remove();
-    state.cursorIndicator = null;
-  }
-  state.cursor3d = null;
-  bumpView();
-}
-
 function updateCursorIndicatorPosition(state, event) {
-  if (!state.cursorIndicator) {
-    return;
-  }
-
-  const point = getMapCoordinates(state.mapTransform, event, state);
-  if (globalThis.vtt3d?.active) {
-    const next = point ? { x: point.x, y: point.y, height: point.height } : null;
-    const was = state.cursor3d;
-    if (!next !== !was || (next && (next.x !== was.x || next.y !== was.y || next.height !== was.height))) {
-      state.cursor3d = next;
-      bumpView();
-    }
-  }
-  if (!point) {
-    state.cursorIndicator.style.display = 'none';
-    return;
-  }
-
-  state.cursorIndicator.setAttribute('cx', String(point.x));
-  state.cursorIndicator.setAttribute('cy', String(point.y));
-  state.cursorIndicator.style.display = '';
-}
-
-function updateCursorIndicatorSize(state) {
-  if (!state.cursorIndicator) {
-    return;
-  }
-  state.cursorIndicator.setAttribute('r', String(state.strokeWidth / 2));
-  bumpView();
-}
-
-function updateCursorIndicatorStyle(state) {
-  if (!state.cursorIndicator) {
-    return;
-  }
-  if (state.eraseMode) {
-    state.cursorIndicator.setAttribute('stroke', 'rgba(255, 255, 255, 0.8)');
-    state.cursorIndicator.setAttribute('fill', 'rgba(255, 255, 255, 0.1)');
-  } else {
-    state.cursorIndicator.setAttribute('stroke', state.color);
-    state.cursorIndicator.setAttribute('fill', 'rgba(255, 255, 255, 0.15)');
-  }
+  const point = map3dPoint(state, event);
+  state.cursor3d = point && {x: point.x, y: point.y, height: point.height};
   bumpView();
 }
 
@@ -1001,9 +832,8 @@ function pointOnStroke(at, drawing) {
 }
 
 /** What the 3D board draws; `revision` changes whenever any of it does. */
-export function getDrawingView() {
-  if (!sharedState) return null;
-  const state = sharedState;
+export function getDrawingView(state = sharedState) {
+  if (!state) return null;
   return {
     revision: viewRevision,
     active: state.active,
@@ -1064,7 +894,7 @@ export function setDrawingContext({ sceneId = '_default', levelId = 'level-0' } 
     if (sceneId !== state.sceneId) {
       state.pendingList = [];
       state.pendingSync = false;
-      state.drawingLayer.setAttribute('aria-busy', 'false');
+      state.mapSurface.setAttribute('aria-busy', 'false');
       state.drawings = [];
       state.confirmedDrawings = [];
     }
@@ -1089,37 +919,12 @@ export function setDrawings(drawings) {
 
 export function renderDrawings(state) {
   const targetState = state || sharedState;
-  if (!targetState || !targetState.drawingLayer) {
+  if (!targetState || !targetState.mapSurface) {
     return;
-  }
-
-  // Remove all children except the cursor indicator
-  const children = Array.from(targetState.drawingLayer.childNodes);
-  for (const child of children) {
-    if (child !== targetState.cursorIndicator) {
-      targetState.drawingLayer.removeChild(child);
-    }
   }
 
   targetState.shownKey = shownKey(targetState);
   bumpView();
-  for (const drawing of targetState.drawings) {
-    if (!shownOnThisPage(targetState, drawing) || !drawing.points || drawing.points.length < 2) {
-      continue;
-    }
-
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('stroke', drawing.color || '#ff0000');
-    path.setAttribute('stroke-width', String(drawing.strokeWidth || 3));
-    path.dataset.drawingId = drawing.id;
-    updatePathFromPoints(path, drawing.points);
-    targetState.drawingLayer.appendChild(path);
-  }
-
-  // Re-append cursor indicator so it stays on top
-  if (targetState.cursorIndicator) {
-    targetState.drawingLayer.appendChild(targetState.cursorIndicator);
-  }
 }
 
 export function setDrawModeActive(active) {

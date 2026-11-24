@@ -118,6 +118,7 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
 <body>
 <main>
     <h1>Players</h1>
+    <p><a class="back" href="character_sheet/builder/library.php?scope=pcs">View submitted PCs</a></p>
     <p class="hint">Turning a player off keeps everything of theirs (sheet, inventory, schedule, relationships, tokens). They cannot log in, and they leave the chat, the schedule, the tabs and the VTT lists until you turn them on again. A password box left empty keeps the password they have.</p>
     <?php if ($message): ?><div class="note ok"><?php echo $h($message); ?></div><?php endif; ?>
     <?php if ($error): ?><div class="note bad"><?php echo $h($error); ?></div><?php endif; ?>
@@ -139,7 +140,7 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
         <?php endforeach; ?>
         <div class="bar">
             <button type="submit" id="save-players">Save</button>
-            <a class="back" href="dashboard.php">Back to the dashboard</a>
+            <a class="back" href="/dnd/table/">Back to the Table</a>
         </div>
     </form>
     <form method="post" id="remove-player"><input type="hidden" name="action" value="remove"></form>

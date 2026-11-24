@@ -7,7 +7,6 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mountFogOfWar, toggleFogForLevel } from '../fog-of-war.js';
 
 import {
   initializeState,
@@ -39,28 +38,6 @@ function initWithLevel0Fog(extraInit = {}) {
 }
 
 describe('fog revealedCells through real store (per-level)', () => {
-  test('retired manual toggle never writes or changes saved compatibility records', () => {
-    initWithLevel0Fog();
-    updateState(draft => {
-      draft.boardState.sceneState['scene-1'].fogOfWar.byLevel[LEVEL_0].revealedCells['5,5'] = true;
-    });
-    const before = structuredClone(getState().boardState.sceneState['scene-1']);
-    const dirty = [];
-    const previousDocument = globalThis.document;
-    try {
-      globalThis.document = { getElementById: () => null };
-      mountFogOfWar({ boardApi: { updateState }, isGm: false });
-      assert.equal(toggleFogForLevel('scene-1', LEVEL_0, false, {
-        markSceneStateDirty: (sceneId, field = '*') => dirty.push([sceneId, field]),
-      }), false);
-      assert.deepEqual(dirty, [], 'legacy calls must not submit fog or unrelated configuration writes');
-      assert.deepEqual(getState().boardState.sceneState['scene-1'], before);
-    } finally {
-      mountFogOfWar({ boardApi: null, isGm: false });
-      if (previousDocument === undefined) delete globalThis.document;
-      else globalThis.document = previousDocument;
-    }
-  });
   test('cells on level-0 survive updateState + getState round-trip', () => {
     initWithLevel0Fog();
 

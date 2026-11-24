@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { renderDrawings } from '../drawing-tool.js';
+import { getDrawingView } from '../drawing-tool.js';
 import { canEditDrawing } from '../drawing-edits.js';
 import { floorDrawn, pickView } from '../pointer-pick.mjs';
 
@@ -13,11 +13,7 @@ import { floorDrawn, pickView } from '../pointer-pick.mjs';
 // the floor under the pointer where it began, and is shown to whoever is shown that floor.
 
 const page = (levelId, drawings) => {
-  const drawn = [];
-  globalThis.document = { createElementNS: () => ({ dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }) };
-  const state = { levelId, drawings, cursorIndicator: null, drawingLayer: { childNodes: [], removeChild() {}, appendChild(path) { drawn.push(path.dataset.drawingId); } } };
-  renderDrawings(state);
-  return drawn;
+  return getDrawingView({ levelId, drawings }).drawings.map(drawing => drawing.id);
 };
 const stroke = (id, extra = {}) => ({ id, authorId: 'gm', levelId: 'level-0', points: [{ x: 0, y: 0 }, { x: 10, y: 10 }], ...extra });
 // The page's own test for which floors it is shown, as terrain-prototype.js gives it: pointer-pick's floorDrawn.
@@ -65,9 +61,9 @@ test('a stroke takes its height where it begins, keeps it through the eraser, an
   assert.match(tool, /if \(shownKey\(state\) !== state\.shownKey\) renderDrawings\(state\);/, 'redrawn when who is shown what changes');
   assert.match(tool, /if \(state\.drawing \|\| state\.erasing \|\| !state\.drawings\.some\(\(drawing\) => Number\.isFinite\(drawing\?\.z\)\)\) return;/, 'and looked at only while a stroke has a height');
   const terrain = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
-  assert.match(terrain, /return hit\?\.floor\?Number\(hit\.height\)\|\|0:0;/, 'a built floor gives its height; the ground and a stair give 0');
+  assert.match(tool, /if \(hit\.surfaceId \|\| hit\.rampId\) return Math\.round\(hit\.height \* 100\) \/ 100;/);
   assert.match(terrain, /return height<=0\|\|!view\|\|floorDrawn\(height,view\);/, 'the ground is always shown; a floor by the picture\'s own test');
-  assert.match(terrain, /window\.terrainPrototype=\{floorUnder,heightShown,/);
+  assert.match(terrain, /window\.terrainPrototype=\{heightShown,/);
 });
 
 // Brandon called the drawing tool "pretty janky". The worst of it: the tool refused the next press until the

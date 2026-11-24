@@ -1,29 +1,21 @@
 import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces,walkFloorContact,cubeStepDown,landingSurfaceHeight} from './floor-support.js';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding,rampCarries} from './imported-ramps.mjs';
-import './height-tethers.js';
 import {onSurface} from './stacked-surfaces.mjs';
 import {createFlightState} from './flight-height.mjs';
-import {applyTokenLevelPresentation} from './token-presentation.js';
 import {slopeIndicator} from './slope-indicator.mjs';
 // Terrain design is canonical scene environment; display preferences remain local.
 import {claimActiveTool,publishActiveTool} from './active-tool.js';
-import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
+import {sample,paint,clamp,groundSquare,heightBand,effectiveHeight,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs,traceSurfaceLeg,commandSurfaceEnding,surfaceBelow} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
-import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
-import {pointAtHeight,pickDrawn,pickView,pickWalked,floorDrawn} from './pointer-pick.mjs';
+import {pickView,floorDrawn} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 import {getCurrentMeasurementPoints,getDroppedMeasurementPoints,getCurrentMovementKind} from './drag-ruler.js';import {straightLine} from './forced-line.mjs';import {stairEnds,stairAssume} from './stair-assume.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
-const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
-canvas.style.cssText='position:absolute;pointer-events:none;z-index:1;';
-transform.insertBefore(canvas,$('#vtt-grid-overlay'));
-const gl=canvas.getContext('webgl',{alpha:true,antialias:true,preserveDrawingBuffer:true});
-if(!gl)throw new Error('Terrain prototype requires WebGL');
 const style=document.createElement('style');style.textContent=`
  #terrain-panel{position:absolute;left:58px;top:12px;width:228px;z-index:90;padding:14px;border:1px solid #777;border-radius:8px;background:var(--panel-bg,#24252b);color:var(--text-color,#eee);box-shadow:0 6px 24px #0007}
  [data-action="terrain-height"]{grid-row:4;grid-column:2}#terrain-readout{margin-left:6px}
@@ -32,7 +24,6 @@ const style=document.createElement('style');style.textContent=`
  #terrain-panel button[aria-pressed=true]{outline:2px solid #d9ba6d;outline-offset:1px}#terrain-panel output{float:right;font-variant-numeric:tabular-nums}
  #terrain-panel footer{margin-top:14px;display:flex;align-items:center;justify-content:space-between}
  #terrain-brush{position:fixed;pointer-events:none;border:2px solid #ffe7a4;border-radius:50%;z-index:91;box-shadow:0 0 2px #000;transform:translate(-50%,-50%)}
- .terrain-on #vtt-grid-overlay{opacity:0!important}.terrain-on #vtt-map-image{opacity:0!important}
  `;document.head.append(style);
 const button=document.createElement('button');button.type='button';button.className='btn';button.textContent='Height';button.dataset.action='terrain-height';button.setAttribute('aria-expanded','false');
 $('[data-action="measure-distance"]').after(button);
@@ -43,182 +34,72 @@ panel.innerHTML=`<header><strong>Map height</strong><button type="button" class=
  <label><input id="terrain-limit" type="checkbox">Stop at height</label><label for="terrain-target">Height</label><input id="terrain-target" type="number" min="-8" max="32" step="1" value="2">
  <footer><button type="button" class="btn" id="terrain-undo" disabled>Undo</button><span>Height <output id="terrain-readout">0.0</output></span></footer>`;
 board.parentElement.append(panel);
-const brush=document.createElement('div');brush.id='terrain-brush';brush.hidden=true;document.body.append(brush);
+
 // fieldVersion counts every change to the height field, so the 3D board can redraw the ground;
 // brush3d is the Height tool's brush on the 3D board ({x,y} map pixels, radius in squares) or null.
 let fieldVersion=0,brush3d=null;
-let field=null,key='',signature='',triangles=[],undo=[],drawing=false,mode='raise',last=null,ctx=null,dirty=true,active=false,textureSource='',storageError=false;
-const pad=1100;
+let field=null,key='',signature='',undo=[],drawing=false,mode='raise',last=null,ctx=null,dirty=true,active=false,storageError=false;
+
 let terrainRevision=0;
 let stampTime=0,stampPosition=null,viewerHeight=0,lastBrushMotion=-Infinity;
-const markers=document.createElementNS("http://www.w3.org/2000/svg","svg");markers.id="terrain-cost-markers";markers.style.cssText="position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:2";transform.insertBefore(markers,$("#vtt-grid-overlay"));
-const tokenHeights=new Map();
-function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
-const program=gl.createProgram();
-gl.attachShader(program,compile(gl.VERTEX_SHADER,`attribute vec2 position;attribute vec2 uv;attribute float light;uniform vec2 extent;varying vec2 tex;varying float shade;void main(){gl_Position=vec4(position.x/extent.x*2.-1.,1.-position.y/extent.y*2.,0.,1.);tex=uv;shade=light;}`));
-gl.attachShader(program,compile(gl.FRAGMENT_SHADER,`precision mediump float;uniform sampler2D map;uniform vec2 imageSize;uniform vec2 gridOrigin;uniform float gridSize;uniform float showGrid;varying vec2 tex;varying float shade;void main(){vec4 c=texture2D(map,tex);vec2 p=mod(tex*imageSize-gridOrigin,gridSize);float line=1.-smoothstep(.4,1.3,min(min(p.x,gridSize-p.x),min(p.y,gridSize-p.y)));gl_FragColor=vec4(c.rgb*shade*(1.-line*.25*showGrid),c.a);}`));
-gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.useProgram(program);
-const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-for(const [name,size,offset] of [['position',2,0],['uv',2,8],['light',1,16]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,20,offset);}
-const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 function dimensions(){return {width:image.naturalWidth,height:image.naturalHeight,left:ctx.view.mapInsets.left||0,top:ctx.view.mapInsets.top||0,grid:ctx.view.gridSize||64};}
 function heightAt(x,y){if(!field||!active)return 0;const d=dimensions();return sample(field,(x-d.left)/d.width,(y-d.top)/d.height);}
 // How far a square of height moves a thing on screen. The scene's map design may ask for a flatter slant (height-view.mjs).
-function slant(){return slantVector(viewSlant(importedDesign()));}
-// How far each token is drawn lifted for its height, by placement id: `translate` as last set on it (see tick).
-const tokenLifts=new Map();
-function project(x,y,h){const g=dimensions().grid,s=slant();return {x:x+h*g*s.x,y:y-h*g*s.y};}
-// The same sum for a caller with thousands of points to place at once (the sight picture): the
-// grid and the slant are looked up once, not for every point. Good only for the piece of work it
-// was asked for; a new slant arrives with a new revision of the walls.
-function projector(){const g=dimensions().grid,s=slant();return (x,y,h)=>({x:x+h*g*s.x,y:y-h*g*s.y});}
-// The board as it is this instant, not as it was at the last frame: a press that selects a token
-// and starts dragging it has to see that selection at once.
 function liveBoard(){return window.terrainContext?.()||ctx;}
 function livePlacement(who){const board=liveBoard(),id=typeof who==='string'?who:who?.id,found=id?(board.state.boardState.placements[board.state.boardState.activeSceneId]||[]).find(p=>p.id===id):null;return found||(who&&typeof who==='object'?who:null);}
-// How the board is being viewed, for reading the pointer (pointer-pick.mjs). The same choice the
-// drawing makes in vision-prototype.js: the GM looks down from a chosen height unless exactly one
-// token is selected and the fog is on, in which case the view is that token's; a player's view is
-// their own token's.
+// Resolve the viewer's standing height for visibility comparisons.
 function pointerView(){
  const board=liveBoard(),gm=window.gmVision;
- const token=board.isGM?(gm?.manual?null:livePlacement(board.selectedIds?.[0])):(livePlacement(window.visionPrototype?.viewerTokenId)||livePlacement(board.followId));
+ const token=board.isGM?(gm?.manual?null:livePlacement(board.selectedIds?.[0])):(livePlacement(board.followId));
  if(board.isGM&&(!token||(gm&&!gm.lighting)))return pickView({gmHeight:token?groundFor(token):Number(gm?.height)||0});
  if(token)return pickView({token,ground:groundFor(token)});
  return pickView({token:{column:0,row:0,width:1,height:1},ground:floorElevations(levelConfig()).get(board.levelId)||0});
 }
-// Turns a point on the screen into a point on the flat map. `options.standingOn` (a token or its
-// id) reads the point at the height that token stands at: the start of a drag is the dragged
-// token's own place, whatever else is drawn over it. Otherwise the point is whatever is drawn
-// there for this viewer, the highest floor first, then a ramp, then the ground.
-function unproject(p,options={}){
- // 3D board: pointers are already read as map points on the 3D surfaces (window.vtt3d).
- if(window.vtt3d?.active)return p;
- if(!active||!field)return p;
- if(importedDesign()&&panel.hidden){
-  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,s=slant();
-  const raw={x:(p.x-ox)/g,y:(p.y-oy)/g},back=q=>({x:ox+q.x*g,y:oy+q.y*g});
-  const own=options.standingOn?livePlacement(options.standingOn):null;
-  if(own)return back(pointAtHeight(raw,groundFor(own),s));
-  const hit=pickDrawn(raw,{slant:s,surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
-  // A token being dragged: the pointer means the square on the floor the drag's path walks to (pickWalked).
-  const drag=window.vttDragTarget?.(),dragged=drag?livePlacement(drag.id):null;
-  if(dragged&&!['fly','hover'].includes(dragged.movementMode)){
-   const walked=pickWalked(raw,hit||groundPick(p,g,ox,oy),{slant:s,walk:q=>{const square=drag.target(back(q));return square?walkHeights(dragged,square.column,square.row):null;}});
-   if(walked?.walked)return back(walked);
-  }
-  if(hit)return back(hit);
- }
-
- return meshPoint(p);
+function rawPoint(event){
+ return window.vtt3d?.clientToMap(event.clientX,event.clientY) ?? null;
 }
-// The same point with the height of what is drawn there: a floor's or a stair's own, else the ground's. A ping, a
-// drawing or anything else put down by a click belongs at that height, or it is drawn on the ground far below it.
-function unprojectAt(p){
- if(window.vtt3d?.active)return {x:p.x,y:p.y,height:Number.isFinite(p.height)?p.height:(field?heightAt(p.x,p.y):0)};
- if(!active||!field)return {x:p.x,y:p.y,height:0};
- if(importedDesign()&&panel.hidden){
-  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
-  const hit=pickDrawn({x:(p.x-ox)/g,y:(p.y-oy)/g},{slant:slant(),surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
-  if(hit)return {x:ox+hit.x*g,y:oy+hit.y*g,height:Number(hit.height)||0};
- }
- const q=meshPoint(p);return {x:q.x,y:q.y,height:heightAt(q.x,q.y)};
-}
-// The ground under a point on the screen, on the flat map: the drawn ground's own triangles.
-function meshPoint(p){
- for(let i=triangles.length-1;i>=0;i--){const t=triangles[i],b=barycentric(p,...t);if(b)return {x:t.reduce((s,v,k)=>s+v.gx*b[k],0),y:t.reduce((s,v,k)=>s+v.gy*b[k],0)};}
- return p;
-}
-// The same in squares, with the height of the ground there, for pickWalked.
-function groundPick(p,g,ox,oy){const q=meshPoint(p),height=heightAt(q.x,q.y);return {x:(q.x-ox)/g,y:(q.y-oy)/g,height:Number.isFinite(height)?height:0};}
-function rawPoint(e){if(window.vtt3d?.active){const hit=window.vtt3d.clientToMap(e.clientX,e.clientY);return hit?{x:hit.x,y:hit.y,height:hit.height}:{x:NaN,y:NaN};}const rect=surface.getBoundingClientRect(),v=ctx.view;return {x:(e.clientX-rect.left-v.translation.x)/v.scale,y:(e.clientY-rect.top-v.translation.y)/v.scale};}
 let sharedTerrainRevision=-1,savingTerrain=false,dirtyWhileSaving=false;
 function save(){if(storageError)return;if(savingTerrain){dirtyWhileSaving=true;return;}dirtyWhileSaving=false;const savingKey=key;savingTerrain=true;saveShared('terrain',{n:field.n,m:field.m,h:Array.from(field.h),bounds:field.bounds||{left:(dimensions().left-(ctx.view.gridOffsets.left||0))/dimensions().grid,top:(dimensions().top-(ctx.view.gridOffsets.top||0))/dimensions().grid,width:dimensions().width/dimensions().grid,height:dimensions().height/dimensions().grid}},Math.max(0,sharedTerrainRevision),ctx.state.boardState.activeSceneId).then(result=>{if(key===savingKey)sharedTerrainRevision=acknowledgedRevision(result,'terrain')??sharedTerrainRevision;}).catch(e=>{if(key!==savingKey)return;storageError=true;console.error(e);alert('Terrain save was not confirmed. Keep this draft open; reload to recover shared terrain.');}).finally(()=>{savingTerrain=false;if(key===savingKey&&dirtyWhileSaving&&!storageError&&!drawing)save();});}
 function saveLocalBackup(){try{localStorage.setItem(key,JSON.stringify({n:field.n,m:field.m,h:Array.from(field.h)}));storageError=false;}catch(e){storageError=true;console.error('Terrain could not be saved in this browser',e);alert('Terrain could not be saved. Browser storage is full. Keep this tab open.');}}
-function setOpen(open){panel.hidden=!open;button.setAttribute('aria-expanded',String(open));if(open){claimActiveTool('terrain',()=>setOpen(false));publishActiveTool('terrain','Height');}else{finish();brush.hidden=true;publishActiveTool('terrain');}}
+function setOpen(open){panel.hidden=!open;button.setAttribute('aria-expanded',String(open));if(open){claimActiveTool('terrain',()=>setOpen(false));publishActiveTool('terrain','Height');}else{finish();brush3d=null;publishActiveTool('terrain');}}
 button.onclick=()=>setOpen(panel.hidden);panel.querySelector('header button').onclick=()=>setOpen(false);
 panel.querySelectorAll('[data-brush]').forEach(b=>b.onclick=()=>{mode=b.dataset.brush;panel.querySelectorAll('[data-brush]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
 $('#terrain-size').oninput=e=>$('#terrain-size-value').textContent=e.target.value+' squares';
 $('#terrain-undo').onclick=()=>{if(!storageError&&undo.length){field.h=undo.pop();dirty=true;fieldVersion++;save();$('#terrain-undo').disabled=!undo.length;}};
 function finish(){if(drawing){drawing=false;last=null;stampPosition=null;save();} }
 function stamp(p,amount){const d=dimensions();paint(field,{x:p.x-d.left,y:p.y-d.top,width:d.width,height:d.height,radius:Number($('#terrain-size').value)*d.grid/2,amount,mode,stopAtTarget:$('#terrain-limit').checked,target:clamp(Number($('#terrain-target').value)||0,-8,32)});dirty=true;fieldVersion++;}
-function move(e){if(!ctx||!active||panel.hidden){brush3d=null;return;}const p=unproject(rawPoint(e)),d=dimensions();if(window.vtt3d?.active){brush.hidden=true;brush3d=Number.isFinite(p.x)?{x:p.x,y:p.y,radius:Number($('#terrain-size').value)/2}:null;}else brush.hidden=false;brush.style.left=e.clientX+'px';brush.style.top=e.clientY+'px';brush.style.width=brush.style.height=Number($('#terrain-size').value)*d.grid*ctx.view.scale+'px';$('#terrain-readout').textContent=groundSquare(heightAt(p.x,p.y))+(isCliff(p.x,p.y)?' · Cliff':'');
+function move(e){if(!ctx||!active||panel.hidden){brush3d=null;return;}const p=rawPoint(e);if(!p){brush3d=null;return;}brush3d={x:p.x,y:p.y,radius:Number($('#terrain-size').value)/2};$('#terrain-readout').textContent=groundSquare(heightAt(p.x,p.y))+(isCliff(p.x,p.y)?' · Cliff':'');
  if(drawing){if(Math.hypot(p.x-last.x,p.y-last.y)>.2)lastBrushMotion=performance.now();last=p;e.preventDefault();e.stopImmediatePropagation();}}
-board.addEventListener('pointerdown',e=>{if(panel.hidden||!active||e.button!==0||storageError)return;e.preventDefault();e.stopImmediatePropagation();const p=unproject(rawPoint(e)),d=dimensions();if(p.x<d.left||p.y<d.top||p.x>d.left+d.width||p.y>d.top+d.height)return;undo.push(field.h.slice());if(undo.length>30)undo.shift();$('#terrain-undo').disabled=false;drawing=true;lastBrushMotion=-Infinity;last=p;stampPosition=p;stampTime=performance.now();board.setPointerCapture(e.pointerId);stamp(p,.08);},true);
+board.addEventListener('pointerdown',e=>{if(panel.hidden||!active||e.button!==0||storageError)return;e.preventDefault();e.stopImmediatePropagation();const p=rawPoint(e),d=dimensions();if(!p||p.x<d.left||p.y<d.top||p.x>d.left+d.width||p.y>d.top+d.height)return;undo.push(field.h.slice());if(undo.length>30)undo.shift();$('#terrain-undo').disabled=false;drawing=true;lastBrushMotion=-Infinity;last=p;stampPosition=p;stampTime=performance.now();board.setPointerCapture(e.pointerId);stamp(p,.08);},true);
 board.addEventListener('pointermove',move,true);
 board.addEventListener('pointerup',e=>{if(drawing){e.preventDefault();e.stopImmediatePropagation();finish();if(board.hasPointerCapture(e.pointerId))board.releasePointerCapture(e.pointerId);}},true);
-board.addEventListener('pointercancel',finish,true);board.addEventListener('lostpointercapture',finish,true);board.addEventListener('pointerleave',()=>brush.hidden=true);
+board.addEventListener('pointercancel',finish,true);board.addEventListener('lostpointercapture',finish,true);board.addEventListener('pointerleave',()=>brush3d=null);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')setOpen(false);});window.addEventListener('blur',finish);window.addEventListener('pagehide',finish);document.addEventListener('visibilitychange',()=>{if(document.hidden)finish();});
-function draw(){
- const d=dimensions(),w=ctx.view.mapPixelSize.width+2*pad,h=ctx.view.mapPixelSize.height+2*pad;
- const scale=Math.min(1,4096/w,4096/h);canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);canvas.style.left=canvas.style.top=-pad+'px';canvas.style.width=w+'px';canvas.style.height=h+'px';gl.viewport(0,0,canvas.width,canvas.height);
- if(textureSource!==image.src){let source=image;const max=Math.min(4096,gl.getParameter(gl.MAX_TEXTURE_SIZE));if(Math.max(d.width,d.height)>max){source=document.createElement('canvas');const s=max/Math.max(d.width,d.height);source.width=Math.round(d.width*s);source.height=Math.round(d.height*s);source.getContext('2d').drawImage(image,0,0,source.width,source.height);}gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);textureSource=image.src;}
- const vertices=[],points=[];triangles=[];
- for(let j=0;j<field.m;j++)for(let i=0;i<field.n;i++){
-   const u=i/(field.n-1),v=j/(field.m-1),gx=d.left+u*d.width,gy=d.top+v*d.height,z=field.h[j*field.n+i],p=project(gx,gy,z);
-   const dx=(sample(field,u+1/(field.n-1),v)-sample(field,u-1/(field.n-1),v))*d.grid/(2*d.width/(field.n-1));
-   const dy=(sample(field,u,v+1/(field.m-1))-sample(field,u,v-1/(field.m-1)))*d.grid/(2*d.height/(field.m-1));
-   points.push({...p,gx,gy,u,v,light:clamp((1+.25*dx-.4*dy)/Math.sqrt(1+.12*(dx*dx+dy*dy)),.48,1.2)});
- }
- const add=(a,b,c)=>{const t=[points[a],points[b],points[c]];triangles.push(t);for(const p of t)vertices.push(p.x+pad,p.y+pad,p.u,p.v,p.light);};
- for(let j=0;j<field.m-1;j++)for(let i=0;i<field.n-1;i++){const a=j*field.n+i;add(a,a+1,a+field.n);add(a+1,a+field.n+1,a+field.n);}
- // Raised ground at the south or west edge of the map is drawn away from the edge; close the gap with the ground's own side (height-view.mjs).
- // Only on a scene that has a view setting or a floating plate: older maps keep their edges exactly as they were.
- for(const face of (usesHeightView(importedDesign())?edgeFaces(points,field.n,field.m):[])){triangles.push(face);for(const p of face)vertices.push(p.x+pad,p.y+pad,p.u,p.v,p.light);}
- gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);gl.uniform2f(gl.getUniformLocation(program,'extent'),w,h);gl.uniform2f(gl.getUniformLocation(program,'imageSize'),d.width,d.height);gl.uniform2f(gl.getUniformLocation(program,'gridOrigin'),(ctx.view.gridOffsets.left||0)-d.left,(ctx.view.gridOffsets.top||0)-d.top);gl.uniform1f(gl.getUniformLocation(program,'gridSize'),d.grid);gl.uniform1f(gl.getUniformLocation(program,'showGrid'),ctx.state.grid.visible?1:0);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,vertices.length/5);drawCostMarkers();terrainRevision++;dirty=false;
-}
 function tick(now){
  try{
  const nextContext=window.terrainContext?.();if(drawing&&ctx?.state.boardState.activeSceneId!==nextContext?.state.boardState.activeSceneId)finish();
  ctx=nextContext;active=!!ctx&&ctx.view.mapLoaded&&image.complete&&image.naturalWidth>0&&!!(sharedField('terrain')||sharedField('walls')||(ctx.state.boardState.templates?.[ctx.state.boardState.activeSceneId]||[]).some(t=>t.type==='wall')||!panel.hidden);
- document.documentElement.classList.toggle('terrain-on',active);canvas.hidden=!active;const pref='terrain-slope-arrows:'+String(ctx?.userId||'viewer');if(pref!==markerPreferenceKey){markerPreferenceKey=pref;markersVisible=localStorage.getItem(pref)!=='false';}markers.style.display=active&&markersVisible?'':'none';button.disabled=!ctx?.view.mapLoaded;
+ document.documentElement.classList.toggle('terrain-on',active);const pref='terrain-slope-arrows:'+String(ctx?.userId||'viewer');if(pref!==markerPreferenceKey){markerPreferenceKey=pref;markersVisible=localStorage.getItem(pref)!=='false';}button.disabled=!ctx?.view.mapLoaded;
  if(active){
    const nextKey='terrain-prototype:v1:'+ctx.state.boardState.activeSceneId+':'+image.getAttribute('src');
    if(key!==nextKey){finish();key=nextKey;sharedTerrainRevision=-1;storageError=false;undo=[];$('#terrain-undo').disabled=true;const n=Math.min(201,Math.max(17,Math.ceil(image.naturalWidth/ctx.view.gridSize*4)+1)),m=Math.min(201,Math.max(17,Math.ceil(image.naturalHeight/ctx.view.gridSize*4)+1));field={n,m,h:new Float32Array(n*m)};dirty=true;fieldVersion++;}
    const shared=sharedField('terrain');if(!savingTerrain&&!drawing&&!storageError&&shared&&shared.revision!==sharedTerrainRevision){field={...shared.value,h:Float32Array.from(shared.value.h)};fieldVersion++;sharedTerrainRevision=shared.revision;dirty=true;undo=[];$('#terrain-undo').disabled=true;}
-   const nextSignature=JSON.stringify([ctx.view.mapPixelSize,ctx.view.mapInsets,ctx.view.gridSize,ctx.view.gridOffsets,ctx.state.grid.visible,ctx.isGM&&document.querySelector('#wall-panel')?.hidden===false,viewSlant(importedDesign()),usesHeightView(importedDesign())]);if(nextSignature!==signature){signature=nextSignature;dirty=true;}
+   const nextSignature=JSON.stringify([ctx.view.mapPixelSize,ctx.view.mapInsets,ctx.view.gridSize,ctx.view.gridOffsets,ctx.state.grid.visible,ctx.isGM&&document.querySelector('#wall-panel')?.hidden===false]);if(nextSignature!==signature){signature=nextSignature;dirty=true;}
    if(drawing&&last&&now-stampTime>=32){
      const amount=Math.min(.15,(now-stampTime)/1000)*brushRate(now-lastBrushMotion<100);stampTime=now;
      const distance=Math.hypot(last.x-stampPosition.x,last.y-stampPosition.y),steps=Math.max(1,Math.ceil(distance/(dimensions().grid*.15)));
      for(let i=1;i<=steps;i++)stamp({x:stampPosition.x+(last.x-stampPosition.x)*i/steps,y:stampPosition.y+(last.y-stampPosition.y)*i/steps},amount/steps);
      stampPosition={...last};$('#terrain-readout').textContent=groundSquare(heightAt(last.x,last.y));
    }
-   if(dirty){if(window.vtt3dBoard&&window.vtt3dActive!==false){terrainRevision++;dirty=false;}else draw();}
+   if(dirty){terrainRevision++;dirty=false;}
    const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];
    flight.select('terrain-flight:v1:'+ctx.state.boardState.activeSceneId);flight.update(placements,flightGround);
    if(ctx.isGM)for(const token of placements)if(['fly','hover'].includes(token.movementMode)&&!Number.isFinite(token.flightHeight)&&!flightMigrationPending.has(ctx.state.boardState.activeSceneId+':'+token.id)){flightMigrationPending.add(ctx.state.boardState.activeSceneId+':'+token.id);window.submitFlightHeight(token,flight.height(token,(x,y)=>flightGround(x,y,token))).catch(console.error);}
-   const reference=placements.find(p=>p.id===(ctx.isGM?(ctx.selectedIds.length===1?ctx.selectedIds[0]:window.visionPrototype?.viewerTokenId):(window.visionPrototype?.viewerTokenId||ctx.followId)));
+   const reference=placements.find(p=>p.id===(ctx.isGM?(ctx.selectedIds.length===1?ctx.selectedIds[0]:null):ctx.followId));
    viewerHeight=window.gmVision?.manual?window.gmVision.height:reference ? heightBand(groundFor(reference))*2 : (floorElevations(levelConfig()).get(ctx.levelId)||0);
    window.gmVision?.syncNavigation();
    button.hidden=!ctx.isGM;
    if(!ctx.isGM&&!panel.hidden)setOpen(false);
-
- }
- // The 3D board keeps canonical height/rule hydration above, without the 2D paint.
- if(window.vtt3dBoard&&window.vtt3dActive!==false){canvas.hidden=true;markers.style.display='none';requestAnimationFrame(tick);return;}
- // Read token geometry together before writing styles to avoid per-token layout flushes.
- const placementById=new Map((ctx?.state.boardState.placements[ctx.state.boardState.activeSceneId]||[]).map(p=>[p.id,p]));
- const tokenSlant=active?slant():null;
- const tokenGeometry=Array.from(document.querySelectorAll('#vtt-token-layer [data-placement-id],#vtt-token-layer [data-vtt-drag-ghost]'),token=>{const matrix=active?new DOMMatrix(token.style.transform):null;return {token,matrix,x:active?matrix.m41+token.offsetWidth/2:0,y:active?matrix.m42+token.offsetHeight/2:0};});
- // An aura belongs to its token, not to the ground under it (Brandon, October 12, 2026: "if a token is in the air...
- // the aura is on the ground way under them"): it is drawn lifted exactly as its token was drawn a frame ago.
- if(!active)tokenLifts.clear();
- for(const aura of document.querySelectorAll('#vtt-aura-layer [data-placement-id]')){const lift=tokenLifts.get(aura.dataset.placementId)||'';if(aura.style.translate!==lift)aura.style.translate=lift;}
- for(const {token,matrix,x,y} of tokenGeometry){
-   if(!active){if(token.style.translate)token.style.translate='';if(token.style.scale)token.style.scale='';continue;}
-   const placement=placementById.get(token.dataset.placementId||token.dataset.terrainSourceId);
-   if(placement&&token.dataset.placementId&&token.dataset.terrainSourceId!==placement.id)token.dataset.terrainSourceId=placement.id;
-   const g=dimensions().grid;
-   // The ghost of a dragged token is drawn where letting go would put the token (dropHeight below).
-   const dropped=placement&&token.dataset.vttDragGhost?dropHeight(placement,Math.round((matrix.m41-(ctx.view.gridOffsets.left||0))/g),Math.round((matrix.m42-(ctx.view.gridOffsets.top||0))/g)):null;
-   const z=dropped??(placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y));
-   const value=`${z*g*tokenSlant.x}px ${-z*g*tokenSlant.y}px`;if(token.style.translate!==value)token.style.translate=value;if(token.dataset.placementId)tokenLifts.set(token.dataset.placementId,value);const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
-   const targetScale=relativeScale(z,viewerHeight),oldHeight=tokenHeights.get(token.dataset.placementId),whole=groundSquare(z);
-   if(token.style.transition)token.style.transition='';if(token.style.scale)token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
-   if(oldHeight!==undefined&&whole>oldHeight&&heightBand(whole)===heightBand(oldHeight)&&!matchMedia('(prefers-reduced-motion: reduce)').matches)token.animate([{transform:scaled},{transform:`${placed} scale(${targetScale*1.045})`},{transform:scaled}],{duration:220});
-   tokenHeights.set(token.dataset.placementId,whole);
-   const delta=heightBand(z)*2-viewerHeight,badgeKey=String(delta);if(token.dataset.terrainBadge!==badgeKey||Boolean(delta)!==Boolean(token.querySelector('.vtt-token__level-indicator'))||delta&&token.querySelector('.vtt-token__level-indicator-distance')?.textContent!==String(Math.abs(delta))){applyTokenLevelPresentation(token,{direction:delta>0?'above':delta<0?'below':'same',indicator:delta!==0,distance:Math.abs(delta)});token.dataset.terrainBadge=badgeKey;}
-   const effectiveText=String(effectiveHeight(z,Math.max(placement?.width||1,placement?.height||1)));if(token.dataset.terrainEffectiveHeight!==effectiveText)token.dataset.terrainEffectiveHeight=effectiveText;
 
  }
  }catch(e){console.error(e);}requestAnimationFrame(tick);
@@ -230,7 +111,11 @@ function importedDesign(){return window.wallPrototype?.model||sharedField('walls
 function levelConfig(){return ctx?.state.boardState.sceneState?.[ctx.state.boardState.activeSceneId]?.mapLevels;}
 function groundFor(placement,point=null){
  if(!placement)return 0;
+ // Asked before this file's first frame has run (the 3D board opening in the middle of a turn asks at once for the
+ // turn's starting square): the board is read now. With no board yet, the floor's own height is the answer.
+ if(!ctx)ctx=window.terrainContext?.()||null;
  const level=placement.levelId||'level-0',base=floorElevations(levelConfig()).get(level)??0;
+ if(!ctx?.view)return base;
  if(['fly','hover'].includes(placement.movementMode))return Math.max(base,flight.height(placement,(x,y)=>flightGround(x,y,placement)));
  // A token carried by a stair stands at the stair's height, even while the floor it came from still
  // lies under it (WallMovement::height has the same rule). Otherwise the plate it stands on decides.
@@ -270,7 +155,7 @@ function movementPlacement(from,to,enter=true){
 function movementGroundFor(from,to){return groundFor(movementPlacement(from,to,false));}
 function highGround(actor,target){return effectiveHeight(groundFor(actor),Math.max(actor.width||1,actor.height||1))-effectiveHeight(groundFor(target),Math.max(target.width||1,target.height||1))>=1;}
 function isCliff(x,y){const g=dimensions().grid;return [[1,0],[0,1],[1,1],[1,-1]].some(([dx,dy])=>Math.abs(heightAt(x+dx*g/2,y+dy*g/2)-heightAt(x-dx*g/2,y-dy*g/2))>=3-1e-6);}
-function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||window.visionPrototype?.viewerTokenId));}
+function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||ctx.followId));}
 // One redraw of the ruler is one pass (ruler-pass.mjs): each leg is walked once and each ground
 // height looked up once, however many times the cost, the line and the red stretches ask.
 const pass=createRulerPass();
@@ -364,7 +249,6 @@ function routeNow(start,end,options={}){
 // each leg is asked the same way. The 3D sandbox now shares a straight-chord surface trajectory for
 // physical samples, costs, and prediction; its endpoint must also agree with the whole-command floor
 // check. The unchanged 2D ruler retains its historical square-by-square walker.
-function walkEnd(placement,points){return walkEnding(placement,points).height;}
 // The same, with how he stands there: on which floor, on which plate, and by which end he came onto a stair.
 function surfaceLeg(placement,end){
  const d=dimensions(),design=importedDesign();
@@ -622,41 +506,6 @@ function stairRoute(start,hover,explicitActor=null,kind=getCurrentMovementKind()
 }
 // The squares a drag of this token to a square goes through: his own corners when he has dropped any, else the
 // app's (stairCorners), else none.
-function dragPoints(placement,column,row){
- const ruler=getDroppedMeasurementPoints(),dx=ruler.length?placement.column-ruler[0].column:0,dy=ruler.length?placement.row-ruler[0].row:0;
- const own=ruler.slice(1).map(p=>({column:p.column+dx,row:p.row+dy})).filter(p=>!(p.column===column&&p.row===row));
- const corners=own.length?own:getCurrentMovementKind()==='forced'?[]:(stairCorners(placement,column,row)||[]);
- return [{column:placement.column,row:placement.row},...corners,{column,row}];
-}
-let walkMemo=null;
-function walkHeights(placement,column,row){
- if(!importedDesign())return null;
- // A forced move is not walked: the creature is where the straight line has carried it, at the height it travels at.
- if(getCurrentMovementKind()==='forced'){const z=forcedHeight(forcedFrom(placement),column,row);return z===null?null:{end:z,top:z};}
- const points=dragPoints(placement,column,row);
- const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
- if(walkMemo?.key===key)return walkMemo.heights;
- const carry={};let end=null,top=-Infinity;
- for(let i=1;i<points.length;i++){const walked=routeNow(points[i-1],points[i],{actor:placement,ignoreZones:true,ignoreClimb:true,carry});for(const step of walked.points){if(Number.isFinite(step.rawHeight)){end=step.rawHeight;if(end>top)top=end;}}}
- // It ends where the move ends (walkEnd); the highest it passes is still the walk's.
- const ends=walkEnd(placement,points);if(Number.isFinite(ends)){end=ends;if(end>top)top=end;}
- walkMemo={key,heights:Number.isFinite(end)?{end,top}:null};
- return walkMemo.heights;
-}
-let dropMemo=null;
-function dropHeight(placement,column,row){
- if(!importedDesign()||['fly','hover'].includes(placement.movementMode))return null;
- // Held in a forced move, the ghost is where the straight line has carried the creature; the fall, if any, is in the ruler's words.
- if(getCurrentMovementKind()==='forced')return forcedHeight(forcedFrom(placement),column,row);
- const points=dragPoints(placement,column,row);
- const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
- if(dropMemo?.key===key)return dropMemo.height;
- const height=walkEnd(placement,points);
- dropMemo={key,height:Number.isFinite(height)?height:null};
- return dropMemo.height;
-}
-// On a scene with ramps a previewed walk follows them (route-walker.mjs): this is where a token
-// with the ghost's floor and stair progress stands. Null on a scene with none, where nothing changes.
 function rampStanding(design=importedDesign()){return design?.ramps?.length?p=>groundFor(p):null;}
 // One step of a previewed walk, for the reach outline: the same contact rule, one square at a time.
 function walkTerrain(p){const d=dimensions();return heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);}
@@ -698,12 +547,6 @@ function stepsWorldPoints(steps){
  }
  return points;
 }
-function worldPointsPath(points,parts=[]){
- const d=dimensions();
- for(const p of points){const q=project((ctx.view.gridOffsets.left||0)+p.x*d.grid,(ctx.view.gridOffsets.top||0)+p.y*d.grid,p.z);parts.push(`${parts.length?'L':'M'} ${q.x.toFixed(2)} ${q.y.toFixed(2)}`);}
- return parts;
-}
-function stepsPath(steps,parts=[]){return worldPointsPath(stepsWorldPoints(steps),parts);}
 function movementPresentation(points,forced=false,actor=null){
  const pieces=[];
  for(const steps of forced?forcedLegs(points):routeLegs(points,actor))for(let i=1;i<steps.length;i++){
@@ -713,12 +556,6 @@ function movementPresentation(points,forced=false,actor=null){
  return pieces;
 }
 function squarePresentation(from,at,next){return [...stepsWorldPoints([from,at]),...(next?stepsWorldPoints([at,next]):[])].slice(2,next?8:5);}
-function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
-function routePath(points,forced=false){
- const parts=[];
- for(const steps of forced?forcedLegs(points):routeLegs(points))stepsPath(steps,parts);
- return parts.join(' ');
-}
 // A forced move goes straight (forced-line.mjs): each leg is the true line from where it starts to where it ends
 // (one leg for a push or a pull; a slide has a leg to each corner), at the height the creature travels at, which is
 // the line the move itself takes. No walk: it steps onto nothing.
@@ -732,42 +569,10 @@ function forcedLegs(points){
  return legs;
 }
 // Where the leg being held starts: the creature's own square, or the last corner dropped in this drag.
-function forcedFrom(placement){
- const ruler=getCurrentMeasurementPoints();if(ruler.length<2)return placement;
- const last=ruler[ruler.length-1];return {...placement,column:last.column+placement.column-ruler[0].column,row:last.row+placement.row-ruler[0].row};
-}
 // The height a creature is at when a forced move has carried it to a square (travel-height.mjs, by way of the walls).
 function forcedHeight(from,column,row){const z=window.wallPrototype?.moverHeight?.(from,{...from,column,row},'forced');return Number.isFinite(z)?z:null;}
-// The drawn line over one square only: from the edge the step from `from` crosses into `at`, to the
-// edge the step on to `next` leaves by (or to the middle of `at` when the route stops there).
-// stepsPath draws each one-square step as a start point and four quarter points, so the edges are the half-way ones.
-// The three squares come from the leg the ruler already walked and carry the height walked at
-// (rawHeight), so nothing is walked again here.
-function squarePath(from,at,next){
- const parts=[];
- stepsPath([from,at],parts);
- if(next)stepsPath([at,next],parts);
- return parts.slice(2,next?8:5).map((part,i)=>(i?'L':'M')+part.slice(1)).join(' ');
-}
-let markerCache='',markerBuilds=0,markerPreferenceKey='',markersVisible=true;
-function setMarkersVisible(value){markersVisible=!!value;if(markerPreferenceKey)localStorage.setItem(markerPreferenceKey,String(markersVisible));markers.style.display=active&&markersVisible?'':'none';}
-function drawCostMarkers(){
- const d=dimensions(),g=d.grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,parts=[];
- const hash=fieldHash();
- const cache=JSON.stringify([key,hash,field.n,field.m,d,ox,oy,ctx.view.mapPixelSize]);if(cache===markerCache)return;markerCache=cache;markerBuilds++;
- const minCol=Math.ceil((d.left-ox)/g),minRow=Math.ceil((d.top-oy)/g),maxCol=Math.floor((d.left+d.width-ox)/g),maxRow=Math.floor((d.top+d.height-oy)/g);
- for(let row=minRow;row<maxRow;row++)for(let col=minCol;col<maxCol;col++){
-   const shape=slopeIndicator(col+.5,row+.5,(x,y)=>heightAt(ox+x*g,oy+y*g),(x,y)=>x>=minCol&&x<maxCol&&y>=minRow&&y<maxRow);
-   if(!shape)continue;const {dx,dy,grade:rise}=shape;
-   const color=slopeArrowColor(rise);
-   const x=ox+(col+.5+dx*.25)*g,y=oy+(row+.5+dy*.25)*g,q=project(x,y,heightAt(x,y));
-   const ahead=project(x+dx*g*.08,y+dy*g*.08,heightAt(x+dx*g*.08,y+dy*g*.08));
-   const length=Math.hypot(ahead.x-q.x,ahead.y-q.y)||1,ux=(ahead.x-q.x)/length,uy=(ahead.y-q.y)/length;
-   const tip={x:q.x+ux*g*.065,y:q.y+uy*g*.065},tail={x:q.x-ux*g*.055,y:q.y-uy*g*.055},base={x:q.x-ux*g*.005,y:q.y-uy*g*.005};
-   parts.push(`<path data-elevation-arrow="up" data-grade="${rise}" d="M${tail.x},${tail.y} L${tip.x},${tip.y} M${base.x-uy*g*.045},${base.y+ux*g*.045} L${tip.x},${tip.y} L${base.x+uy*g*.045},${base.y-ux*g*.045}" fill="none" stroke="rgb(${color.join(',')})" stroke-width="${g*.026}" stroke-linecap="round" stroke-linejoin="round"/>`);
- }
- markers.setAttribute('width',ctx.view.mapPixelSize.width);markers.setAttribute('height',ctx.view.mapPixelSize.height);markers.innerHTML=parts.join('');
-}
+let markerPreferenceKey='',markersVisible=true;
+function setMarkersVisible(value){markersVisible=!!value;if(markerPreferenceKey)localStorage.setItem(markerPreferenceKey,String(markersVisible));}
 function fieldHash(){let hash=2166136261;for(const byte of new Uint8Array(field.h.buffer,field.h.byteOffset,field.h.byteLength))hash=Math.imul(hash^byte,16777619);return hash;}
 // The arrow's colour for how steep the climb is, from dark green (gentle) to pale red (steepest).
 function slopeArrowColor(rise){
@@ -792,25 +597,10 @@ function slopeMarks(){
  }
  slopeMarkList=list;return list;
 }
-function paintRoute(overlay,points,gridSize,forced=false){
- const ns='http://www.w3.org/2000/svg';let group=overlay.svg.querySelector('[data-terrain-route]');
- if(!group){group=document.createElementNS(ns,'g');group.dataset.terrainRoute='';overlay.svg.insertBefore(group,overlay.path.nextSibling);}
- const pieces=movementPresentation(points,forced).map(piece=>({path:worldPointsPath(piece.points).join(' '),color:piece.color}));
- group.replaceChildren();
- for(const piece of pieces){const path=document.createElementNS(ns,'path');path.setAttribute('d',piece.path);path.setAttribute('fill','none');path.setAttribute('stroke',piece.color);path.setAttribute('stroke-width',Math.max(2,gridSize*.32));path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');group.append(path);}
- const last=group.lastChild;if(last){last.setAttribute('marker-end','url(#terrain-route-head)');let head=overlay.svg.querySelector('#terrain-route-head');if(!head){head=document.createElementNS(ns,'marker');head.id='terrain-route-head';head.setAttribute('viewBox','0 0 10 10');head.setAttribute('refX','8');head.setAttribute('refY','5');head.setAttribute('markerWidth','2');head.setAttribute('markerHeight','2');head.setAttribute('orient','auto');const shape=document.createElementNS(ns,'path');shape.setAttribute('d','M0 0L10 5L0 10Z');head.append(shape);overlay.svg.querySelector('defs').append(head);}head.firstChild.setAttribute('fill',pieces.at(-1).color);}
- overlay.path.style.opacity='0';
-}
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
 // For what is drawn by hand on the map (drawing-tool.js). floorUnder: the height of the floor drawn under a point
 // of the board, 0 for the ground or a stair, null on a map with no built floors. heightShown: whether a floor of
 // that height is drawn for whoever is looking at this page (the same test the picture itself uses).
-function floorUnder(p){
- if(!active||!field||!importedDesign())return null;
- const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
- const hit=pickDrawn({x:(p.x-ox)/g,y:(p.y-oy)/g},{slant:slant(),surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
- return hit?.floor?Number(hit.height)||0:0;
-}
 // The 3D board's choice among the surfaces under the pointer (board3d/surface-choice.mjs): does a straight walk from
 // where this token stands end on this surface ({column,row,surfaceElevation,levelId,surfaceId,rampId})? The same walk
 // and test as the held token's "Can't walk there". Null when it cannot say: a flier, no imported design, no height.
@@ -825,7 +615,7 @@ function heightShown(z){
  const height=Number(z)||0,view=pointerView();
  return height<=0||!view||floorDrawn(height,view);
 }
-window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,slopeMarks,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,walkReaches,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,slopeMarks,get markersVisible(){return markersVisible;},stairRoute,walkEnding,pickedSurfaceReached,walkReaches,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

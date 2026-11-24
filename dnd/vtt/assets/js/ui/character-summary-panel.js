@@ -42,7 +42,6 @@ const SKILL_GROUPS = {
     'Navigate',
     'Ride',
     'Swim',
-    'Track',
   ],
   Interpersonal: [
     'Brag',
@@ -71,6 +70,7 @@ const SKILL_GROUPS = {
     'Sabotage',
     'Search',
     'Sneak',
+    'Track',
   ],
   Lore: [
     'Culture',
@@ -148,7 +148,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return { ran: false, reason: 'not-found' };
     },
     // presetTargetIds: the creatures carrying its maintained-ability marking (board-interactions.js runMaintainedAgain).
-    async runFree({ characterId, sourceToken = null, abilityId = '', name = '', presetTargetIds = [] } = {}) {
+    async runFree({ characterId, sourceToken = null, abilityId = '', name = '', presetTargetIds = [], maintenanceCastId = null, maintenanceBindings = null } = {}) {
       if (!characterId) return { ran: false, reason: 'no-character' };
       const sheet = await fetchCharacterSummary(routes, characterId);
       const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
@@ -161,7 +161,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (index < 0) continue;
         const action = { ...list[index], _stableActionId: list[index]._stableActionId || getStableActionId(list[index], category, index), _maintainRerun: true };
         if (!hasAbilityAutomation(action.automation)) return { ran: false, reason: 'no-automation', name: action.name };
-        startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, free: true, presetTargetIds });
+        await startAbilityAutomation(sheet, action, category, sourceToken, { characterId, routes, free: true, presetTargetIds, maintenanceCastId, maintenanceBindings });
         return { ran: true, name: action.name };
       }
       return { ran: false, reason: 'not-found' };
@@ -2996,7 +2996,9 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     return;
   }
 
-  window.AbilityAutomationRunner.open({
+  return window.AbilityAutomationRunner.open({
+    maintenanceCastId: options.maintenanceCastId,
+    maintenanceBindings: options.maintenanceBindings,
     action: clonePlain(action),
     actionType: categoryKey,
     hero: clonePlain(sheet.hero || {}),
@@ -3094,6 +3096,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getPlacementById(placementId)
         : null
     ),
+    getTargetFacts: id => window.VTTBoardCallbacks?.getTargetFacts?.(id),
     getAbility: (payload) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getAbility === 'function'
         ? window.VTTBoardCallbacks.getAbility(payload)
@@ -3619,6 +3622,7 @@ function showAutomationSpendDialog({
   current = 0,
   minAmount = 1,
   maxAmount = 1,
+  allowOverride = false,
   anchor = null,
 } = {}) {
   return new Promise((resolve) => {
@@ -3649,6 +3653,7 @@ function showAutomationSpendDialog({
           ` : `<p class="vtt-automation-spend__hint">Spend ${minAmount} ${escapeHtml(resource)}?</p>`}
           <div class="dice-actions__controls vtt-automation-spend__actions">
             <button type="button" class="dice-roll-btn" data-spend-confirm>${variable ? 'Spend' : 'OK'}</button>
+            ${allowOverride ? '<button type="button" class="dice-clear-btn" data-spend-override>Override amount</button>' : ''}
             <button type="button" class="dice-clear-btn" data-spend-cancel>Cancel</button>
           </div>
         </div>
@@ -3681,6 +3686,11 @@ function showAutomationSpendDialog({
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('[data-spend-cancel]')) {
         cleanup({ canceled: true });
+        return;
+      }
+      if (target?.closest('[data-spend-override]')) {
+        const amount = Number(window.prompt('The suggested maximum is ' + maxAmount + ' ' + resource + '. Enter the amount to count for this use. An override leaves your resource pool as it is.', String(maxAmount)));
+        if (Number.isSafeInteger(amount) && amount > 0) cleanup({ overrideAmount: amount });
         return;
       }
       const step = target?.closest('[data-spend-step]');
@@ -3762,6 +3772,14 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
   const floor = resourceFloor(hero, resource);
   const spendCapacity = Math.max(0, current - floor);
   if (spendCapacity < minAmount) {
+    if (payload.allowOverride) {
+      const proceed = await confirmSummaryAction('This effect costs at least ' + minAmount + ' ' + title + '. You have ' + current + '. Declare a spend for this use and leave the pool as it is?', { title: 'Insufficient resource', confirmText: 'Override', cancelText: 'Skip spend' });
+      if (proceed) {
+        const answer = window.prompt('How much ' + title + ' counts for this use?', String(minAmount));
+        const amount = Number(answer);
+        if (Number.isSafeInteger(amount) && amount > 0) return { overrideAmount: amount, spent: 0, resource: title, current };
+      }
+    }
     return { skipped: true, reason: 'insufficient', resource: title, current, required: minAmount };
   }
   const maxRaw = payload?.maxAmount;
@@ -3777,8 +3795,10 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
     current,
     minAmount,
     maxAmount,
+    allowOverride: payload.allowOverride === true,
     anchor: options?.automationAnchor || null,
   });
+  if (choice?.overrideAmount) return { overrideAmount: choice.overrideAmount, spent: 0, resource: title, current };
   if (choice?.canceled || !choice?.amount) {
     return { canceled: true, resource: title, current };
   }

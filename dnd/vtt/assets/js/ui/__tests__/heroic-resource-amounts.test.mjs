@@ -50,7 +50,7 @@ test('an ability\'s cost or gain is sent as the amount of the change, and the sh
 });
 
 test('a rule\'s gain or loss is an amount; only "set to" is a set; nothing is refused for a copy that was behind', () => {
-  assert.match(board, /rule\.effect\.kind === 'set' \? \{ value: change\.next \} : \{ delta: rule\.effect\.kind === 'lose' \? -amount : amount \}, sheet\);/);
+  assert.match(board, /rule\.effect\.kind === 'set' \? \{ value: change\.next \} : \{ delta: rule\.effect\.kind === 'lose' \? -amount : amount \}, sheet, opening\);/);
   assert.doesNotMatch(board, /expectedValue/, 'the write no longer says what the page thought the number was');
   assert.match(board, /\? \{ delta: String\(Math\.trunc\(Number\(write\.delta\)\)\) \}\s*: \{ value: String\(Math\.trunc\(Number\(write\?\.value\) \|\| 0\)\) \}\),/);
   assert.match(board, /sheetForCache\.hero\.resource\.value = saved\.resource;/, 'the copy kept on the page is given the sheet\'s answer');

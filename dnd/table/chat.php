@@ -22,6 +22,7 @@ header('Cache-Control: no-store');
   <link rel="stylesheet" href="/dnd/css/ui-kit.css?v=<?php echo $v('css/ui-kit.css'); ?>">
   <link rel="stylesheet" href="/dnd/css/style.css?v=<?php echo $v('css/style.css'); ?>">
   <link rel="stylesheet" href="/dnd/vtt/assets/css/chat.css?v=<?php echo $v('vtt/assets/css/chat.css'); ?>">
+  <link rel="stylesheet" href="/dnd/css/ask-test.css?v=<?php echo $v('css/ask-test.css'); ?>">
   <style>
     html, body { margin: 0; height: 100%; background: #16100c; overflow: hidden; }
     #chat-panel, #chat-panel.chat-panel--closed { position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important; max-height: none !important;
@@ -102,6 +103,7 @@ header('Cache-Control: no-store');
   </script>
   <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
   <script src="/dnd/js/ui-kit.js?v=<?php echo $v('js/ui-kit.js'); ?>"></script>
+  <script src="/dnd/js/ask-test.js?v=<?php echo $v('js/ask-test.js'); ?>"></script>
   <script src="/dnd/js/chat-panel.js?v=<?php echo $v('js/chat-panel.js'); ?>"></script>
   <script>
     // "The whisper pop-out in chat is stuck in the chat. It should pop out as its own box." (Brandon, November 10,

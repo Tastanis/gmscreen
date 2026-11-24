@@ -33,7 +33,7 @@ const origin='http://127.0.0.1:8129';
     // GM credentials still authorize another GM-only read after previewing players.
     assert.equal((await gm.request.get(endpoint+'?user=cal')).status(),200);
     const page=await gm.newPage();const errors=[];
-    page.on('pageerror',error=>errors.push(error.message));
+    page.on('pageerror',error=>errors.push(error.stack || error.message));
     await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
     await page.goto(origin+'/dnd/vtt/');
     await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
@@ -48,17 +48,17 @@ const origin='http://127.0.0.1:8129';
     await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
     assert.match(await panel.locator('[data-preview-details]').innerText(),/Viewing: Level 0/);
     await panel.screenshot({path:'.playwright-mcp/player-view-details.png'});
-    const liveParent=await page.locator('#vtt-map-levels').evaluate(node=>node.parentElement.id);
+    const liveScene=await page.evaluate(()=>window.vtt3dBridge.getContext().sceneId);
     await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=page.locator('.vtt-player-preview-dialog');
-    await dialog.locator('.vtt-player-preview-map canvas').waitFor();
-    assert.equal(await page.locator('#vtt-map-levels').count(),1);
-    assert.equal(await page.locator('#vtt-map-levels').evaluate(node=>node.parentElement.id),liveParent);
+    const frame = dialog.frameLocator('iframe[title="Captured player board"]');
+    await frame.locator('#vtt-board3d canvas').waitFor();
+    assert.equal(await page.evaluate(()=>window.vtt3dBridge.getContext().sceneId),liveScene);
     assert.match(await dialog.locator('h2').innerText(),/sharon: Level 0/);
     await dialog.screenshot({path:'.playwright-mcp/player-map-preview.png'});
     await dialog.getByRole('button',{name:'Close preview'}).click();
-    await page.locator('.vtt-player-preview-map').waitFor({state:'detached'});
-    assert.equal(await page.locator('.vtt-player-preview-map').count(),0);
+    await page.locator('iframe[title="Captured player board"]').waitFor({state:'detached'});
+    assert.equal(await page.locator('iframe[title="Captured player board"]').count(),0);
     assert.deepEqual(await snapshot(gm),uiBefore);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     for(const [type,payload] of [
       ['grid.set',{grid:{size:64,offsetX:5,offsetY:7,visible:true}}],
@@ -75,22 +75,16 @@ const origin='http://127.0.0.1:8129';
     await panel.getByRole('button',{name:'Refresh player view'}).click();
     await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
     await panel.getByRole('button',{name:'Open player preview'}).click();
-    await dialog.locator('[data-map-level-id="test-upper"]').waitFor();
-    const upper=await dialog.evaluate(async node=>{
-      const {buildMapLevelCutoutMask}=await import('/dnd/vtt/assets/js/ui/map-level-renderer.js');
-      const canvas=node.querySelector('canvas'),level=node.querySelector('[data-map-level-id="test-upper"]');
-      const style=getComputedStyle(node.querySelector('.vtt-board__map-backdrop'));
-      const insets=Object.fromEntries(['top','right','bottom','left'].map(side=>[side,parseFloat(style.getPropertyValue('padding-'+side))||0]));
-      const expected=buildMapLevelCutoutMask([{column:6,row:5,width:2,height:2}],{
-        mapPixelSize:{width:canvas.width,height:canvas.height},mapInsets:insets,gridSize:64,gridOrigin:{x:5,y:7},
-      });
-      const probe=document.createElement('div');probe.style.maskImage=expected;
-      return {maskMatches:level.style.maskImage===probe.style.maskImage,
-        clear:canvas.getContext('2d').getImageData(insets.left+10,insets.top+10,1,1).data[3],
-        fogged:canvas.getContext('2d').getImageData(canvas.width-1,canvas.height-1,1,1).data[3]};
-    });
-    assert.deepEqual(upper,{maskMatches:true,clear:0,fogged:255});
-    await dialog.screenshot({path:'.playwright-mcp/player-map-upper-preview.png'});
+    await frame.locator('#vtt-board3d canvas').waitFor();
+    const captured = await frame.locator('body').evaluate(() => ({
+      level:window.vtt3dBridge.getContext().viewerLevelId,
+      grid:window.vtt3dBridge.getContext().grid,
+      readOnly:window.vtt3dBridge.readOnly,
+    }));
+    assert.equal(captured.level,'test-upper');
+    assert.equal(captured.readOnly,true);
+    assert.equal(captured.grid.offsetX,5);
+    assert.equal(captured.grid.offsetY,7);
     await dialog.getByRole('button',{name:'Close preview'}).click();
     assert.deepEqual(await snapshot(gm),upperBefore);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     console.log('PASS: player preview HTTP authentication, methods, identity validation, exact player projection and unchanged canonical state.');

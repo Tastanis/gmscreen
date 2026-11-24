@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from 'node:fs';
 // Brandon, November 17, 2026: "in the scenes, i cannot add, import, or d elete a scene in the new table version ... there
 // is a show players button at the top of the vtt but that one doesnt work ... the zones, it has me and players. But the
 // way it toggles is weird ... i want the defalt to be zones off for both."
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const apps = read('../../../../../table/table-apps.js'), embed = read('../../../../../table/vtt-embed.js');
 
 test('the Scenes list adds, imports and deletes scenes, without opening the map', () => {

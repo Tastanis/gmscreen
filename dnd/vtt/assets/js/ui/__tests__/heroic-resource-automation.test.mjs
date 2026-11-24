@@ -2,12 +2,41 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
+  heroicResourceOpeningBalance,
+  heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
   ruleMatchesHeroicResourceEvent,
 } from '../heroic-resource-automation.js';
+
+test('only a single automatic opening with a known balance can accompany an early gain', () => {
+  const rule = { event: 'combatStart', effect: { kind: 'set', amount: { from: 'victories' } }, autoApply: true };
+  const opening = (...rules) => heroicResourceOpeningBalance({ rules }, { victories: 4 });
+  assert.equal(opening(rule), 4);
+  assert.equal(opening({ ...rule, effect: { kind: 'set', amount: 0 } }), 0);
+  assert.equal(opening({ ...rule, autoApply: false }), null);
+  assert.equal(opening({ ...rule, filter: { whose: 'enemy' } }), null);
+  assert.equal(opening({ ...rule, effect: { kind: 'set', amount: '1d3' } }), null);
+  assert.equal(opening(rule, rule), null);
+});
+
+test('a fast first turn gains Essence on top of the starting balance, independently for each hero', async () => {
+  const run = createHeroicResourceBoundaryQueue();
+  let balance = 9;
+  let finishOldFight;
+  const oldFight = new Promise((resolve) => { finishOldFight = resolve; });
+  const end = run('caster', 'combatEnd', async () => { await oldFight; balance = 0; });
+  const start = run('caster', 'combatStart', () => { balance = 1; });
+  const turn = run('caster', 'turnStart', () => { assert.equal(balance, 1); balance += 2; });
+  assert.equal(await run('other', 'turnStart', () => 4), 4);
+  assert.equal(balance, 9);
+  finishOldFight();
+  await Promise.all([end, start, turn]);
+  assert.equal(balance, 3);
+});
 
 function env(overrides = {}) {
   return {
@@ -35,6 +64,28 @@ function env(overrides = {}) {
 }
 
 describe('heroic resource automation schema', () => {
+  test('a limited resource offer must still belong to its active combat, round or turn', () => {
+    const off = { active: false, round: 0 };
+    const fight = { active: true, encounterId: 'first', round: 1, turnId: 'hero' };
+    const nextTurn = { ...fight, turnId: 'guard' };
+    const nextRound = { ...fight, round: 2 };
+    const nextFight = { ...fight, encounterId: 'second' };
+    for (const scope of ['round', 'turn', 'encounter']) {
+      const rule = { limit: { scope } };
+      const allows = (atEvent, now) => heroicResourceTimingAllows(rule, 'damage', atEvent, now);
+      assert.equal(allows(off, off), false);
+      assert.equal(allows(off, fight), false);
+      assert.equal(allows(fight, off), false);
+      assert.equal(allows(fight, nextFight), false);
+      assert.equal(allows(fight, fight), true);
+      assert.equal(allows(fight, nextTurn), scope !== 'turn');
+      assert.equal(allows(fight, nextRound), scope === 'encounter');
+      assert.equal(heroicResourceTimingAllows(rule, 'combatEnd', fight, off), true);
+      assert.equal(heroicResourceTimingAllows(rule, 'combatStart', off, fight), true);
+    }
+    assert.equal(heroicResourceTimingAllows({ limit: null }, 'damage', off, off), true);
+  });
+
   test('normalizes rules with limits and amount specs', () => {
     const normalized = normalizeHeroicResourceAutomation({
       schema: 'heroic-resource/v1',

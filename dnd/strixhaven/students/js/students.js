@@ -14,7 +14,7 @@ const SKILLS_LIST = {
     ],
     'Exploration Skills': [
         'Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump',
-        'Lift', 'Navigate', 'Ride', 'Swim', 'Track'
+        'Lift', 'Navigate', 'Ride', 'Swim'
     ],
     'Interpersonal Skills': [
         'Brag', 'Empathize', 'Flirt', 'Gamble', 'Handle Animals', 'Interrogate',
@@ -22,7 +22,7 @@ const SKILLS_LIST = {
     ],
     'Intrigue Skills': [
         'Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist',
-        'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search'
+        'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search', 'Track'
     ],
     'Lore Skills': [
         'Culture', 'Criminal Underworld', 'History', 'Magic', 'Monsters',
@@ -611,8 +611,8 @@ function expandStudentToNewTab() {
 
             <script src="../../js/ui-kit.js"></script>
             <script>window.dndPlayers = ${JSON.stringify(window.dndPlayers || null).replace(/</g, '\\u003c')};</script>
-            <script src="../gm/js/character-lookup.js"></script>
-            <script src="../gm/js/rich-text-editor.js"></script>
+            <script src="../shared/js/character-lookup.js"></script>
+            <script src="../shared/js/rich-text-editor.js"></script>
             <script>
                 // Copy necessary variables and functions to the popout
                 const isGM = ${isGM};

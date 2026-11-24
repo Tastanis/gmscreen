@@ -390,6 +390,45 @@ function resolveDistanceTargetId(filter, event, payload) {
   return payload?.placementId || payload?.targetId || payload?.newTargetId || payload?.actorId || '';
 }
 
+// Finish a hero's combat-start or combat-end balance before processing a later offer for that hero.
+export function createHeroicResourceBoundaryQueue() {
+  const balances = new Map();
+  return async function run(profileId, eventType, apply) {
+    const previous = balances.get(profileId);
+    const work = previous ? previous.then(apply, apply) : Promise.resolve(apply());
+    if (eventType !== 'combatStart' && eventType !== 'combatEnd') return work;
+    balances.set(profileId, work);
+    try {
+      return await work;
+    } finally {
+      if (balances.get(profileId) === work) balances.delete(profileId);
+    }
+  };
+}
+
+// Only an unconditional, deterministic opening set can be shared with the first turn.
+// Interactive, filtered, rolled and multi-rule openings keep their authored sequence.
+export function heroicResourceOpeningBalance(automation, context) {
+  const openings = normalizeHeroicResourceAutomation(automation).rules.filter(rule => rule.enabled && rule.event === 'combatStart');
+  if (openings.length !== 1) return null;
+  const [rule] = openings;
+  const amount = rule.effect.amount;
+  if (!rule.autoApply || rule.effect.kind !== 'set' || rule.limit || Object.keys(rule.filter).length
+    || Object.keys(amount).some(key => !['amount', 'from', 'bonus'].includes(key))
+    || (amount.from && amount.from !== 'victories')) return null;
+  return Math.max(0, resolveHeroicResourceAmount(amount, context).amount);
+}
+
+// A limited offer belongs to the fight (and possibly the round or turn) that produced it.
+export function heroicResourceTimingAllows(rule, eventType, atEvent, now) {
+  if (!rule.limit || eventType === 'combatStart' || eventType === 'combatEnd') return true;
+  if (!atEvent.active || !now.active) return false;
+  if (atEvent.encounterId != null && atEvent.encounterId !== now.encounterId) return false;
+  const scope = rule.limit.scope;
+  if ((scope === 'round' || scope === 'turn') && atEvent.round !== now.round) return false;
+  return scope !== 'turn' || atEvent.turnId === undefined || atEvent.turnId === now.turnId;
+}
+
 export function ruleMatchesHeroicResourceEvent(rule, eventType, payload = {}, env = {}) {
   if (!rule?.enabled || rule.event !== eventType) return false;
   const filter = rule.filter || {};

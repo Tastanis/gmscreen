@@ -1,41 +1,15 @@
-/**
- * Map pings.
- *
- * Extracted from dnd/vtt/assets/js/ui/board-interactions.js as part of the
- * phase 4 refactor. Do not add unrelated code to this file.
- *
- * Owns the alt-click ping/focus interaction: spawning the local pulse, queuing
- * the ping into board state, deduping incoming pings from other clients, and
- * sanitizing the persisted ping list. The pinging DOM layer (`#vtt-ping-layer`)
- * is created by board-interactions.js and accessed via the `getPingLayer`
- * callback.
- *
- * See docs/vtt-sync-refactor/phase-4-extraction-targets.md target #5 for the
- * design history.
- */
-
-const MAP_PING_ANIMATION_DURATION_MS = 900;
 const MAP_PING_RETENTION_MS = 10000;
 const MAP_PING_HISTORY_LIMIT = 8;
 const MAP_PING_PROCESSED_RETENTION_MS = 60000;
-const PING_PULSE_BASE_SIZE_PX = 160;
-const PING_PULSE_CLEANUP_BUFFER_MS = 160;
 
 export function createMapPings({
-  documentRef = typeof document === 'undefined' ? undefined : document,
   windowRef = typeof window === 'undefined' ? undefined : window,
-  getBoardElement = () => null,
-  getPingLayer = () => null,
   getViewState = () => ({}),
-  applyTransform = () => {},
   getBoardState = () => ({}),
   updateBoardState = () => {},
   getCurrentUserId = () => null,
   normalizeProfileId = (value) => value,
   getLocalMapPoint = () => null,
-  // Where a point of the flat map at a height (in squares) is drawn: the board leans, so a floor above is not
-  // drawn over the ground under it.
-  projectPoint = (x, y) => ({ x, y }),
   markPingsDirty = () => {},
   persistBoardStateSnapshot = () => {},
 } = {}) {
@@ -45,7 +19,7 @@ export function createMapPings({
 
   function handleMapPing(event, { focus = false } = {}) {
     const viewState = getViewState() ?? {};
-    if (!viewState.mapLoaded) {
+    if (!viewState.mapLoaded || !board3d()) {
       return false;
     }
 
@@ -192,78 +166,15 @@ export function createMapPings({
   }
 
   function renderPing(pingEntry) {
-    const pingLayer = getPingLayer();
     const viewState = getViewState() ?? {};
-    if (!pingLayer || !viewState.mapLoaded) {
-      return;
-    }
-
+    if (!viewState.mapLoaded) return;
     const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
     const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
     if (mapWidth <= 0 || mapHeight <= 0) {
       return;
     }
 
-    const layer3d = board3d();
-    if (layer3d) {
-      const x = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth, y = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
-      layer3d.pulse({ x, y, z: Number.isFinite(Number(pingEntry.z)) ? Number(pingEntry.z) : null, type: pingEntry.type });
-      return;
-    }
-    const drawn = drawnAt(pingEntry, mapWidth, mapHeight);
-    spawnPingPulse(drawn.x, drawn.y, pingEntry.type, 0);
-  }
-
-  // Where a ping is drawn on the board: its place on the flat map, at its own height.
-  function drawnAt(pingEntry, mapWidth, mapHeight) {
-    const x = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
-    const y = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
-    const z = Number(pingEntry.z);
-    if (!Number.isFinite(z) || z === 0) return { x, y };
-    const at = projectPoint(x, y, z);
-    return at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : { x, y };
-  }
-
-  function spawnPingPulse(localX, localY, type, delayMs) {
-    const pingLayer = getPingLayer();
-    if (!pingLayer || !documentRef) {
-      return;
-    }
-
-    const element = documentRef.createElement('div');
-    element.className = 'vtt-board__ping';
-    if (type === 'focus') {
-      element.classList.add('vtt-board__ping--focus');
-    }
-    element.style.left = `${localX}px`;
-    element.style.top = `${localY}px`;
-    element.style.setProperty('--vtt-ping-delay', `${delayMs}ms`);
-
-    const viewState = getViewState() ?? {};
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const size = PING_PULSE_BASE_SIZE_PX / scale;
-    element.style.setProperty('--vtt-ping-size', `${size}px`);
-
-    pingLayer.appendChild(element);
-    const cleanupDelay = MAP_PING_ANIMATION_DURATION_MS + delayMs + PING_PULSE_CLEANUP_BUFFER_MS;
-    scheduleTimeout(() => {
-      element.remove();
-    }, cleanupDelay);
-  }
-
-  function scheduleTimeout(callback, delayMs) {
-    if (typeof callback !== 'function') {
-      return;
-    }
-    const timer =
-      windowRef && typeof windowRef.setTimeout === 'function'
-        ? windowRef.setTimeout.bind(windowRef)
-        : typeof setTimeout === 'function'
-        ? setTimeout
-        : null;
-    if (timer) {
-      timer(callback, delayMs);
-    }
+    board3d()?.pulse({x:pingEntry.x*mapWidth,y:pingEntry.y*mapHeight,z:pingEntry.z ?? null,type:pingEntry.type});
   }
 
   function recordProcessedPing(pingEntry) {
@@ -286,6 +197,7 @@ export function createMapPings({
   }
 
   function processIncomingPings(entries, activeSceneId) {
+    if (!board3d()) return;
     const list = Array.isArray(entries) ? entries : [];
     const now = Date.now();
     pruneProcessedPings(now);
@@ -315,7 +227,7 @@ export function createMapPings({
     }
 
     const viewState = getViewState() ?? {};
-    if (!viewState.mapLoaded) {
+    if (!viewState.mapLoaded || !board3d()) {
       return;
     }
 
@@ -335,9 +247,8 @@ export function createMapPings({
   }
 
   function centerViewOnPing(pingEntry) {
-    const board = getBoardElement();
     const viewState = getViewState() ?? {};
-    if (!board || !viewState.mapLoaded) {
+    if (!board3d() || !viewState.mapLoaded) {
       return;
     }
 
@@ -359,24 +270,6 @@ export function createMapPings({
       return;
     }
 
-    const boardRect = board.getBoundingClientRect();
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const { x: localX, y: localY } = drawnAt(pingEntry, mapWidth, mapHeight);
-    const desiredX = boardRect.width / 2 - localX * scale;
-    const desiredY = boardRect.height / 2 - localY * scale;
-
-    const mapWidthScaled = mapWidth * scale;
-    const mapHeightScaled = mapHeight * scale;
-    const minX = Math.min(0, boardRect.width - mapWidthScaled);
-    const maxX = Math.max(0, boardRect.width - mapWidthScaled);
-    const minY = Math.min(0, boardRect.height - mapHeightScaled);
-    const maxY = Math.max(0, boardRect.height - mapHeightScaled);
-
-    if (viewState.translation && typeof viewState.translation === 'object') {
-      viewState.translation.x = Math.min(Math.max(desiredX, minX), maxX);
-      viewState.translation.y = Math.min(Math.max(desiredY, minY), maxY);
-    }
-    applyTransform();
   }
 
   function sanitizePingsForPersistence(source) {
@@ -438,7 +331,7 @@ export function createMapPings({
       return false;
     }
     const viewState = getViewState() ?? {};
-    if (!viewState.mapLoaded) {
+    if (!viewState.mapLoaded || !board3d()) {
       return false;
     }
     centerViewOnPing({ x, y });
@@ -452,7 +345,7 @@ export function createMapPings({
     pulseAt: (localX, localY, z = null) => {
       const layer3d = board3d();
       if (layer3d) layer3d.pulse({ x: localX, y: localY, z: Number.isFinite(z) ? z : null, type: 'ping' });
-      else spawnPingPulse(localX, localY, 'ping', 0);
+
     },
     processIncomingPings,
     sanitizePingsForPersistence,

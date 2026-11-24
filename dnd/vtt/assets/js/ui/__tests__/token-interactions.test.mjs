@@ -138,7 +138,9 @@ test('createTokenInteractions returns the expected public surface', () => {
   assert.equal(typeof ti.clearDragCandidate, 'function');
 });
 
-test('startSelectionBox populates selectionBoxState and captures the pointer', () => {
+test('startSelectionBox populates selectionBoxState and captures the pointer', (t) => {
+  globalThis.vtt3d = {active:true, overlayHost:{querySelector:()=>stubEl()}};
+  t.after(()=>{delete globalThis.vtt3d;});
   const viewState = buildViewState();
   const capturedPointers = [];
   const mapSurface = {
@@ -163,7 +165,7 @@ test('startSelectionBox populates selectionBoxState and captures the pointer', (
   assert.deepEqual(capturedPointers, [7]);
   assert.ok(viewState.selectionBoxState, 'state set');
   assert.equal(viewState.selectionBoxState.pointerId, 7);
-  assert.deepEqual(viewState.selectionBoxState.startLocal, { x: 10, y: 20 });
+  assert.deepEqual(viewState.selectionBoxState.startScreen, { x: 0, y: 0 });
   assert.equal(viewState.selectionBoxState.active, false);
 });
 
@@ -192,11 +194,13 @@ test('clearDragCandidate only clears when pointerId matches', () => {
   assert.equal(viewState.dragCandidate, null);
 });
 
-test('cancelSelectionBox clears state and hides the box element', () => {
+test('cancelSelectionBox clears state and hides the box element', (t) => {
   const viewState = buildViewState({
     selectionBoxState: { pointerId: 4, active: true, startLocal: { x: 0, y: 0 }, currentLocal: { x: 0, y: 0 } },
   });
   const selectionBox = { ...stubEl(), hidden: false };
+  globalThis.vtt3d = {active:true, overlayHost:{querySelector:()=>selectionBox}};
+  t.after(()=>{delete globalThis.vtt3d;});
   const released = [];
   const mapSurface = {
     ...stubEl(),

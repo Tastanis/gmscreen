@@ -30,7 +30,7 @@ if ($user !== 'zepha' && !$is_gm) {
         <div class="error-container">
             <h1>Access Restricted</h1>
             <p class="error-message">Arcane Construction is only available to Zepha and the GM.</p>
-            <a href="../../dashboard.php" class="back-button">Return to Dashboard</a>
+            <a href="/dnd/table/" class="back-button">Return to Table</a>
         </div>
     </body>
     </html>';

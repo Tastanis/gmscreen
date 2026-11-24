@@ -32,7 +32,7 @@ import {
   getSelectedStairId,
   subscribeStairsMode,
 } from './stairs-panel.js';
-import { refreshStairsRender } from './stairs-renderer.js';
+import { pickStair, refreshStairsRender } from './stairs-renderer.js';
 
 let boardApi = null;
 let viewStateRef = null;
@@ -105,20 +105,16 @@ function handleMapPointerDown(event) {
 
   if (!editMode) return;
 
-  const target = event.target;
-  const targetEl = target instanceof Element ? target : null;
-  const stairId = targetEl?.dataset?.stairId ?? null;
-  const cornerIndex = targetEl?.dataset?.cornerIndex ?? null;
-  const segmentId = targetEl?.dataset?.segmentId ?? null;
+  const { stairId, cornerIndex, segmentId } = pickStair(event.clientX, event.clientY) ?? {};
 
-  if (stairId && cornerIndex !== null && targetEl.classList?.contains('vtt-stair-corner-handle')) {
+  if (stairId && Number.isInteger(cornerIndex)) {
     event.stopPropagation();
     event.preventDefault();
     beginCornerDrag(stairId, Number(cornerIndex), event);
     return;
   }
 
-  if (stairId && segmentId && targetEl.classList?.contains('vtt-stair-segment')) {
+  if (stairId && segmentId) {
     event.stopPropagation();
     event.preventDefault();
     setSelectedStairId(stairId);
@@ -126,7 +122,7 @@ function handleMapPointerDown(event) {
     return;
   }
 
-  if (stairId && targetEl.classList?.contains('vtt-stair-fill')) {
+  if (stairId) {
     event.stopPropagation();
     event.preventDefault();
     setSelectedStairId(stairId);
@@ -319,9 +315,7 @@ function markDirtyAndPersist(sceneId) {
 
 // Pointer coords → integer cell coordinates (whole grid square).
 function pointerToGridCell(event) {
-  const mapSurface = document.getElementById('vtt-map-surface');
-  if (!mapSurface) return null;
-  const local = pointerToLocalCoords(event, mapSurface);
+  const local = pointerToLocalCoords(event);
   if (!local) return null;
   return {
     column: Math.floor(local.x / local.gridSize),
@@ -332,42 +326,18 @@ function pointerToGridCell(event) {
 // Pointer coords → nearest grid-line intersection (the corner of a
 // cell). Used for corner-drag snapping.
 function pointerToGridCorner(event) {
-  const mapSurface = document.getElementById('vtt-map-surface');
-  if (!mapSurface) return null;
-  const local = pointerToLocalCoords(event, mapSurface);
+  const local = pointerToLocalCoords(event);
   if (!local) return null;
   const column = Math.max(0, Math.round(local.x / local.gridSize));
   const row = Math.max(0, Math.round(local.y / local.gridSize));
   return { column, row };
 }
 
-function pointerToLocalCoords(event, mapSurface) {
-  const view = viewStateRef ?? {};
-  // 3D board: the point under the pointer on the 3D surfaces.
-  if (window.vtt3d?.active) {
-    const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
-    if (!hit) return null;
-    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64), offsets = view.gridOffsets ?? {};
-    const x = hit.x - (Number.isFinite(offsets.left) ? offsets.left : 0), y = hit.y - (Number.isFinite(offsets.top) ? offsets.top : 0);
-    return x < 0 || y < 0 ? null : { x, y, gridSize };
-  }
-  const scale = Number.isFinite(view.scale) && view.scale !== 0 ? view.scale : 1;
-  const translation = view.translation ?? { x: 0, y: 0 };
-  const offsetX = Number.isFinite(translation.x) ? translation.x : 0;
-  const offsetY = Number.isFinite(translation.y) ? translation.y : 0;
-
-  const rect = mapSurface.getBoundingClientRect();
-  const pointerX = event.clientX - rect.left;
-  const pointerY = event.clientY - rect.top;
-  const localX = (pointerX - offsetX) / scale;
-  const localY = (pointerY - offsetY) / scale;
-
-  const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-  const offsets = view.gridOffsets ?? {};
-  const gOffLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const gOffTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-  const x = localX - gOffLeft;
-  const y = localY - gOffTop;
-  if (x < 0 || y < 0) return null;
-  return { x, y, gridSize };
+function pointerToLocalCoords(event) {
+  const hit = window.vtt3d?.clientToMap(event.clientX, event.clientY);
+  if (!hit) return null;
+  const gridSize = Math.max(8, viewStateRef?.gridSize || 64);
+  const x = hit.x - (viewStateRef?.gridOffsets?.left || 0);
+  const y = hit.y - (viewStateRef?.gridOffsets?.top || 0);
+  return x < 0 || y < 0 ? null : { x, y, gridSize };
 }

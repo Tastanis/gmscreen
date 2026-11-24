@@ -27,16 +27,10 @@ export function renderSceneList(routes, store) {
   const folderSelect = document.querySelector('[data-scene-folder-select]');
   const feedback = document.querySelector('[data-scene-feedback]');
   const folderButtons = document.querySelectorAll('[data-action="create-folder"]');
-  const overlayInput = document.getElementById('vtt-overlay-upload-input');
 
   const stateApi = store ?? {};
   const endpoints = routes ?? {};
-  let mapLevelUploadTargetSceneId = null;
-  let mapLevelUploadTargetLevelId = null;
-  let mapLevelUploadPending = false;
-  let mapLevelUploadPendingSceneId = null;
 
-  const isAssetUploadPending = () => mapLevelUploadPending;
 
   const markPlayerMapFieldsDirty = () => {
     if (typeof stateApi._markTopLevelDirty !== 'function') {
@@ -164,10 +158,6 @@ export function renderSceneList(routes, store) {
       boardSceneState,
       {
         viewerUserId: String(state.user?.name || '').trim().toLowerCase(),
-        mapLevelUploadsEnabled: Boolean(overlayInput && endpoints.uploads),
-        mapLevelUploadPending,
-        mapLevelUploadPendingSceneId,
-        assetUploadPending: isAssetUploadPending(),
         playerMapDisabled: Boolean(state.boardState?.playerMapDisabled),
         playerActiveSceneId: state.boardState?.playerActiveSceneId ?? null,
         folders: sceneState.folders,
@@ -333,36 +323,6 @@ export function renderSceneList(routes, store) {
       } else {
         showFeedback(feedback, 'Unable to add map level.', 'error');
       }
-      return;
-    }
-
-    if (action === 'upload-map-level' && sceneId) {
-      const levelId = target.getAttribute('data-map-level-id');
-      if (!levelId) {
-        return;
-      }
-
-      const currentState = stateApi.getState?.() ?? {};
-      const sceneState = normalizeSceneState(currentState.scenes);
-      const scene = sceneState.items.find((item) => item.id === sceneId);
-      if (!scene) {
-        return;
-      }
-
-      if (!overlayInput || !endpoints.uploads) {
-        showFeedback(feedback, 'Map level uploads are unavailable right now.', 'error');
-        return;
-      }
-
-      if (isAssetUploadPending()) {
-        showFeedback(feedback, 'An image upload is already in progress.', 'info');
-        return;
-      }
-
-      mapLevelUploadTargetSceneId = sceneId;
-      mapLevelUploadTargetLevelId = levelId;
-      overlayInput.value = '';
-      overlayInput.click();
       return;
     }
 
@@ -635,122 +595,6 @@ export function renderSceneList(routes, store) {
       }
       render(stateApi.getState?.()); return;
     }
-    const opacityInput = event.target.closest('[data-action="set-map-level-opacity"]');
-    if (!opacityInput) {
-      return;
-    }
-
-    const sceneId = opacityInput.getAttribute('data-scene-id');
-    const levelId = opacityInput.getAttribute('data-map-level-id');
-    if (!sceneId || !levelId) {
-      return;
-    }
-
-    const opacity = normalizeMapLevelOpacityInput(opacityInput.value);
-    let updated = false;
-    mutateSceneMapLevels(stateApi, sceneId, (mapLevels) => {
-      const level = mapLevels.levels.find((entry) => entry.id === levelId);
-      if (!level) {
-        return false;
-      }
-
-      level.opacity = opacity;
-      updated = true;
-      return true;
-    });
-
-    if (updated) {
-      persistBoardStateSnapshot();
-    }
-  });
-
-  overlayInput?.addEventListener('change', async () => {
-    const file = overlayInput.files?.[0] ?? null;
-    overlayInput.value = '';
-    const targetMapLevelSceneId = mapLevelUploadTargetSceneId;
-    mapLevelUploadTargetSceneId = null;
-    const targetMapLevelId = mapLevelUploadTargetLevelId;
-    mapLevelUploadTargetLevelId = null;
-
-    if (!file) {
-      return;
-    }
-
-    if (targetMapLevelSceneId) {
-      if (!endpoints.uploads) {
-        showFeedback(feedback, 'Map level uploads are unavailable right now.', 'error');
-        return;
-      }
-
-      mapLevelUploadPending = true;
-      mapLevelUploadPendingSceneId = targetMapLevelSceneId;
-      render(stateApi.getState?.());
-
-      try {
-        const url = await uploadOverlayAsset(file, endpoints.uploads);
-        if (!url) {
-          throw new Error('Upload endpoint returned no URL.');
-        }
-
-        let levelUpdated = false;
-        let limitReached = false;
-        mutateSceneMapLevels(stateApi, targetMapLevelSceneId, (mapLevels) => {
-          let resolvedTargetId = targetMapLevelId ?? mapLevels.activeLevelId ?? null;
-
-          if (resolvedTargetId && !mapLevels.levels.some((level) => level.id === resolvedTargetId)) {
-            resolvedTargetId = null;
-          }
-
-          if (!resolvedTargetId) {
-            if (mapLevels.levels.length >= MAP_LEVEL_MAX_LEVELS) {
-              limitReached = true;
-              return false;
-            }
-
-            const orderedLevels = reindexMapLevels(getOrderedMapLevels(mapLevels.levels));
-            const level = createMapLevel(`Level ${orderedLevels.length + 1}`, orderedLevels);
-            orderedLevels.push(level);
-            mapLevels.levels = reindexMapLevels(orderedLevels);
-            resolvedTargetId = level.id;
-          }
-
-          mapLevels.levels = mapLevels.levels.map((level, index) => {
-            if (level.id !== resolvedTargetId) {
-              return level;
-            }
-
-            return {
-              ...level,
-              name: level.name || `Level ${index + 1}`,
-              mapUrl: url,
-              visible: true,
-            };
-          });
-          mapLevels.activeLevelId = resolvedTargetId;
-          levelUpdated = true;
-          return true;
-        });
-
-        if (!levelUpdated) {
-          const message = limitReached
-            ? `Map levels are limited to ${MAP_LEVEL_MAX_LEVELS}.`
-            : 'Unable to apply the uploaded map level.';
-          throw new Error(message);
-        }
-
-        persistBoardStateSnapshot();
-        showFeedback(feedback, 'Map level uploaded successfully.', 'success');
-      } catch (error) {
-        console.error('[VTT] Failed to upload map level', error);
-        showFeedback(feedback, error?.message || 'Unable to upload map level.', 'error');
-      } finally {
-        mapLevelUploadPending = false;
-        mapLevelUploadPendingSceneId = null;
-        render(stateApi.getState?.());
-      }
-      return;
-    }
-
   });
 
   window.addEventListener('vtt:scene-map-uploaded', async (event) => {
@@ -1281,27 +1125,9 @@ function reindexMapLevels(levels = []) {
   }));
 }
 
-function normalizeMapLevelOpacityInput(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 1;
-  }
-  return roundToPrecision(clamp(numeric, 0, 100) / 100, 2);
-}
-
-function formatMapLevelOpacityPercent(value) {
-  const numeric = Number(value);
-  const opacity = Number.isFinite(numeric) ? numeric : 1;
-  return Math.round(clamp(opacity, 0, 1) * 100);
-}
-
 function normalizeBoardStateVersion(value) {
   const numeric = typeof value === 'number' ? value : Number.parseInt(value, 10);
   return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function deriveNamePrefix(name) {
@@ -1329,16 +1155,6 @@ function fallbackPrefixMatch(candidate, fallback) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function roundToPrecision(value, precision = 4) {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  const places = Number.isFinite(precision) ? Math.max(0, Math.trunc(precision)) : 0;
-  const factor = 10 ** places;
-  return Math.round(value * factor) / factor;
 }
 
 function updateFolderOptions(select, folders = []) {
@@ -1432,20 +1248,9 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
   const name = escapeHtml(scene.name || 'Untitled Scene');
   const sceneGrid = normalizeGridConfig(sceneBoardState.grid ?? scene.grid ?? {});
   const mapLevelsState = normalizeMapLevelsState(sceneBoardState.mapLevels ?? null, { sceneGrid });
-  const assetUploadPending = Boolean(options.assetUploadPending);
 
-  const addMapLevelDisabled = assetUploadPending || mapLevelsState.levels.length >= MAP_LEVEL_MAX_LEVELS;
-  const addMapLevelTitle = assetUploadPending
-    ? 'Wait for the current image upload to finish before adding another map level.'
-    : mapLevelsState.levels.length >= MAP_LEVEL_MAX_LEVELS
-      ? `Maximum of ${MAP_LEVEL_MAX_LEVELS} map levels reached.`
-      : '';
-  const mapLevelUploadDisabled = !options.mapLevelUploadsEnabled || assetUploadPending;
-  const mapLevelUploadTitle = !options.mapLevelUploadsEnabled
-    ? 'Map level uploads are unavailable right now.'
-    : assetUploadPending
-      ? 'An image upload is already in progress.'
-      : '';
+  const addMapLevelDisabled = mapLevelsState.levels.length >= MAP_LEVEL_MAX_LEVELS;
+  const addMapLevelTitle = addMapLevelDisabled ? `Maximum of ${MAP_LEVEL_MAX_LEVELS} map levels reached.` : '';
 
   return `
     <article class="scene-item${isActive ? ' is-active' : ''}" data-scene-id="${scene.id}">
@@ -1473,15 +1278,11 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             >
               Add Level
             </button>
-            ${options.mapLevelUploadPending && options.mapLevelUploadPendingSceneId === scene.id
-              ? '<span class="scene-level__status" role="status">Uploading level...</span>'
-              : ''}
+
           </div>
           ${renderMapLevelList(scene.id, mapLevelsState, {
             isActiveScene: isActive,
             viewerLevelId: sceneBoardState.userLevelState?.[options.viewerUserId]?.levelId,
-            mapLevelUploadDisabled,
-            mapLevelUploadTitle,
           })}
         </div>
         <footer class="scene-item__footer">
@@ -1527,23 +1328,8 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
   const hidden = level.hidden === true;
   const displayMode = level.displayMode === 'always' ? 'always' : 'auto';
   const isActiveLevel = (options.viewerLevelId || mapLevelsState.activeLevelId) === level.id;
-  const opacityPercent = formatMapLevelOpacityPercent(level.opacity);
-  const hasMap = Boolean(level.mapUrl);
   const canLower = index > 0;
   const canRaise = index < levels.length - 1;
-  const uploadDisabled = Boolean(options.mapLevelUploadDisabled);
-  const uploadTitle = options.mapLevelUploadTitle || '';
-  const cutoutCount = Array.isArray(level.cutouts) ? level.cutouts.length : 0;
-  const cutoutDisabled = !options.isActiveScene || !isActiveLevel || !hasMap || hidden;
-  const cutoutTitle = !options.isActiveScene
-    ? 'Activate this scene to edit level cutouts.'
-    : !isActiveLevel
-      ? 'Switch to this level using the up/down nav before editing cutouts.'
-      : !hasMap
-        ? 'Upload a map image before editing cutouts.'
-        : hidden
-          ? 'Unhide this level before editing cutouts.'
-          : '';
   const modeLabel = displayMode === 'always' ? 'Always' : 'Auto';
   const modeTitle = displayMode === 'always'
     ? 'Always: this level renders for every viewer regardless of their current level. Click to switch to Auto.'
@@ -1556,7 +1342,6 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
       data-scene-id="${sceneId}"
       data-map-level-display-mode="${displayMode}"
       data-map-level-hidden="${hidden ? 'true' : 'false'}"
-      data-map-level-has-map="${hasMap ? 'true' : 'false'}"
     >
       <div class="scene-level__compact-row">
         <span class="scene-level__name" title="${name}">${name}</span>
@@ -1578,36 +1363,11 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
         >
           ${modeLabel}
         </button>
-        <span class="scene-level__map-state">${hasMap ? 'Map' : 'No map'}</span>
       </div>
-      <label class="scene-level__opacity">
-        <span class="scene-level__opacity-label">Opacity</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="5"
-          value="${opacityPercent}"
-          data-action="set-map-level-opacity"
-          data-scene-id="${sceneId}"
-          data-map-level-id="${level.id}"
-          aria-label="Map level opacity"
-        />
-        <span class="scene-level__opacity-value">${opacityPercent}%</span>
-      </label>
+
       <div class="scene-level__controls">
         <button type="button" class="btn btn--ghost btn--tiny" data-action="edit-floor-stairs" data-scene-id="${sceneId}" data-map-level-id="${level.id}" ${options.isActiveScene ? '' : 'disabled'}>Stairs</button>
-        <button
-          type="button"
-          class="btn btn--ghost btn--tiny scene-level__upload"
-          data-action="upload-map-level"
-          data-scene-id="${sceneId}"
-          data-map-level-id="${level.id}"
-          ${uploadDisabled ? 'disabled' : ''}
-          ${uploadTitle ? ` title="${escapeHtml(uploadTitle)}"` : ''}
-        >
-          Upload
-        </button>
+
         <button
           type="button"
           class="btn btn--ghost btn--tiny scene-level__rename"
@@ -1616,19 +1376,6 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
           data-map-level-id="${level.id}"
         >
           Rename
-        </button>
-        <button
-          type="button"
-          class="btn btn--ghost btn--tiny scene-level__cutouts"
-          data-action="edit-map-level-cutouts"
-          data-scene-id="${sceneId}"
-          data-map-level-id="${level.id}"
-          data-map-level-cutout-count="${cutoutCount}"
-          aria-pressed="false"
-          ${cutoutDisabled ? 'disabled' : ''}
-          ${cutoutTitle ? ` title="${escapeHtml(cutoutTitle)}"` : ''}
-        >
-          Cutouts${cutoutCount ? ` (${cutoutCount})` : ''}
         </button>
         <button
           type="button"
@@ -1715,44 +1462,11 @@ function setFormPending(form, isPending) {
   }
 }
 
-async function uploadOverlayAsset(file, endpoint) {
-  const formData = new FormData();
-  formData.append('map', file, file.name);
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const message = await readUploadError(response);
-    throw new Error(message || `Upload failed with status ${response.status}`);
-  }
-
-  const payload = await response.json();
-  if (!payload.success) {
-    throw new Error(payload.error || 'Upload failed');
-  }
-
-  const url = payload.data?.url ?? null;
-  return typeof url === 'string' ? url.trim() || null : null;
-}
-
-async function readUploadError(response) {
-  try {
-    const payload = await response.json();
-    return payload.error ?? '';
-  } catch (error) {
-    return '';
-  }
-}
-
 export const __testing = {
   buildSceneMarkup,
   createMapLevel,
   deleteSceneMapLevelCascade,
   getOrderedMapLevels,
   mutateSceneMapLevels,
-  normalizeMapLevelOpacityInput,
   reindexMapLevels,
 };

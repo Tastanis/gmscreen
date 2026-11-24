@@ -2,6 +2,8 @@
 
 The canonical hook registry is `../../character_sheet/ability-automation/REGISTRY.md`. This file maps the registry to the code that implements the hooks.
 
+JSON authors can reference current action values, filter targets, choose a teleport origin, apply one roll by target, and maintain separate casts. [Field registry](../../character_sheet/ability-automation/REGISTRY.md#shared-action-hooks) · [Runnable recipes](../vtt-json/elementalist-shared-hooks.json)
+
 ## Main Flow
 
 1. Ability JSON is normalized by `../../character_sheet/ability-automation/schema.js`.
@@ -143,6 +145,12 @@ reject. The client requires an explicit paid result, bounds HTTP/body waiting to
 15 seconds and never retries uncertain payment. Missing linked resources require
 manual review; they no longer grant free upkeep. Failed payment preserves the
 zone and stops its effects; only confirmed insufficient funds trigger removal.
+
+Round-, turn-, and encounter-limited heroic-resource rules require active combat when the
+event happens. The board rechecks the original scope when it delivers and applies a
+delayed offer. Explicit combat-start and combat-end rules still run at the boundary.
+At turn start, the connected hero's player gets the resource or upkeep question.
+When that player is away, a connected Director can answer as soon as the turn starts.
 
 Heroic-resource rule saves now use narrow sync-resource writes for GM, owner and
 other authorized VTT users. Rule writes include expectedValue; under the existing

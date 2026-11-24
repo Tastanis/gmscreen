@@ -6,6 +6,7 @@ import {
 } from './sheet-model.js';
 import { PICKER_CONDITION_NAMES, normalizeSheetConditions, conditionChipLabel } from './conditions.js';
 
+const ALL_BOOK_SKILLS = Object.values(SKILL_GROUPS).flat();
 const SORTED_SKILL_GROUPS = Object.fromEntries(Object.entries(SKILL_GROUPS).map(([group, skills]) => [`${group} Skills`, [...skills].sort((a, b) => a.localeCompare(b))]));
 const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
@@ -20,7 +21,7 @@ export function makeSheetExports(sheetState, activeCharacter) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, data]) => ({
         name,
-        group: getSkillGroup(name),
+        group: getSkillGroup(name, data),
         level: data.level || "Trained",
         bonus: data.bonus ?? "",
       }));
@@ -162,7 +163,12 @@ export function makeSheetExports(sheetState, activeCharacter) {
 
   function renderPrintableSkills() {
     const trained = trainedSkillMap();
-    return Object.entries(SORTED_SKILL_GROUPS)
+    // A custom skill is printed in the group it was given; one with none under Other.
+    const custom = Object.entries(trained).filter(([name]) => !ALL_BOOK_SKILLS.includes(name));
+    const groups = Object.entries(SORTED_SKILL_GROUPS).map(([group, skills]) => [group, [...skills, ...custom.filter(([name, data]) => getSkillGroup(name, data) === group.replace(" Skills", "")).map(([name]) => name)]]);
+    const other = custom.filter(([name, data]) => getSkillGroup(name, data) === "Other").map(([name]) => name);
+    if (other.length) groups.push(["Other Skills", other]);
+    return groups
       .map(([group, skills]) => `
         <div class="fs-skill-group">
           <h3>${escapeHtml(group.replace(" Skills", ""))}</h3>

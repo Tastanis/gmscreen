@@ -24,7 +24,7 @@ test('− is off at nought and + is off at the maximum', () => {
 });
 
 test('the page changes only the count and saves it as a counter', () => {
-  const app = readFileSync(new URL('../../../../../character_sheet/app.js', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../../../../../character_sheet/app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(app, /hit\('\[data-character-recovery-delta\]'\)\)\) \{\n    if \(!state\.editing\) return;/);
   assert.match(app, /v\.currentRecoveries = max > 0 \? Math\.min\(max, next\) : next;\n    renderStatus\(\); saveSheet\(\); return;/);
   assert.match(app, /canEdit, editing: state\.editing, conditions:/);

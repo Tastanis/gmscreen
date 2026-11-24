@@ -29,7 +29,7 @@ export function createWallEditor({panel,transform,selected,model,revision=()=>Na
  const roofEditor=createRoofEditor({fields,selected,model,context,groundAt,change,copyWalls});
  panel.insertBefore(fields,panel.querySelector('footer'));
  const style=document.createElement('style');style.textContent='#wall-panel{max-height:calc(100% - 24px);overflow:auto}.wall-properties{display:grid;gap:5px;margin-top:10px}.wall-properties[hidden]{display:none}.wall-properties label{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px}.wall-properties select,.wall-properties input[type=number]{width:108px;min-width:0}.wall-properties label[hidden]{display:none}#wall-portals{position:absolute;inset:0;pointer-events:none;z-index:100003}.wall-portal{position:absolute;pointer-events:auto;transform:translate(-50%,-50%);width:18px;height:18px;padding:0;font-size:13px;border:1px solid #d9b363;border-radius:3px;background:#24252b;color:#eee}.vtt-manual-token-targeting .wall-portal{pointer-events:none}.wall-portal-note{position:absolute;z-index:6;pointer-events:none;white-space:nowrap;padding:1px 6px;font:12px system-ui,sans-serif;border:1px solid #7a6548;border-radius:4px;background:#201a14;color:#f1e6d0}';document.head.append(style);
- const portalLayer=document.createElement('div');portalLayer.id='wall-portals';transform.append(portalLayer);
+ const portalLayer=document.createElement('div');portalLayer.id='wall-portals';
  // A field being typed in is left alone, so a redraw does not overwrite half a number. That holds
  // only while the same walls are selected, and only for fields that are typed in: a tick box or a
  // list always shows the selected walls, even with the cursor still in it from the last wall.
@@ -43,12 +43,19 @@ export function createWallEditor({panel,transform,selected,model,revision=()=>Na
  let doorsAt=NaN,doors=[];
  // A word beside a door for the player who clicked it (Brandon: no explanations): it is locked, or his hero is not at it.
  function doorNote(button,text){
-  // 3D board: the flat map layer is hidden there, so the word is shown over the button where it is on the screen.
-  if(window.vtt3d?.active){const r=button.getBoundingClientRect(),note=document.createElement('span');note.className='wall-portal-note';note.textContent=text;note.style.cssText=`position:fixed;left:${r.left+r.width/2}px;top:${r.top-6}px;transform:translate(-50%,-100%);z-index:100007;pointer-events:none`;document.body.append(note);setTimeout(()=>note.remove(),1800);return;}
-  const note=document.createElement('span');note.className='wall-portal-note';note.textContent=text;note.style.left=button.style.left;note.style.top=button.style.top;note.style.transform=button.style.transform+' translateY(-170%)';transform.append(note);setTimeout(()=>note.remove(),1500);}
+  const rect = button.getBoundingClientRect();
+  const note = document.createElement('span');
+  note.className = 'wall-portal-note';
+  note.textContent = text;
+  note.style.cssText = `position:fixed;left:${rect.left+rect.width/2}px;top:${rect.top-6}px;transform:translate(-50%,-100%);z-index:100007;pointer-events:none`;
+  document.body.append(note);
+  setTimeout(()=>note.remove(),1800);
+ }
  function portals(){
   // 3D board: the buttons live above the 3D view, each pinned to its doorway (data-vtt3d-anchor).
-  const board3d=window.vtt3d?.active?window.vtt3d:null;if(board3d&&portalLayer.parentElement!==board3d.overlayHost)board3d.overlayHost.append(portalLayer);else if(!board3d&&portalLayer.parentElement!==transform)transform.append(portalLayer);
+  const board3d = window.vtt3d;
+  if (!board3d?.active) return;
+  if (portalLayer.parentElement !== board3d.overlayHost) board3d.overlayHost.append(portalLayer);
   portalLayer.replaceChildren();const c=context();if(!c||!panel.hidden)return;const m=model();
   if(doorsAt!==revision()){doorsAt=revision();doors=m.segments.filter(raw=>properties(raw).interaction!=='none');}
   if(!doors.length)return;
@@ -56,16 +63,12 @@ export function createWallEditor({panel,transform,selected,model,revision=()=>Na
   for(const raw of doors){const e=properties(raw);if(e.interaction==='none'||e.secret&&!c.isGM||isBroken(e))continue;const a=nodes.get(e.a),b=nodes.get(e.b),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
    const heights=wallHeights(e,a,b,mid,groundAt);
    // With vision off on the 3D board every door and window a player may know of is shown.
-   if(!board3d&&(!c.isGM||document.documentElement.classList.contains('height-vision-active'))&&!window.visionPrototype?.portalVisible({a,b,...heights}))continue;
 
-   const v=c.view,x=(v.gridOffsets.left||0)+mid.x*v.gridSize,y=(v.gridOffsets.top||0)+mid.y*v.gridSize,p=window.terrainPrototype?.active?terrainPrototype.project(x,y,heights.base):projected(mid),button=document.createElement('button');button.className='wall-portal';button.disabled=!c.isGM&&e.interaction!=='door';button.dataset.portalId=e.id;button.dataset.portalType=e.interaction;button.dataset.open=String(e.open);button.dataset.portalKind=portalKind(e);button.innerHTML=portalIcon(e);button.style.color=e.locked?'#e49494':e.open?'#86d9a6':e.secret?'#c9b6f2':'#eee';button.title=portalTitle(e);button.setAttribute('aria-label',button.title);button.style.left=p.x+'px';button.style.top=p.y+'px';button.style.transform=`translate(-50%,-50%) scale(${1/c.view.scale})`;if(board3d){button.dataset.vtt3dAnchor=`${mid.x},${mid.y},${heights.base+Math.min(1,Math.max(0,(heights.top-heights.base)/2))}`;button.style.transform='translate(-50%,-50%)';button.style.visibility='hidden';}for(const type of ['pointerdown','pointerup','mousedown','mouseup','dblclick'])button.addEventListener(type,ev=>{ev.stopPropagation();if(type==='pointerdown'||type==='mousedown')ev.preventDefault();});button.onclick=ev=>{ev.stopPropagation();const gm=!!context()?.isGM;if(!gm&&e.interaction!=='door')return;if(e.locked){if(!gm)doorNote(button,'Locked');return;}button.disabled=true;savePortal(e.id,!e.open).catch(error=>{console.error(error);if(gm)alert('Door change was not confirmed. Reload the shared map before trying again.');else if(/next to/i.test(error?.message||''))return askMoveQuestion({kind:'reach'},{anchor:button}).then(answer=>answer==='anyway'?savePortal(e.id,!e.open,true).catch(()=>doorNote(button,'Not now')):null);else doorNote(button,/locked/i.test(error?.message||'')?'Locked':'Not now');}).finally(()=>{button.disabled=false;});document.getElementById('vtt-board-canvas')?.focus({preventScroll:true});};portalLayer.append(button);
+   const button=document.createElement('button');button.className='wall-portal';button.disabled=!c.isGM&&e.interaction!=='door';button.dataset.portalId=e.id;button.dataset.portalType=e.interaction;button.dataset.open=String(e.open);button.dataset.portalKind=portalKind(e);button.innerHTML=portalIcon(e);button.style.color=e.locked?'#e49494':e.open?'#86d9a6':e.secret?'#c9b6f2':'#eee';button.title=portalTitle(e);button.setAttribute('aria-label',button.title);button.dataset.vtt3dAnchor=`${mid.x},${mid.y},${heights.base+Math.min(1,Math.max(0,(heights.top-heights.base)/2))}`;button.style.transform='translate(-50%,-50%)';button.style.visibility='hidden';for(const type of ['pointerdown','pointerup','mousedown','mouseup','dblclick'])button.addEventListener(type,ev=>{ev.stopPropagation();if(type==='pointerdown'||type==='mousedown')ev.preventDefault();});button.onclick=ev=>{ev.stopPropagation();const gm=!!context()?.isGM;if(!gm&&e.interaction!=='door')return;if(e.locked){if(!gm)doorNote(button,'Locked');return;}button.disabled=true;savePortal(e.id,!e.open).catch(error=>{console.error(error);if(gm)alert('Door change was not confirmed. Reload the shared map before trying again.');else if(/next to/i.test(error?.message||''))return askMoveQuestion({kind:'reach'},{anchor:button}).then(answer=>answer==='anyway'?savePortal(e.id,!e.open,true).catch(()=>doorNote(button,'Not now')):null);else doorNote(button,/locked/i.test(error?.message||'')?'Locked':'Not now');}).finally(()=>{button.disabled=false;});document.getElementById('vtt-board-canvas')?.focus({preventScroll:true});};portalLayer.append(button);
   }
  }
  const materialColors={glass:'#9fd8e8',wood:'#b98a55',stone:'#b9b9b9',metal:'#8fa3c2'};
  const materialColor=material=>materialColors[material]||'#d9b363';
  function color(raw){const e=properties(raw);if(isBroken(e))return '#8a8a8a';return e.interaction!=='none'?(e.open?'#77c79a':e.locked?'#d27777':'#ba91df'):e.sight==='limited'?'#7daf76':e.sight==='pass'?'#79b9cd':'#d9b363';}
- function directions(fragment,raw,a,b,scale){const e=properties(raw),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);if(!len)return;const ns='http://www.w3.org/2000/svg';
-  for(const [kind,direction] of [['sight',e.sightDirection],['movement',e.movementDirection]]){if(direction==='both')continue;const sign=direction==='left'?1:-1,t=kind==='sight'?.4:.6,mid={x:a.x+dx*t,y:a.y+dy*t},q=projected(mid),tip=projected({x:mid.x-dy/len*.35*sign,y:mid.y+dx/len*.35*sign}),end=projected({x:mid.x+dx/len*.10-dy/len*.24*sign,y:mid.y+dy/len*.10+dx/len*.24*sign}),other=projected({x:mid.x-dx/len*.10-dy/len*.24*sign,y:mid.y-dy/len*.10+dx/len*.24*sign}),arrow=document.createElementNS(ns,'path');arrow.setAttribute('d',`M${q.x},${q.y} L${tip.x},${tip.y} M${end.x},${end.y} L${tip.x},${tip.y} L${other.x},${other.y}`);arrow.setAttribute('fill','none');arrow.setAttribute('stroke',kind==='sight'?'#8bc6ed':'#eebc70');arrow.setAttribute('stroke-width',2/scale);fragment.append(arrow);}
- }
- return {refresh,portals,color,directions,materialColor};
+ return {refresh,portals,color,materialColor};
 }

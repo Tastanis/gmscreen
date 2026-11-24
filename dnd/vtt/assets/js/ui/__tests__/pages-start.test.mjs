@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -50,7 +50,7 @@ function findPhp() {
 /** The code of dnd/ as it stands in the working folder, in a folder of its own: tracked files, and new code files. */
 function copyOfTheSite() {
   const list = (args) => spawnSync('git', ['-C', repo, 'ls-files', '-z', ...args, 'dnd'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout.split('\0').filter(Boolean);
-  const files = [...list([]), ...list(['--others', '--exclude-standard']).filter((file) => /\.(?:php|m?js|cjs|css|html)$/i.test(file))];
+  const files = [...list([]), ...list(['--others', '--exclude-standard']).filter((file) => /\.(?:php|m?js|cjs|css|html)$/i.test(file) || file==='dnd/character_sheet/builder/rules.json')];
   assert.ok(files.length > 100, 'the list of the site\'s files could not be read from git');
   const copy = mkdtempSync(path.join(tmpdir(), 'vtt-pages-start-'));
   for (const file of files) {
@@ -77,7 +77,267 @@ async function answers(origin, tries = 60) {
 
 const SCRIPT_DELAY_MS = 250;
 
+// Open through the same S menu as a player or Director. Only the Table's own map may contact a sheet.
+async function openBuilder(page) {
+  await page.getByRole('button',{name:'Table menu'}).click();
+  await page.getByText('Character builder',{exact:true}).click();
+  const frame=page.frameLocator('iframe[src="/dnd/character_sheet/builder/"]');
+  await frame.locator('[name="hero-name"]').waitFor();
+}
+
+async function finishTableHeroes(page, ...classes) {
+  await openBuilder(page);
+  const frame = page.frames().find(f => f.url().endsWith('/character_sheet/builder/'));
+  assert.ok(frame);
+  for (const [index, classId] of classes.entries()) {
+    if (index) {
+      page.once('dialog', dialog => dialog.accept());
+      await frame.getByRole('button',{name:'Start another hero'}).click();
+    }
+    await finishIndependentHero(page, frame, classId);
+  }
+  return frame;
+}
+async function finishPlayerBuilds(page) {
+  await page.getByRole('button', { name: 'Table menu' }).click();
+  await page.getByText('My Characters', { exact: true }).click();
+  await page.frameLocator('iframe[src*="builder/library.php"]').getByRole('link', { name: 'Open character builder' }).waitFor();
+  const frame = await finishTableHeroes(page, 'null', 'conduit');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'shadow');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'talent');
+}
+async function finishDirectorBuilds(page) {
+  const frame = await finishTableHeroes(page, 'censor');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'fury');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'tactician');
+  await frame.locator('nav [data-step="Identity"]').click();
+  await finishIndependentHero(page, frame, 'troubadour');
+}
+
+async function finishIndependentHero(page, builder = page.mainFrame(), classId = 'elementalist') {
+  const isNull = classId === 'null';
+  const isCensor = classId === 'censor';
+  const specialization = { censor: 'Paragon', conduit: 'Life and Protection', fury: 'Stormwight', null: 'Cryokinetic', elementalist: 'Fire', shadow: 'College of Caustic Alchemy', tactician: 'Vanguard', talent: 'Telepathy', troubadour: 'Virtuoso' }[classId];
+  const heroName = { censor: 'Cavall Polder', conduit: 'Polder of Adûn', fury: 'Wolf Polder', null: 'Frost Polder', elementalist: 'Ember Polder', shadow: 'Nightshade Polder', tactician: 'Banner Polder', talent: 'Dream Polder', troubadour: 'Ballad Polder' }[classId];
+  page.setDefaultTimeout(5000);
+  const unrelatedStorage=()=>page.evaluate(()=>Object.fromEntries(Object.entries(localStorage).filter(([k])=>!k.startsWith('draw-steel.builder.'))));
+  const before=await unrelatedStorage();
+  await builder.locator('[name="hero-name"]').fill(heroName);
+  await builder.locator('[name="hero-class"]').selectOption(classId);
+  if (classId !== 'elementalist') await builder.locator('[name="hero-level"]').selectOption('2');
+  await builder.locator('nav [data-step="Ancestry"]').click();
+  const ancestry = builder.locator('[data-slot="ancestry"]');
+  if (!await ancestry.locator('[data-option="ancestry-polder"][aria-pressed="true"]').count()) {
+    await ancestry.getByRole('button',{name:'Polder',exact:true}).click();
+    await builder.goto(builder.url());
+    await builder.locator('[data-slot="ancestry"] button[aria-pressed="true"]').waitFor();
+  }
+  for(const step of ['Ancestry','Background','Class','Training']){
+    await builder.locator('nav [data-step="'+step+'"]').click();
+    for(let i=0;i<70;i++){
+      const key=await builder.locator('fieldset[data-slot]').evaluateAll(groups=>{
+        return groups.find(group=>{const [used,max]=group.querySelector('legend small').textContent.split('/').map(parseFloat);return used!==max;})?.dataset.slot;
+      });
+      if(!key)break;
+      const slot=builder.locator('fieldset[data-slot="'+key+'"]');
+      if(key==='subclass'){await slot.getByRole('button',{name:specialization,exact:true}).click();continue;}
+      if (key === 'tactician-kits') {
+        await slot.getByRole('button',{name:'Martial Artist',exact:true}).click();
+        await slot.getByRole('button',{name:'Mountain',exact:true}).click();
+        continue;
+      }
+      if (key === 'tactician-kits-meleeDamage') {
+        const mountain = slot.locator('button[data-option="kit-mountain"]');
+        assert.match(await mountain.innerText(), /\+0\/\+0\/\+4/);
+        await mountain.click();
+        continue;
+      }
+      if(key==='conduit-domain'){
+        await slot.getByRole('button',{name:'Life',exact:true}).click();
+        await slot.getByRole('button',{name:'Protection',exact:true}).click();
+        continue;
+      }
+      const preferred = {
+        'censor-1-2': 'Cavall', 'censor-domain': 'War', 'censor-1-5': 'Warrior Priest',
+        'conduit-deity': 'Adûn', 'conduit-feature-1': 'Protection', 'conduit-domain-ability-2': 'Wellspring of Grace',
+        'fury-stormwight-kit': 'Vuken', 'fury-stormwight-ability-2': 'Visceral Roar', 'fury-perk-2': 'Expert Artisan',
+        'shadow-kit': 'Cloak and Dagger', 'shadow-caustic-alchemy-ability-2': 'Sticky Bomb',
+        'tactician-vanguard-ability-2': 'Squad! On Me!',
+        'talent-augmentation': 'Distance Augmentation', 'talent-ward': 'Vanishing Ward',
+        'talent-telepathy-ability-2': 'Synaptic Override',
+        'troubadour-kit': 'Swashbuckler', 'troubadour-virtuoso-ability-2': 'Encore',
+        'troubadour-invocation': 'Formal Introductions',
+      }[key];
+      if (preferred) {
+        await slot.getByRole('button', { name: preferred, exact: true }).click();
+        continue;
+      }
+      if(key==='elementalist-1-7'){await slot.getByRole('button',{name:'Enchantment of Celerity',exact:true}).click();continue;}
+      if(step==='Training' && key==='env-nomadic'){
+        await slot.locator('.soft button').first().click();
+        await builder.getByRole('button',{name:'Keep choosing'}).click();
+        await slot.locator('.soft button').first().click();
+        await builder.getByRole('button',{name:'Use this choice'}).click();
+        await slot.locator('.soft button[aria-pressed="true"]').waitFor();
+      }else await slot.locator('.choice:not(.soft) button[aria-pressed="false"]:enabled').first().click();
+    }
+  }
+  await builder.locator('nav [data-step="Review"]').click();
+  assert.ok(await builder.getByRole('heading',{name:'Accepted house rules'}).count());
+  const download=page.waitForEvent('download');
+  await builder.getByRole('button',{name:'Download hero JSON'}).click();
+  const saved=await download;
+  const sheet=JSON.parse(readFileSync(await saved.path(),'utf8'));
+  assert.equal(sheet.hero.name,heroName); assert.equal(sheet.hero.classTrack,specialization);assert.equal(sheet.hero.vitals.size,'1S');
+  assert.ok(sheet.features.some(f=>f.title==='House rules'));
+  if (isNull) {
+    assert.equal(sheet.hero.resource.title,'Discipline');
+    assert.equal(sheet.hero.level,2);
+    assert.ok(sheet.actions.mains.some(a=>a.name==='Entropic Field' && a.cost==='5 Discipline'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a=>a.id.startsWith('elementalist')));
+  } else if (isCensor) {
+    assert.equal(sheet.hero.resource.title, 'Wrath');
+    assert.equal(sheet.hero.kit.name, 'Warrior Priest');
+    assert.ok(sheet.features.some(f => f.title === 'Sanctified Weapon'));
+    assert.ok(sheet.actions.maneuvers.some(a => a.name === 'Blessing of the Faithful' && a.cost === '5 Wrath'));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Weakening Brand'));
+  } else if (classId === 'fury') {
+    assert.equal(sheet.hero.resource.title, 'Ferocity');
+    assert.equal(sheet.hero.kit.name, 'Vuken');
+    assert.ok(sheet.actions.maneuvers.some(a=>a.name==='Aspect of the Wild'));
+    const roar = sheet.actions.mains.find(a=>a.name==='Visceral Roar');
+    assert.equal(roar.cost,'5 Ferocity');
+    assert.equal(roar.tests[0].tiers.low.damageType,'lightning');
+    assert.ok(!Object.values(sheet.actions).flat().some(a=>a.name==='Judgment' || a.name==='Weakening Brand'));
+  } else if (classId === 'tactician') {
+    assert.equal(sheet.hero.resource.title, 'Focus');
+    assert.equal(sheet.hero.kit.name, 'Martial Artist and Mountain');
+    assert.ok(sheet.actions.maneuvers.some(a => a.name === 'Squad! On Me!' && a.cost === '5 Focus'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Parry'));
+    const grace = sheet.actions.mains.find(a => a.name === 'Battle Grace');
+    assert.equal(grace.tests[0].tiers.high.damage, String(13 + Math.max(sheet.hero.stats.might, sheet.hero.stats.agility)));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Pain for Pain'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Visceral Roar' || a.name === 'Overwatch'));
+  } else if (classId === 'troubadour') {
+    assert.equal(sheet.hero.resource.title, 'Drama');
+    assert.equal(sheet.hero.kit.name, 'Swashbuckler');
+    assert.ok(sheet.sidebar.skills.Music);
+    assert.ok(sheet.features.some(f => f.title === 'Formal Introductions'));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Encore' && a.cost === '5 Drama'));
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Thunder Mother' && a.actionLabel === 'No action'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Harmonize'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => ['Riposte', 'Mark', 'Guest Star'].includes(a.name)));
+  } else if (classId === 'talent') {
+    assert.equal(sheet.hero.resource.title, 'Clarity');
+    assert.equal(sheet.hero.resource.allowNegative, true);
+    assert.ok(sheet.sidebar.lists.languages.includes('Mindspeech'));
+    assert.equal(sheet.actions.freeStrikes.find(a => a.name === 'Mind Spike').range, 'Ranged 12');
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Synaptic Override' && a.cost === '5 Clarity'));
+    assert.ok(sheet.features.some(f => f.title === 'Vanishing Ward'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Minor Telekinesis' || a.name === 'Sticky Bomb'));
+  } else if (classId === 'shadow') {
+    assert.equal(sheet.hero.resource.title, 'Insight');
+    assert.equal(sheet.hero.resource.discountOnPowerRollEdge, true);
+    assert.equal(sheet.hero.kit.name, 'Cloak and Dagger');
+    assert.ok(sheet.actions.mains.some(a => a.name === 'Sticky Bomb' && a.cost === '5 Insight'));
+    assert.ok(sheet.actions.triggers.some(a => a.name === 'Defensive Roll'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a => a.name === 'Black Ash Teleport' || a.name === 'Healing Grace'));
+  } else if (classId === 'conduit') {
+    assert.equal(sheet.hero.resource.title,'Piety');
+    assert.ok(sheet.actions.mains.some(a=>a.name==='Wellspring of Grace' && a.cost==='5 Piety'));
+    assert.ok(sheet.features.some(f=>f.title==='Revitalizing Ritual'));
+    assert.ok(sheet.features.some(f=>f.title==='Protective Circle'));
+    assert.ok(!Object.values(sheet.actions).flat().some(a=>a.name==='Sacred Bond'));
+  } else assert.ok(sheet.actions.mains.some(a=>a.name==='Hurl Element'));
+  if (builder === page.mainFrame()) assert.deepEqual(await unrelatedStorage(),before);
+}
+
 // Each page: who opens it, where, and how it shows that it has started.
+async function finishAndKeepHero(page) {
+  await finishIndependentHero(page);
+  await page.getByRole('button', { name: 'Save to My Characters' }).click();
+  await page.waitForURL(/\/builder\/library\.php\?id=/);
+  const name = 'Ember Polder';
+  await page.getByRole('heading', { name, exact: true }).waitFor();
+  const savedUrl = page.url();
+  await page.getByRole('tab', { name: 'Abilities' }).click();
+  await page.getByRole('heading', { name: 'Hurl Element', exact: true }).waitFor();
+  assert.equal(await page.locator('[data-sheet-use], [data-character-stamina-action], [data-sheet-edit], [data-sheet-chat]').count(), 0);
+  await page.getByRole('tab', { name: 'Background' }).click();
+  await page.getByRole('heading', { name: 'Background', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Features' }).click();
+  await page.getByRole('heading', { name: 'House rules' }).waitFor();
+  const exported = await page.request.get(savedUrl + '&download=1');
+  const sheet = await exported.json();
+  assert.equal(sheet.hero.name, name);
+
+  const gm = await page.context().browser().newContext();
+  const other = await page.context().browser().newContext();
+  const owner = await page.context().browser().newContext();
+  const list = new URL('library.php', savedUrl).href;
+  try {
+    const fresh = await owner.newPage();
+    await fresh.goto(list + '?__start_as=cal');
+    await fresh.getByRole('link', { name: new RegExp(name) }).click();
+    assert.equal(fresh.url(), savedUrl);
+    const headers = { 'X-Character-Token': await fresh.locator('input[name="token"]').inputValue() };
+    const saveUrl = new URL('save.php', savedUrl).href;
+    const retry = await owner.request.post(saveUrl, { headers, data: sheet });
+    assert.equal((await retry.json()).id, new URL(savedUrl).searchParams.get('id'));
+    const second = await owner.request.post(saveUrl, { headers, data: { ...sheet, hero: { ...sheet.hero, name: 'Second Polder' } } });
+    const secondId = (await second.json()).id;
+    assert.ok(secondId && secondId !== new URL(savedUrl).searchParams.get('id'));
+    const director = await gm.newPage();
+    await director.goto(list + '?scope=pcs&__start_as=GM');
+    assert.equal(await director.getByRole('link', { name: new RegExp(name) }).count(), 0);
+    assert.equal((await gm.request.get(savedUrl)).status(), 404);
+    await other.request.get(list + '?__start_as=sharon');
+    assert.equal((await other.request.get(savedUrl + '&download=1')).status(), 404);
+    assert.equal((await other.request.get(list + '?scope=pcs')).status(), 403);
+    assert.equal((await owner.request.post(savedUrl, { form: { action: 'submit' } })).status(), 403);
+    await page.getByRole('button', { name: 'Send to GM’s PCs' }).click();
+    await page.getByText('Shared with the GM').waitFor();
+    assert.equal((await gm.request.get(list + '?id=' + secondId)).status(), 404);
+    await director.goto(new URL('/dnd/players.php', savedUrl).href);
+    await director.getByRole('link', { name: 'View submitted PCs' }).click();
+    await director.getByRole('link', { name: new RegExp(name) }).click();
+    await director.getByRole('tab', { name: 'Abilities' }).click();
+    await director.getByRole('heading', { name: 'Hurl Element', exact: true }).waitFor();
+    assert.equal((await other.request.get(savedUrl)).status(), 404);
+  } finally {
+    await Promise.all([gm.close(), other.close(), owner.close()]);
+  }
+}
+
+async function checkBuilderWindow(table) {
+  const win = table.locator('.win').filter({ has: table.locator('iframe[src="/dnd/character_sheet/builder/"]') });
+  const frame = win.frameLocator('iframe');
+  await frame.locator('[name="hero-name"]').fill('Keep my draft');
+  await win.locator('[data-b="close"]').click();
+  assert.equal(await win.count(), 0);
+  await table.reload();
+  await table.getByRole('button', { name: 'Table menu' }).waitFor();
+  assert.equal(await win.count(), 0);
+  await openBuilder(table);
+  assert.equal(await frame.locator('[name="hero-name"]').inputValue(), 'Keep my draft');
+
+  const popup = table.waitForEvent('popup');
+  await win.locator('[data-b="pop"]').click();
+  const detached = await popup;
+  try {
+    assert.equal(await detached.locator('[name="hero-name"]').inputValue(), 'Keep my draft');
+    // Stop the Table's chat/layout writers before measuring storage changes made by the detached builder.
+    await table.goto('about:blank');
+    await finishAndKeepHero(detached);
+  } finally {
+    await detached.close();
+  }
+}
+
 const PAGES = [
   { name: 'the map, as the Director', as: 'GM', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
   { name: 'the map, as a player', as: 'cal', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
@@ -85,11 +345,13 @@ const PAGES = [
   // once it has started. The classic sheet (classic.php) was retired when the new one was approved.
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
     started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
-  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
-  { name: 'the main page, as a player', as: 'cal', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
+  { name: 'the main page, as the Director', as: 'GM', path: '/dnd/table/', check:finishDirectorBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'the main page, as a player', as: 'cal', path: '/dnd/table/', check:finishPlayerBuilds, started: () => !!window.Table && !!document.querySelector('iframe[title="Map"]') },
+  { name: 'a direct character builder link as a player', as: 'cal', path: '/dnd/character_sheet/builder/', landing: '/dnd/table/', check:checkBuilderWindow,
+    started: () => !!document.querySelector('.win iframe[src="/dnd/character_sheet/builder/"]') },
 ];
 
-test('every page starts: the map as Director and as a player, the character sheet, the main page', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
+test('every page starts: the map as Director and as a player, the character sheet, the Table and standalone character builder', { timeout: 240000, skip: process.env.SKIP_PAGE_START_CHECK === '1' ? 'SKIP_PAGE_START_CHECK=1' : false }, async () => {
   const php = findPhp();
   assert.ok(php, 'PHP was not found (set PHP_BIN): the pages cannot be started, so this check cannot pass');
   let chromium;
@@ -104,7 +366,7 @@ test('every page starts: the map as Director and as a player, the character shee
   const failures = [];
   try {
     try { browser = await chromium.launch({ channel: 'chrome', headless: true }); }
-    catch (error) { assert.fail('Chrome could not be started through Playwright: ' + error.message.split('\n')[0]); }
+    catch (error) { assert.fail('Chrome could not be started through Playwright: ' + error.message); }
     for (const one of PAGES) {
       const port = await freePort(), origin = `http://127.0.0.1:${port}`;
       const server = spawn(php, [...extensions, '-S', `127.0.0.1:${port}`, '-t', site, router], { env: { ...process.env, PAGE_START_CHECK: '1' }, stdio: 'ignore' });
@@ -113,6 +375,17 @@ test('every page starts: the map as Director and as a player, the character shee
       try {
         assert.ok(await answers(origin), 'PHP\'s own server did not come up');
         const page = await context.newPage();
+        const storedPCs = ['dnd/data/players.json', 'dnd/data/characters.json', 'dnd/character_sheet/data/character_sheets.json', 'dnd/character_sheet/data/hero_tokens.json'];
+        const pcContents = () => storedPCs.map(file => existsSync(path.join(site, file)) ? readFileSync(path.join(site, file), 'utf8') : null);
+        const before = one.check === checkBuilderWindow ? pcContents() : null;
+        if([checkBuilderWindow,finishPlayerBuilds,finishDirectorBuilds].includes(one.check))context.on('request',request=>{
+          // The first navigation of a pop-out is emitted before its frame exists.
+          const source = request.isNavigationRequest() ? request.headers().referer || request.url() : request.frame().url();
+          if (!source.includes('/character_sheet/builder/')) return;
+          const url=new URL(request.url());
+          const libraryWrite = one.check === checkBuilderWindow && request.method() === 'POST' && /^\/dnd\/character_sheet\/builder\/(?:save|library)\.php$/.test(url.pathname);
+          if((request.method()!=='GET' && !libraryWrite) || url.pathname.endsWith('handler.php') || url.pathname.includes('/character_sheet/data/'))errors.push('Unexpected builder request '+request.method()+' '+url.pathname);
+        });
         page.on('pageerror', (error) => errors.push(error.message));
         // A script or stylesheet of ours that will not load is a start-up fault too.
         page.on('response', (response) => { const url = response.url(); if (url.startsWith(origin) && response.status() >= 400 && /\.(?:m?js|css)(?:\?|$)/.test(url)) errors.push(`${response.status()} ${url.slice(origin.length)}`); });
@@ -125,12 +398,15 @@ test('every page starts: the map as Director and as a player, the character shee
           return route.continue();
         });
         await page.goto(`${origin}${one.path}?__start_as=${one.as}`, { waitUntil: 'load', timeout: 30000 });
-        assert.ok(new URL(page.url()).pathname.startsWith(one.path.replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
+        if (one.landing) await page.waitForURL(url => url.pathname === one.landing);
+        assert.ok(new URL(page.url()).pathname.startsWith((one.landing || one.path).replace(/index\.php$/, '')), `was sent away to ${new URL(page.url()).pathname} (not signed in?)`);
         await page.waitForFunction(one.started, null, { timeout: 20000 });
-        await page.waitForTimeout(1500);                               // anything thrown just after start-up
+        // Listen for late start-up errors while the longer interactive checks run.
+        await Promise.all([page.waitForTimeout(1500), one.check?.(page)]);
+        if (before) assert.deepEqual(pcContents(), before, 'Saving, viewing and sharing a character must leave campaign files intact');
         if (errors.length) failures.push(`${one.name}: ${errors.slice(0, 3).join(' | ')}`);
       } catch (error) {
-        failures.push(`${one.name}: DID NOT START. ${error.message.split('\n')[0]}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);
+        failures.push(`${one.name}: DID NOT START. ${error.message}${errors.length ? ' Errors: ' + errors.slice(0, 3).join(' | ') : ' No error was logged.'}`);
       } finally {
         await context.close().catch(() => {});
         server.kill();                                                 // this server, by its own handle; never by name

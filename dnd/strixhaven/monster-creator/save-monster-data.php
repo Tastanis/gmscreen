@@ -22,7 +22,7 @@ if (!$is_gm) {
 // Include backup and lock systems
 require_once 'includes/monster-backup-helper.php';
 require_once 'includes/monster-store.php';
-require_once '../gm/includes/file-lock-manager.php';
+require_once '../shared/includes/file-lock-manager.php';
 
 // Set JSON response header
 header('Content-Type: application/json');

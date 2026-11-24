@@ -245,7 +245,7 @@ def reference_issues(capture_dir: Path, manifest: dict, historical_report: list 
         if item['kind'] == 'file' and path.endswith('.json'):
             # Validate saved JSON too: partial/truncated JSON must not become a baseline.
             raw = local.read_text(encoding='utf-8-sig')
-            # Retired GM notes placeholder: current GM notes use tabs.json.
+            # Preserve the archived, intentionally empty GM notes placeholder.
             # Preserve its exact zero bytes; never relax validation for active stores.
             if path == 'dnd/strixhaven/gm/data/gm-notes.json' and raw == '':
                 historical.add((path, '', 'empty-retired-placeholder'))

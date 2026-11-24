@@ -51,7 +51,7 @@ test('swamp ripples: rippleColor, rippleSpeed and waterColor, and the bog as it 
 
 test('index.json picks either animation by name', () => {
   // scene-art.mjs needs the browser's three.js, so it is read, not run.
-  const art = readFileSync(new URL('../../../../board3d/scene-art.mjs', import.meta.url), 'utf8');
+  const art = readFileSync(new URL('../../../../board3d/scene-art.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.ok(art.includes("if(option.animation==='swamp-ripples')applySwampWaterAnimation(material,option);\n else if(option.animation==='flow')applyFlowAnimation(material,option);"));
   assert.ok(art.includes("import {applyFlowAnimation} from './flow-art.mjs';"));
 });

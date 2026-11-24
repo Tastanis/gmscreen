@@ -1430,3 +1430,13 @@ its own competency and pins. The board (period, level, competency, mode, pins) i
 teacher id; opening Grading with no filters restores it. A competency not in the current level falls back to All.
 Verify with asl/tests/grading-pins-browser.test.cjs (PW_CHANNEL=chrome works). The navigation browser test's
 "headings stay pinned" assertion fails identically on the earlier page.
+
+The Table character builder stores independent drafts in the browser and downloads
+native hero files. Keep its rules and tests separate from player-sheet storage.
+For the supported classes and source chapters, including Fury aspect and kit choices,
+see `docs/character-builder.md`.
+
+Shared JSON action values, targeting, rolls and cast maintenance are documented
+in `dnd/character_sheet/ability-automation/AUTHORING.md`. The Elementalist examples
+live in `dnd/ai-reference/vtt-json/elementalist-shared-hooks.json`. Local coverage
+uses disposable actors in `shared-elementalist-hooks.test.mjs`.

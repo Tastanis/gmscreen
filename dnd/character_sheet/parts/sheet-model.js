@@ -8,13 +8,18 @@ import { normalizeSheetConditions } from './conditions.js';
 
 export const SKILL_GROUPS = {
   Crafting: ['Alchemy', 'Architecture', 'Blacksmithing', 'Carpentry', 'Cooking', 'Fletching', 'Forgery', 'Jewelry', 'Mechanics', 'Tailoring'],
-  Exploration: ['Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump', 'Lift', 'Navigate', 'Ride', 'Swim', 'Track'],
+  Exploration: ['Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump', 'Lift', 'Navigate', 'Ride', 'Swim'],
   Interpersonal: ['Brag', 'Empathize', 'Flirt', 'Gamble', 'Handle Animals', 'Interrogate', 'Intimidate', 'Lead', 'Lie', 'Music', 'Perform', 'Persuade', 'Read Person'],
-  Intrigue: ['Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist', 'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search', 'Sneak'],
+  Intrigue: ['Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist', 'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search', 'Sneak', 'Track'],
   Lore: ['Culture', 'Criminal Underworld', 'History', 'Magic', 'Monsters', 'Nature', 'Psionics', 'Religion', 'Rumors', 'Society', 'Strategy', 'Timescape'],
 };
 export const ALL_SKILLS = Object.values(SKILL_GROUPS).flat().sort((a, b) => a.localeCompare(b));
-export const getSkillGroup = (skill) => Object.keys(SKILL_GROUPS).find((group) => SKILL_GROUPS[group].includes(skill)) || 'Other';
+export const SKILL_GROUP_NAMES = Object.keys(SKILL_GROUPS);
+// A book skill is in its book group. A custom skill is in the group it was given (Brandon, November 17, 2026: "i want
+// to be able to tag it as like an intrigue skill or whatever so that it can show up under the correct category"),
+// else under Other.
+export const getSkillGroup = (skill, entry = null) => Object.keys(SKILL_GROUPS).find((group) => SKILL_GROUPS[group].includes(skill))
+  || (SKILL_GROUP_NAMES.includes(entry?.group) ? entry.group : 'Other');
 
 export const ACTION_TYPES = ['mains', 'maneuvers', 'triggers', 'freeStrikes'];
 export const ACTION_LABELS = { mains: 'Main Action', maneuvers: 'Maneuver', triggers: 'Triggered Action', freeStrikes: 'Free Strike' };
@@ -139,7 +144,10 @@ export function normalizeSkillsState(skills = {}) {
   Object.entries(skills).forEach(([skill, value]) => {
     const entry = { bonus: '' };
     if (typeof value === 'string') entry.level = value;
-    else if (value && typeof value === 'object') { entry.level = value.level || 'Trained'; entry.bonus = value.bonus ?? ''; }
+    else if (value && typeof value === 'object') {
+      entry.level = value.level || 'Trained'; entry.bonus = value.bonus ?? '';
+      if (SKILL_GROUP_NAMES.includes(value.group) && !ALL_SKILLS.includes(skill)) entry.group = value.group;
+    }
     if (entry.level && entry.level !== 'Untrained') normalized[skill] = entry;
   });
   return normalized;

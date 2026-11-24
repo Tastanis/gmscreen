@@ -293,6 +293,7 @@
             gainMalice: board.gainMalice,
             getCounter: board.getCounter,
             isHeroPlacement: board.isHeroPlacement,
+            getTargetFacts: board.getTargetFacts,
             getAbility: board.getAbility,
             landToken: board.landToken,
             getSpeed: board.getSpeed,

@@ -1,7 +1,6 @@
 /* The VTT inside a table window ("embedded"): the board gets the whole window. Its map tools fold into one slim
    strip on the left (vtt-embed.js); table-wide things (dice, chat, combat, scenes, tokens, tests) are run from the
    table's rail instead. The original buttons stay in the page, out of sight, so everything they do still works. */
-html.vtt-embed .strix-mini-nav, html.vtt-embed .strix-mini-nav-spacer { display: none !important; }
 html.vtt-embed body { padding-top: 0 !important; }
 html.vtt-embed #vtt-app { top: 0 !important; height: 100vh !important; padding: 0 !important; }
 html.vtt-embed .vtt-board { padding: 0 !important; gap: 0 !important; }

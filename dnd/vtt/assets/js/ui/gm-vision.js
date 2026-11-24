@@ -1,3 +1,5 @@
+import {createExploredFog} from './explored-fog.mjs';
+import {sharedField,saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {groundSquare,stepViewHeight} from './terrain-math.mjs';
 import {openingHeight} from './opening-height.mjs';
@@ -60,9 +62,9 @@ function update(){const c=window.terrainContext?.();if(c?.isGM){
    finally{togglePending=false;sync();}
   });
   controls.querySelector('[data-reset-explored]').addEventListener('click',async e=>{
-   if(!window.terrainContext?.().isGM||!window.visionPrototype)return;
+   if(!window.terrainContext?.().isGM)return;
    const button=e.currentTarget;button.disabled=true;
-   try{await window.visionPrototype.resetExplored();}catch(error){console.error('Explored fog reset failed',error);window.alert('Could not reset explored areas. Please try again.');}finally{button.disabled=false;}
+   try{await saveShared('exploration',{resetId:crypto.randomUUID()},sharedField('exploration')?.revision||0);await createExploredFog().resetScene(scene);}catch(error){console.error('Explored fog reset failed',error);window.alert('Could not reset explored areas. Please try again.');}finally{button.disabled=false;}
   });sync();
  }
  sync();
@@ -74,7 +76,7 @@ export const gmVision={
  get manual(){const c=context();return !!c?.isGM&&(override||c.selectedIds?.length!==1);},
  get height(){return currentHeight(context());},get revision(){context();return state.revision;},
  // The height a player's hero stands at, and that hero's id, or null when they have none on this scene.
- get playerStanding(){const c=context();if(!c||c.isGM)return null;const id=window.visionPrototype?.viewerTokenId||c.followId,p=id&&c.state.boardState.placements[c.state.boardState.activeSceneId]?.find(p=>p.id===id);return p&&window.terrainPrototype?{id:p.id,height:window.terrainPrototype.groundFor(p)}:null;},
+ get playerStanding(){const c=context();if(!c||c.isGM)return null;const id=c.followId,p=id&&c.state.boardState.placements[c.state.boardState.activeSceneId]?.find(p=>p.id===id);return p&&window.terrainPrototype?{id:p.id,height:window.terrainPrototype.groundFor(p)}:null;},
  /** A player's raised view height, or null. It lapses when the hero changes, the scene changes, or the hero climbs to it. */
  get raised(){const own=this.playerStanding;if(!own){return null;}const key=scene+'|'+own.id;if(raised!==null&&(raisedFor!==key||raised<=groundSquare(own.height))){raised=null;state.revision++;}return raised;},
  step(direction){const c=context();if(c&&!c.isGM){const own=this.playerStanding;if(!own)return;const from=this.raised??own.height,next=stepViewHeight(from,direction);raised=next>groundSquare(own.height)?next:null;raisedFor=scene+'|'+own.id;state.revision++;this.syncNavigation();return;}if(!c?.isGM)return;const height=stepViewHeight(currentHeight(c),direction);if(!Number.isFinite(height))return;state.height=height;override=true;opening=false;state.revision++;try{localStorage.setItem('gm-inspection-height:'+scene,JSON.stringify({height}));}catch{}this.syncNavigation();},

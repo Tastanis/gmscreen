@@ -1,3 +1,5 @@
+import { canPlayerMovePlacement } from './token-presentation.js';
+import {templateSquares} from './template-squares.mjs';
 import {chooseTeleportHeight} from './teleport-choice.js';
 import { intersectsFloor, resolveSupportSurfaces } from './floor-support.js';
 import { isTestDummy, dummyOf, dummyHeroOf, dummyIdFor, isDummyId, dummyPlacementId, dummyName, newDummyRecord } from './test-dummy.mjs';
@@ -6,10 +8,8 @@ import { postUndo, undoChatLines, inUndoGroup, currentUndoTag } from '../service
 import { coverFor } from './cover-check.mjs';
 import { objectRules, entryGaps, creaturesAlong } from './object-tokens.mjs';
 import {groundSquare} from './terrain-math.mjs';
-import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
 import {openQuestion,callAttention,heldMessage} from './open-question.mjs';
-import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt,offeredCornerHeight} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview, fallDamage} from './fall-review.js';
@@ -31,11 +31,9 @@ import {spendCharacterRecoveries} from '../services/recovery-spend.js';
 import {confirmResourceWrite} from '../services/resource-write.js';
 import {spendZoneUpkeep} from '../services/zone-upkeep.js';
 import {runZoneBoundary} from '../services/zone-boundary.js';
-import {renderPersistentZones} from './persistent-zone-renderer.js';
 import {executeClaimedZoneEntry,assertZoneEntryOutcomesConfirmed} from '../services/zone-entry-claims.js';
 import {assertPersistentZoneStillActive} from './persistent-zone-lifecycle.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
-import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
 import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
@@ -45,12 +43,10 @@ import {createConditionMirror,createConditionTracker,shouldMirrorConditionChange
 import {normalizeSheetConditions as normalizeSheetConditionList} from '../../../../character_sheet/parts/conditions.js';
 import {syncTokenTeamAffiliation,syncSquadBadge,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
-import {paintWallTemplate} from './template-wall-renderer.js';
 import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
 import {wallBreakFields,squareMarks,wallStamina,breakSummary,markCubes} from './wall-break.mjs';
 import {WALL_BAR_STYLE,showBar,placeBar} from './wall-break-bar.js';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
-import {paintTemplateArea} from './template-area-renderer.js';
 import {resolveTemplateLevelPresentation, applyTemplateVisibilityMask, clearTemplateVisibilityMask} from './template-presentation.js';
 import {getTokenRenderStackOrder, buildTokenLevelTransform, applyTokenLevelPresentation, resolveVisibleTokenPresentation, normalizeTokenRenderGeometry} from './token-presentation.js';
 import {
@@ -67,9 +63,8 @@ import {
   flashShiftWarning,
   addExternalMeasurementNode,
 } from './drag-ruler.js';
-import { rightPressAt, rightPressPulls, rightPressClicked } from './right-press.mjs';
 import { slideLegs } from './forced-line.mjs';
-import { flashWall, blockedByWallText, blockedText, isWallRefusal, refusalKind } from './wall-flash.mjs';
+import { blockedByWallText, blockedText, isWallRefusal, refusalKind } from './wall-flash.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -85,7 +80,10 @@ import {
 } from './automation-trigger-lifetime.js';
 import { getPowerRollSuggestions, collectRollPassives } from './power-roll-suggestions.js';
 import {
+  createHeroicResourceBoundaryQueue,
   formatHeroicResourcePrompt,
+  heroicResourceOpeningBalance,
+  heroicResourceTimingAllows,
   normalizeHeroicResourceAutomation,
   previewHeroicResourceAmount,
   resolveHeroicResourceAmount,
@@ -113,7 +111,6 @@ import {
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
   normalizeMapLevelsState,
-  normalizeMapLevelCutout,
   resolveActiveLevelIdForUser,
   resolvePcTokenForUser,
   resolvePlacementLevelId,
@@ -126,17 +123,13 @@ import {
 } from '../state/store.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
-import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
+import { mountVisionPanel } from './vision-panel.js';
 import { mountStairsPanel, isStairsEditMode, getSelectedStairId, subscribeStairsMode } from './stairs-panel.js';
 import { mountStairsRenderer, renderStairs, refreshStairsRender } from './stairs-renderer.js';
 import { mountStairsTool } from './stairs-tool.js';
 import { mountStairsTrigger } from './stairs-trigger.js';
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
-import {
-  createMapLevelRenderer,
-  resolveSceneMapLevelsState,
-} from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
 import { canReachFloor, placementSquareDistance } from './floor-geometry.js';
@@ -158,7 +151,7 @@ import {
   getManualDamageTypeOptions as getCanonicalManualDamageTypeOptions,
   openDamageWeaknessDialog,
 } from './typed-damage-condition.js';
-import { resolveSelectionRangeGuide, selectionRangeReachesFloor } from './selection-range-guide.js';
+import { resolveSelectionRangeGuide } from './selection-range-guide.js';
 import {
   resolveAutomationDamageAmount,
   defenseEntriesFromList,
@@ -282,7 +275,7 @@ export {shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 
 export function isPersistentZoneControlTarget(target) {
   return Boolean(target?.closest?.(
-    '.vtt-persistent-zone__badge, .vtt-persistent-zone__body, [data-zone-end]'
+    '.vtt3d-zone-tag'
   ));
 }
 
@@ -533,12 +526,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
-  const grid = document.getElementById('vtt-grid-overlay');
   const tokenLayer = document.getElementById('vtt-token-layer');
-  const auraLayer = document.getElementById('vtt-aura-layer');
-  const templateLayer = document.getElementById('vtt-template-layer');
-  let pingLayer = document.getElementById('vtt-ping-layer');
-  const selectionBox = document.getElementById('vtt-selection-box');
   const mapBackdrop = document.getElementById('vtt-map-backdrop');
   const mapImage = document.getElementById('vtt-map-image');
   const emptyState = board?.querySelector('.vtt-board__empty');
@@ -580,23 +568,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const malicePanelAdd = malicePanel?.querySelector('[data-malice-add]');
   const maliceRemoveCount = malicePanel?.querySelector('[data-malice-remove-count]');
   const maliceAddCount = malicePanel?.querySelector('[data-malice-add-count]');
-  if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage || !templateLayer) return;
-  if (!pingLayer && mapTransform) {
-    pingLayer = document.createElement('div');
-    pingLayer.id = 'vtt-ping-layer';
-    pingLayer.className = 'vtt-board__pings';
-    pingLayer.setAttribute('aria-hidden', 'true');
-    if (tokenLayer && tokenLayer.parentNode === mapTransform) {
-      tokenLayer.insertAdjacentElement('afterend', pingLayer);
-    } else {
-      mapTransform.appendChild(pingLayer);
-    }
-  }
-  const mapLevelRenderer = createMapLevelRenderer({
-    mapTransform,
-    insertBefore: grid ?? templateLayer,
-  });
-
+  if (!board || !mapSurface || !mapTransform || !mapBackdrop || !mapImage) return;
   if (
     !trackerOverflowResizeListenerAttached &&
     typeof window !== 'undefined' &&
@@ -652,9 +624,7 @@ export function mountBoardInteractions(store, routes = {}) {
     minScale: 0.1,
     maxScale: 5,
     translation: { x: 0, y: 0 },
-    isPanning: false,
     pointerId: null,
-    lastPointer: { x: 0, y: 0 },
     mapLoaded: false,
     activeMapUrl: null,
     gridSize: GRID_SIZE_DEFAULT,
@@ -923,20 +893,15 @@ export function mountBoardInteractions(store, routes = {}) {
     levelsV2Enabled, scenesV2Enabled, gridV2Enabled, routingV2Enabled,
   ].some(Boolean);
   const combatTimerService = createCombatTimerService();
-  let mapLevelCutoutEditorActive = false;
-  const mapLevelCutoutTool = createMapLevelCutoutTool();
   const templateTool = createTemplateTool();
   const mapPings = createMapPings({
     getBoardElement: () => board,
-    getPingLayer: () => pingLayer,
     getViewState: () => viewState,
-    applyTransform: () => applyTransform(),
     getBoardState: () => boardApi.getState?.() ?? {},
     updateBoardState: (mutator) => boardApi.updateState?.(mutator),
     getCurrentUserId: () => getCurrentUserId(),
     normalizeProfileId: (value) => normalizeProfileId(value),
     getLocalMapPoint: (event) => getLocalMapPointAt(event),
-    projectPoint: (x, y, z) => window.terrainPrototype?.project?.(x, y, z) ?? { x, y },
     markPingsDirty: () => markPingsDirty(),
     persistBoardStateSnapshot: () => persistBoardStateSnapshot(),
   });
@@ -1010,8 +975,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
     const presentation = normalized && (isGmUser() || !normalized.hidden) && resolveVisibleTokenPresentation(normalized, getActiveSceneTokenLevelState(state), {
       viewerLevelId,
-      gmViewing: isGmUser() || Boolean(window.vtt3dBoard),
-      isCellFogged: isGmUser() || window.vtt3dBoard ? null : createFogChecker(state, viewerLevelId),
+      gmViewing: true,
+      isCellFogged: null,
     });
     // Visibility changes need node creation/removal. Keep the cheap transform
     // path for ordinary movement with unchanged floor/fog presentation.
@@ -1022,7 +987,7 @@ export function mountBoardInteractions(store, routes = {}) {
       || rendered?.levelDistance !== presentation.distance
     ))) {
       renderTokens(state, tokenLayer, viewState);
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       return;
     }
     if (!node) return;
@@ -1063,7 +1028,6 @@ export function mountBoardInteractions(store, routes = {}) {
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
-    redrawAurasAfterMove(placementId);
     fallReview.wake();
     if (activeTokenSettingsId === placementId) syncTokenLevelControls(getPlacementFromStore(placementId));
 
@@ -1081,17 +1045,6 @@ export function mountBoardInteractions(store, routes = {}) {
         detail: movementDetail,
       }));
     }
-  }
-
-  // An aura is drawn around where its token stood when the auras were last drawn. A confirmed move moved the
-  // token alone, so the aura stayed where it was, two squares behind, on every page until a reload (the tester,
-  // Build 485: "it is what 'tied to a token' means at the table"). Redrawn when a token with an aura moves, or
-  // any token while an aura is on show (one may now be nearer or farther from a floor's edge).
-  function redrawAurasAfterMove(placementId) {
-    if (!auraLayer) return;
-    const moved = placementId ? getPlacementFromStore(placementId) : null;
-    if (!auraLayer.childElementCount && !(Array.isArray(moved?.automationAuras) && moved.automationAuras.length)) return;
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
   }
 
   function syncConfirmedSceneGrid(draft, snapshot) {
@@ -1136,7 +1089,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // needs the same explicit separate-layer refresh as a live placement
       // event. This keeps zones visible after reload/reconnect as well as on
       // the original casting client.
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
     }
     if (activeSceneId) {
       if (gridV2Enabled) applyGridState(boardApi.getState?.()?.grid ?? {});
@@ -1151,7 +1104,6 @@ export function mountBoardInteractions(store, routes = {}) {
     )) {
       patchTokenMovementNode(activeSceneId, placementId, placement);
     }
-    if (activeSceneId) redrawAurasAfterMove(null);
     if (context?.source === 'conflict' || context?.source === 'recovery') {
       recordSyncDiagnostic('recoverySnapshotsApplied', {
         source: `sync-v2-${context.source}`,
@@ -1256,7 +1208,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // separate overlay layer. Focused Sync V2 placement patches must redraw
       // that layer explicitly; the removed broad board subscriber no longer
       // does it for remote casts or removals.
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
     }
     // A heroic resource gain that is another player's to accept is left on the hero's token for that player's
     // page. A page read its tokens for such offers only when it loaded or changed scene, so a page that was
@@ -1337,6 +1289,7 @@ export function mountBoardInteractions(store, routes = {}) {
       fireTimingBoundary('turnStart', {
         placementId: combatantId,
         team: getCombatantTeam(combatantId),
+        resourceRecipientId: transition.turnStartResourceRecipientId,
       });
       runPersistentZoneBoundary(combatantId, 'startOfTurn');
       notifyConditionTurnStart(combatantId);
@@ -1363,10 +1316,7 @@ export function mountBoardInteractions(store, routes = {}) {
       startNewFightCleanSlate(getActiveSceneId());
       clearResourceLimitsForScene();
       setTimeout(() => autoOnAurasAtCombatStart().catch((error) => console.warn('[VTT] auras at combat start', error)), 1500);
-      resetPlayerSurgesToZero('combat-start').finally(() => {
-        fireTimingBoundary('combatStart', { round: 1 });
-        fireTimingBoundary('roundStart', { round: 1 });
-      });
+      fireCombatStartBoundaries(1);
       resetTriggeredActionsForActiveScene();
       // Initial/round malice is committed with the server combat transition.
       return;
@@ -1407,6 +1357,9 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTurnPrompt();
     }
     applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
+    // An encounter already in progress when the page opens keeps its existing balance.
+    if (transition?.type === 'combat.start') resourceOpeningEncounterId = combat.encounterId;
+    if (transition?.type === 'combat.end') resourceOpeningEncounterId = null;
     // Each page keeps its own marks for "already this round" and "already this fight" (heroic resource rules,
     // ability limits). Only the one Director's page that runs the fight's effects cleared them, so on every
     // other page they lasted into the next fight, where round 1's "first time this round" gain was never offered.
@@ -1468,17 +1421,17 @@ export function mountBoardInteractions(store, routes = {}) {
       // A viewer-floor change alters the visible token/content set even when
       // no placement coordinates or template records changed.
       renderTokens(state, tokenLayer, viewState);
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       if (context?.event?.type === 'levels.replaced') {
         window.dispatchEvent(new CustomEvent('vtt:scene-levels-updated', { detail: { sceneId: context.event.sceneId } }));
       }
     }
     if (changeSet.fog || changeSet.levels) {
-      renderFog(state);
-      renderFogSelection();
+
+
       if (changeSet.fog && !changeSet.levels) {
         renderTokens(state, tokenLayer, viewState);
-        renderPersistentZoneOverlays();
+        scheduleZoneEndPrompts();
       }
     }
     if (changeSet.templates || changeSet.levels) {
@@ -1586,10 +1539,32 @@ export function mountBoardInteractions(store, routes = {}) {
     return { refunded: true };
   }
 
-  function promptTeleport(from,to,range=null,preferredSurface=null){
+  function abilityTargetDistance(from, to) {
+    const levels = getActiveSceneTokenLevelState();
+    if (!from || !to) return null;
+    const heights = teleportFloorElevations(levels);
+    const height = p => p.flightHeight ?? (window.terrainPrototype?.active ? window.terrainPrototype.groundFor(p) : null) ?? heights.get(p.levelId || BASE_MAP_LEVEL_ID);
+    const a = height(from), b = height(to);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    const planar = placementSquareDistance({ ...from, levelId: BASE_MAP_LEVEL_ID }, { ...to, levelId: BASE_MAP_LEVEL_ID }, {});
+    const lower = a <= b ? from : to;
+    return Number.isFinite(planar) ? Math.max(planar, squaresApartInHeight(Math.abs(a - b), Math.max(Number(lower.width) || 1, Number(lower.height) || 1))) : null;
+  }
+
+  // How many squares apart two creatures are in height. A creature fills the squares above its feet, so one whose
+  // ground is 1.3 up is still within 1 of a creature on the ground: it has to be a full 2 up to be 2 away (Brandon,
+  // November 23, 2026). A height that is all but a whole number is that number (1.999 is 2): heights are taken to the
+  // nearest quarter first. A big creature below reaches as high as it is wide.
+  function squaresApartInHeight(difference, lowerSize = 1) {
+    const whole = Math.floor(Math.round(Math.max(0, difference) * 4) / 4 + 1e-9);
+    return Math.max(0, whole - (Math.max(1, Math.floor(lowerSize)) - 1));
+  }
+
+  function promptTeleport(from,to,range=null,preferredSurface=null,rangeOrigin=null){
     const context=window.terrainContext(),active=window.terrainPrototype?.active;
     const startHeight=active?terrainPrototype.groundFor(from):from.flightHeight??teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(from.levelId||'level-0')??0;
-    return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,preferredSurface,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
+    const rangeHeight = rangeOrigin ? (rangeOrigin.flightHeight ?? (active ? terrainPrototype.groundFor(rangeOrigin) : teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(rangeOrigin.levelId || 'level-0')) ?? 0) : startHeight;
+    return chooseTeleportHeight({from,to,range,rangeOrigin:rangeOrigin || from,rangeHeight,context,startHeight,combatActive,preferredSurface,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
   }
 
   // Route cost for the per-turn movement counter: the same walk the ruler draws,
@@ -1614,15 +1589,12 @@ export function mountBoardInteractions(store, routes = {}) {
   function markWallMet(move, canonical) {
     lastWallMet = null;
     try {
-      const origin = move ? canonical?.[move.placementId] : null, mapLayer = document.getElementById('vtt-map-transform');
+      const origin = move ? canonical?.[move.placementId] : null;
       const met = origin ? window.wallPrototype?.wallMet?.(origin, { column: move.column, row: move.row, path: (move.path || []).slice(1, -1) }) : null;
-      if (!met || !mapLayer) return false;
+      if (!met) return false;
       lastWallMet = met;
       // 3D board: the piece is outlined where it stands, from its base to its top.
-      if (window.vtt3d?.active) return Boolean(window.vtt3d.flashWall?.(met));
-      const grid = viewState.gridSize, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0, terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
-      const at = (q) => (terrain?.project ? terrain.project(left + q.x * grid, top + q.y * grid, met.base) : { x: left + q.x * grid, y: top + q.y * grid });
-      return Boolean(flashWall([at(met.a), at(met.b)], { layer: mapLayer, size: viewState.mapPixelSize, grid }));
+      return Boolean(window.vtt3d?.flashWall?.(met));
     } catch (error) {
       return false;
     }
@@ -2028,7 +2000,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const tokenInteractions = createTokenInteractions({
     mapSurface,
     tokenLayer,
-    selectionBox,
     getStatusElement: () => status,
     viewState,
     selectedTokenIds,
@@ -2135,7 +2106,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const HERO_TRIGGER_DIRECTOR_AFTER_MS = 25000;
   let pickedAutomationTargetsTimer = null;
   let automationTargetPrompt = null;
-  let automationTargetRangeOverlay = null;
   let pendingAutomationArea = null;
   let automationAreaOverlay = null;
   let pendingAutomationMove = null;
@@ -2188,40 +2158,24 @@ export function mountBoardInteractions(store, routes = {}) {
   const enqueueBoardDomainSave = createSerialQueue();
 
   tokenMovementController = createTokenMovementController({
-    mapTransform,
+    // The 3D view draws its own movement guides. Only the ruler and movement accounting run here.
     routes,
     getViewState: () => coordinatePreview ? { ...viewState, dragState: { cursorSquare: coordinatePreview.positions } } : viewState,
-    getBoardState: () => boardApi.getState?.() ?? {},
     getCombatContext: () => ({
       active: combatActive,
       sceneId: getActiveSceneId(),
       round: combatRound,
       activeCombatantId,
     }),
-    getActiveScenePlacements: (state) => getActiveScenePlacements(state),
     getPlacementById: (placementId) => {
       const sceneId = getActiveSceneId();
       return sceneId ? resolvePlacementById(boardApi.getState?.() ?? {}, sceneId, placementId) : null;
     },
-    isActiveCombatantPlacement: (placementId) =>
-      Boolean(combatActive && activeCombatantId && getRepresentativeIdFor(placementId) === activeCombatantId),
-    getPlacementTeam: (placementId, placement) =>
-      placementId ? getCombatantTeam(placementId) : getPlacementCombatTeam(placement),
-    getPlacementLevelId: (placement) => {
-      const state = boardApi.getState?.() ?? {};
-      return placement ? resolveTokenLevelId(placement, getActiveSceneTokenLevelState(state)) : null;
-    },
     setRulerSupplement: (text) => setRulerSupplement(text),
     measureRoute: (move) => measureMovementRoute(move),
-    getCellInfo: (tokenId) => window.terrainZones?.cellInfoFor?.(tokenId) ?? null,
     // The captain's bonus, movement passives and speed buffs.
     getSpeedBonus: (tokenId) => (captainBonusFor(getPlacementsForActiveScene(), tokenId)?.speed ?? 0)
       + (movementRulesFor(getPlacementFromStore(tokenId))?.speedBonus || 0),
-    projectCorner: (column, row) => {
-      const terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
-      const x = (viewState.gridOffsets?.left || 0) + column * (viewState.gridSize || 64), y = (viewState.gridOffsets?.top || 0) + row * (viewState.gridSize || 64);
-      return terrain ? terrain.project(x, y, terrain.heightAt(x, y)) : { x, y };
-    },
     clearRulerSupplement: () => clearRulerSupplement(),
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {
@@ -2251,7 +2205,6 @@ export function mountBoardInteractions(store, routes = {}) {
     isUndoSuppressed: () =>
       isDrawModeActive() ||
       isDrawingInProgress() ||
-      mapLevelCutoutEditorActive ||
       isCustomConditionDialogOpen() ||
       document.getElementById('wall-panel')?.hidden === false,
     getSpeedRule: (tokenId) => speedRuleFor(tokenId),
@@ -2384,7 +2337,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (event.defaultPrevented || event.repeat) return;
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
-    if (isDrawModeActive() || isDrawingInProgress() || mapLevelCutoutEditorActive || isCustomConditionDialogOpen()) return;
+    if (isDrawModeActive() || isDrawingInProgress() || isCustomConditionDialogOpen()) return;
     if (document.getElementById('wall-panel')?.hidden === false) return;
     if (!turnIsRunning()) {
       // No turn: plain Ctrl+Z is the move undo (token-movement-controller); a whole turn needs a turn.
@@ -3306,69 +3259,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return getViewerLevelIdForCurrentUser(state, activeSceneId);
   }
 
-  function syncCutoutToggleButtons() {
-    if (!sceneListContainer) {
-      return;
-    }
-
-    const state = boardApi.getState?.() ?? {};
-    const boardState = state.boardState && typeof state.boardState === 'object' ? state.boardState : {};
-    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
-      ? boardState.sceneState
-      : {};
-    const activeSceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : null;
-
-    syncMapLevelCutoutButtons(sceneState, activeSceneId);
-  }
-
-  function syncMapLevelCutoutButtons(sceneState = {}, activeSceneId = null) {
-    if (!sceneListContainer) {
-      return;
-    }
-
-    const buttons = sceneListContainer.querySelectorAll('[data-action="edit-map-level-cutouts"]');
-    buttons.forEach((button) => {
-      const sceneId = button.getAttribute('data-scene-id');
-      const levelId = button.getAttribute('data-map-level-id');
-      const isActiveScene = Boolean(activeSceneId && sceneId && sceneId === activeSceneId);
-      const sceneEntry = sceneId && sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
-        ? sceneState[sceneId]
-        : {};
-      const sceneGrid = sceneEntry.grid ?? null;
-      const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-      // Levels v2 (§5.1): cutout edit affordances follow the GM's
-      // per-user viewer level. When the GM is on Level 0 (the base map)
-      // no stored level should be marked as the cutout-edit target,
-      // because the base map cannot have cutouts.
-      const viewerLevelId = getViewerLevelIdForCurrentUser(
-        boardApi.getState?.() ?? {},
-        sceneId,
-      );
-      const activeLevelId = viewerLevelId && viewerLevelId !== BASE_MAP_LEVEL_ID
-        ? viewerLevelId
-        : '';
-      const level = mapLevels.levels.find((entry) => entry.id === levelId) ?? null;
-      const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
-      const isVisible = level ? level.hidden !== true : false;
-      const isActiveLevel = Boolean(levelId && activeLevelId && levelId === activeLevelId);
-      const pressed =
-        mapLevelCutoutEditorActive &&
-        isActiveScene &&
-        isActiveLevel &&
-        typeof mapLevelCutoutTool?.isEditingLevel === 'function' &&
-        mapLevelCutoutTool.isEditingLevel(levelId)
-          ? 'true'
-          : 'false';
-
-      button.setAttribute('aria-pressed', pressed);
-      if (!isActiveScene || !isActiveLevel || !hasMap || !isVisible) {
-        button.setAttribute('disabled', 'disabled');
-      } else {
-        button.removeAttribute('disabled');
-      }
-    });
-  }
-
   function isInputElement(node) {
     return Boolean(
       node &&
@@ -3568,44 +3458,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
-      const mapLevelCutoutButton = event.target.closest('[data-action="edit-map-level-cutouts"]');
-      if (mapLevelCutoutButton) {
-        if (mapLevelCutoutButton.disabled) {
-          return;
-        }
-
-        event.preventDefault();
-        if (!isGmUser()) {
-          return;
-        }
-
-        const sceneId = mapLevelCutoutButton.getAttribute('data-scene-id');
-        const levelId = mapLevelCutoutButton.getAttribute('data-map-level-id');
-        const activeSceneId = getActiveSceneId();
-        if (!sceneId || !levelId || !activeSceneId || sceneId !== activeSceneId) {
-          return;
-        }
-
-        if (
-          typeof mapLevelCutoutTool.isEditingLevel === 'function' &&
-          mapLevelCutoutTool.isEditingLevel(levelId)
-        ) {
-          mapLevelCutoutTool.toggle();
-          return;
-        }
-
-        mapLevelCutoutTool.editLevel(levelId, { anchorEvent: event });
-      }
     });
-
-    if (typeof MutationObserver === 'function') {
-      const observer = new MutationObserver(() => {
-        syncCutoutToggleButtons();
-      });
-      observer.observe(sceneListContainer, { childList: true, subtree: true });
-    }
-
-    syncCutoutToggleButtons();
   }
 
   if (startCombatButton) {
@@ -4145,7 +3998,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return '';
   }
 
-  function triggerFire(eventType, payload) {
+  function triggerFire(eventType, payload, { resourcesHandled = false } = {}) {
     try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
     if (eventType === 'staminaChange') fireWindedAndDying(payload);
     if (eventType === 'damage') noteMaintainedDamage(payload).catch((err) => console.warn('[VTT] persistent damage check failed', err));
@@ -4192,9 +4045,11 @@ export function mountBoardInteractions(store, routes = {}) {
         console.warn(`[VTT] automation aura ${eventType} failed`, err);
       });
     }
-    processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
-      console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
-    });
+    if (!resourcesHandled) {
+      processHeroicResourceAutomationEvent(eventType, payload).catch((err) => {
+        console.warn(`[VTT] heroic resource automation ${eventType} failed`, err);
+      });
+    }
   }
 
   // A creature's Stamina first reaches half or less (winded) or 0 or less (dying).
@@ -4390,7 +4245,20 @@ export function mountBoardInteractions(store, routes = {}) {
   // Stamping them null instead defers their expiry to the next turn end.
   let endingTurnCombatantId = null;
 
-  function fireTimingBoundary(eventType, payload = {}) {
+  function fireCombatStartBoundaries(round) {
+    resourceOpeningEncounterId = combatEncounterId;
+    // Establish each hero's starting balance before a turn gain can be offered.
+    // Other combat-start triggers still see the reset Surges.
+    processHeroicResourceAutomationEvent('combatStart', { round, activeCombatantId }).catch((err) => {
+      console.warn('[VTT] combat-start resources failed', err);
+    });
+    resetPlayerSurgesToZero('combat-start').finally(() => {
+      fireTimingBoundary('combatStart', { round }, { resourcesHandled: true });
+      fireTimingBoundary('roundStart', { round });
+    });
+  }
+
+  function fireTimingBoundary(eventType, payload = {}, options) {
     const boundaryPayload = {
       round: combatRound,
       activeCombatantId,
@@ -4407,7 +4275,7 @@ export function mountBoardInteractions(store, routes = {}) {
       endingTurnCombatantId = boundaryPayload.placementId || null;
     }
     try {
-      triggerFire(eventType, boundaryPayload);
+      triggerFire(eventType, boundaryPayload, options);
     } catch (err) {
       console.warn(`[VTT] triggerFire(${eventType}) failed`, err);
     }
@@ -4595,6 +4463,8 @@ export function mountBoardInteractions(store, routes = {}) {
   // gain is taken (unless the rule says markOn "offered"). While a popup for it is open, the same gain is not offered
   // again on this page (an area attack used to open one popup per creature hit).
   const pendingResourceLimitKeys = new Set();
+  const runAfterResourceBalance = createHeroicResourceBoundaryQueue();
+  let resourceOpeningEncounterId = null;
   function heroicResourceLimitKey(rule, placementId, appliedTargetId = '') {
     if (!rule?.limit?.key || !placementId) return '';
     const scope = String(rule.limit.scope || 'round').toLowerCase();
@@ -4682,10 +4552,21 @@ export function mountBoardInteractions(store, routes = {}) {
     return list.filter((item) => item && item.id && Number(item.value) > 0).map((item) => ({ ...item, value: Number(item.value) }));
   }
 
+  function reconcileMaintenanceChoice(current, shown, kept) {
+    const shownIds = new Set(shown.map(item => item.id));
+    const keptIds = new Set(kept.map(item => item.id));
+    const dropped = current.filter(item => shownIds.has(item.id) && !keptIds.has(item.id));
+    const remaining = current.filter(item => !shownIds.has(item.id) || keptIds.has(item.id));
+    const upkeep = current.reduce((total, item) => total + (keptIds.has(item.id) ? item.value : 0), 0);
+    return { dropped, remaining, upkeep };
+  }
+
   function setMaintainedAbilities(placementId, list) {
     return updatePlacementById(placementId, (target) => {
       // targetIds: the creatures it is on (their marking, and where "use it again" goes); none = shown on the hero.
       target.maintainedAbilities = list.length ? list.map((item) => ({ id: item.id, abilityId: item.abilityId || '', name: item.name || 'Ability', value: item.value, since: item.since ?? null,
+        ...(item.castId ? { castId: item.castId, mode: item.mode, action: item.action, ...(item.bindings ? { bindings: item.bindings } : {}),
+          ...(Number.isFinite(item.damageThreshold) ? { damageThreshold: item.damageThreshold } : {}) } : {}),
         targetIds: Array.isArray(item.targetIds) ? item.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [] })) : null;
       if (!list.length) target.maintainedDamage = null;
     });
@@ -4699,6 +4580,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const value = Number(used.persistent) || 0;
     const usedOn = Array.isArray(used.targetIds) ? used.targetIds.filter((targetId) => typeof targetId === 'string' && targetId) : [];
     // Used again while maintained (the free use, or picked by hand): its marking moves to whoever it went to this time.
+    if (used.maintainRerun && used.castId) return;
     if (value && used.maintainRerun && usedOn.length) {
       const owner = getPlacementFromStore(used.actorId);
       const list = getMaintainedAbilities(owner);
@@ -4711,22 +4593,31 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!value || used.maintainRerun || !combatActive) return;
     const placement = getPlacementFromStore(used.actorId);
     if (!placement) return;
-    const id = String(used.actionId || used.actionName || '').trim();
+    const abilityId = String(used.actionId || used.actionName || '').trim();
+    const castId = used.maintenance && typeof used.castId === 'string' ? used.castId : '';
+    const id = castId || abilityId;
     if (!id || getMaintainedAbilities(placement).some((item) => item.id === id)) return;
+    const overlap = castId && getActiveScenePlacements(boardApi.getState?.() ?? {}).some(owner =>
+      getMaintainedAbilities(owner).some(item => (item.abilityId === abilityId || item.name === used.actionName)
+        && item.targetIds?.some(targetId => usedOn.includes(targetId))));
+    const sceneId = getActiveSceneId();
     const who = tokenLabel(placement) || 'Hero';
     const name = used.actionName || 'Ability';
     const answer = await queueHeroicResourcePrompt({
       title: `${who} - Persistent ${value}`,
-      message: `Maintain ${name}?`,
-      detail: `While it is kept, ${who} gains ${value} less essence at the start of each turn. It ends when the fight does, or on 5 x Reason damage in one turn.`,
+      message: overlap ? `${name} is already maintained on one of these targets. Maintain this cast anyway?` : `Maintain ${name}?`,
+      detail: `Keeping this cast reduces the next turn’s heroic resource gain by ${value}. It ends with the encounter. ` +
+        (castId ? used.thresholdSource || '' : 'Damage threshold is 5 × Reason in one turn.'),
       applyLabel: 'Maintain',
       dismissLabel: 'Not now',
     });
-    if (!answer?.applied) return;
+    if (!answer?.applied || !combatActive || sceneId !== getActiveSceneId()) return;
     const fresh = getPlacementFromStore(placement.id);
-    if (!fresh) return;
-    setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh).filter((item) => item.id !== id),
-      { id, abilityId: used.actionId || '', name, value, since: combatRound, targetIds: usedOn }]);
+    if (!fresh || getMaintainedAbilities(fresh).some(item => item.id === id)) return;
+    setMaintainedAbilities(placement.id, [...getMaintainedAbilities(fresh),
+      { id, abilityId: used.actionId || '', name, value, since: combatRound, targetIds: usedOn,
+        ...(castId ? { castId, mode: used.maintenance.mode, action: used.maintenance.action, ...(used.bindings ? { bindings: used.bindings } : {}),
+          ...(Number.isFinite(used.damageThreshold) ? { damageThreshold: used.damageThreshold } : {}) } : {}) }]);
     sayInChat(`${who} maintains ${name} (Persistent ${value}).`);
   }
 
@@ -4803,7 +4694,8 @@ export function mountBoardInteractions(store, routes = {}) {
               ${maintained.map((item, index) => `
                 <div class="maintain-row">
                   <label><input type="checkbox" data-keep="${index}" checked> Keep <b>${escapeHtml(item.name)}</b> (${item.value})</label>
-                  <label class="maintain-again"><input type="checkbox" data-again="${index}"> use it again now (free)</label>
+                  ${item.castId && item.targetIds?.length ? '<small>' + escapeHtml(item.targetIds.map(id => tokenLabel(getPlacementFromStore(id)) || 'Absent target').join(', ')) + '</small>' : ''}
+                  ${item.mode === 'extend' ? '<small>Extend this cast</small>' : '<label class="maintain-again"><input type="checkbox" data-again="' + index + '"> Use again (' + escapeHtml(item.action || 'no essence cost') + ')</label>'}
                 </div>`).join('')}
             </div>
             <p class="heroic-resource-prompt__detail" data-maintain-sum></p>
@@ -4831,8 +4723,16 @@ export function mountBoardInteractions(store, routes = {}) {
       };
       host.addEventListener('change', paint);
       paint();
-      const done = (applied) => {
+      let confirming = false;
+      const done = async (applied) => {
+        if (confirming) return;
         const keptNow = kept();
+        if (applied && keptNow.reduce((total, item) => total + item.value, 0) > gain) {
+          confirming = true;
+          const override = await confirmBoardAction('The upkeep exceeds this turn’s gain. Keep these casts and gain zero?', { title: 'Override upkeep', confirmText: 'Keep anyway', cancelText: 'Review casts' });
+          confirming = false;
+          if (!override) return;
+        }
         const again = maintained.filter((item, index) => host.querySelector(`[data-again="${index}"]`)?.checked);
         host.remove();
         resolve({ applied, kept: keptNow, again });
@@ -4849,14 +4749,29 @@ export function mountBoardInteractions(store, routes = {}) {
   // The free uses, one after another (each waits for the ability runner before it to close).
   async function runMaintainedAgain(placement, profileId, list) {
     const runnerOpen = () => Boolean(document.getElementById('ability-automation-runner'));
+    const sceneId = getActiveSceneId();
+    const batches = [];
     for (const item of list) {
-      for (let waited = 0; runnerOpen() && waited < 600; waited += 1) await new Promise((wake) => setTimeout(wake, 500));
-      const fresh = getPlacementFromStore(placement.id) || placement;
+      if (item.mode === 'extend') continue;
+      const batch = item.mode === 'targets' && batches.find(([first]) => first.mode === 'targets' && first.abilityId === item.abilityId && first.name === item.name);
+      if (batch) batch.push(item);
+      else batches.push([item]);
+    }
+    for (const batch of batches) {
+      while (runnerOpen() && combatActive && getActiveSceneId() === sceneId) await new Promise(wake => setTimeout(wake, 500));
+      if (!combatActive || getActiveSceneId() !== sceneId) return;
+      const fresh = getPlacementFromStore(placement.id);
+      if (!fresh) return;
+      const active = getMaintainedAbilities(fresh).filter(entry => batch.some(chosen => chosen.id === entry.id));
+      if (!active.length) continue;
+      const item = active[0];
+      const markedIds = [...new Set(active.flatMap(entry => entry.targetIds || []))];
+      const presetTargetIds = markedIds.filter(targetId => getPlacementFromStore(targetId));
+      if (markedIds.length && !presetTargetIds.length && !await confirmBoardAction('The marked targets have left the scene. Choose replacement targets for this use?', { title: item.name, confirmText: 'Choose targets', cancelText: 'Skip use' })) continue;
+
       const result = await window.VTTCharacterAbilities?.runFree?.({
         characterId: profileId, sourceToken: cloneJsonSafe(fresh), abilityId: item.abilityId, name: item.name,
-        // To the creatures carrying its marking, still on the map (out of range: warned, never refused).
-        presetTargetIds: (getMaintainedAbilities(fresh).find((entry) => entry.id === item.id)?.targetIds || item.targetIds || [])
-          .filter((targetId) => getPlacementFromStore(targetId)),
+        maintenanceCastId: item.castId, maintenanceBindings: item.bindings, presetTargetIds,
       }).catch(() => null);
       if (!result?.ran) {
         showConditionBanner(`${item.name}: ${result?.reason === 'no-automation' ? 'it has no automation, use it again by hand' : 'not found on the sheet, use it again by hand'}.`, { tone: 'reminder' });
@@ -4873,15 +4788,24 @@ export function mountBoardInteractions(store, routes = {}) {
     const amount = Math.max(0, Number(hit.amount) || 0);
     if (!placement || !amount || !combatActive || !getMaintainedAbilities(placement).length) return;
     const turnKey = `${combatRound}:${activeCombatantId || ''}`;
-    const before = placement.maintainedDamage && placement.maintainedDamage.turn === turnKey ? placement.maintainedDamage : { turn: turnKey, amount: 0, asked: false };
-    const total = before.amount + amount;
-    const sheet = await getAutomationSheetForPlacement(placement.id).catch(() => null);
-    const reason = Number.parseInt(sheet?.hero?.stats?.reason ?? sheet?.hero?.stats?.Reason ?? 0, 10) || 0;
-    const limit = Math.max(1, reason * 5);
-    const ask = total >= limit && !before.asked;
-    updatePlacementById(placement.id, (target) => { target.maintainedDamage = { turn: turnKey, amount: total, asked: before.asked || ask }; });
-    if (!ask) return;
-    const details = { total, limit, reason };
+    const watched = getMaintainedAbilities(placement).filter(item => !item.castId || Number.isFinite(item.damageThreshold));
+    if (!watched.length) return;
+    const before = placement.maintainedDamage?.turn === turnKey ? placement.maintainedDamage : {};
+    const total = (Number(before.amount) || 0) + amount;
+    updatePlacementById(placement.id, target => { target.maintainedDamage = { ...before, turn: turnKey, amount: total }; });
+    const sheet = watched.some(item => !item.castId) ? await getAutomationSheetForPlacement(placement.id).catch(() => null) : null;
+    if (!combatActive || turnKey !== `${combatRound}:${activeCombatantId || ''}`) return;
+    const current = getPlacementFromStore(placement.id);
+    if (current?.maintainedDamage?.turn !== turnKey) return;
+    const damage = current.maintainedDamage;
+    const asked = new Set(damage.askedIds || (damage.asked ? watched.map(item => item.id) : []));
+    const legacyLimit = Math.max(1, 5 * (Number(sheet?.hero?.stats?.reason ?? sheet?.hero?.stats?.Reason) || 0));
+    const affected = getMaintainedAbilities(current).filter(item => !asked.has(item.id) &&
+      (item.castId ? Number.isFinite(item.damageThreshold) && damage.amount >= item.damageThreshold : damage.amount >= legacyLimit));
+    if (!affected.length) return;
+    const ids = affected.map(item => item.id);
+    updatePlacementById(placement.id, target => { target.maintainedDamage = { ...damage, askedIds: [...asked, ...ids] }; });
+    const details = { total: damage.amount, ids };
     const profileId = getAutomationProfileIdForPlacement(placement.id);
     const ownerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
     if (ownerId && ownerId === normalizeProfileId(getCurrentUserId())) {
@@ -4895,19 +4819,24 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   async function askMaintainBreak(placement, details = {}) {
-    const list = getMaintainedAbilities(getPlacementFromStore(placement.id) || placement);
+    const list = getMaintainedAbilities(getPlacementFromStore(placement.id) || placement)
+      .filter(item => !Array.isArray(details.ids) || details.ids.includes(item.id));
     if (!list.length) return;
     const who = tokenLabel(placement) || 'Hero';
     const answer = await queueHeroicResourcePrompt({
       title: `${who} - persistent abilities`,
-      message: `You took ${details.total ?? '?'} damage this turn (5 x Reason = ${details.limit ?? '?'}). That breaks ${list.map((item) => item.name).join(', ')}. End them?`,
-      detail: 'The rules end them. Keep only if the Director says so.',
+      message: `You took ${details.total ?? '?'} damage this turn, reaching the threshold for ${list.map(item => item.name + (Number.isFinite(item.damageThreshold) ? ' (' + item.damageThreshold + ')' : '')).join(', ')}. End these casts?`,
+      detail: 'Choose Keep to override the damage rule.',
       applyLabel: 'End them',
       dismissLabel: 'Keep',
     });
     if (!answer?.applied) return;
-    setMaintainedAbilities(placement.id, []);
-    sayInChat(`${who} stops maintaining ${list.map((item) => item.name).join(', ')} (took ${details.total} damage in one turn).`);
+    const fresh = getPlacementFromStore(placement.id);
+    if (!fresh) return;
+    const { dropped, remaining } = reconcileMaintenanceChoice(getMaintainedAbilities(fresh), list, []);
+    setMaintainedAbilities(placement.id, remaining);
+    endZonesOfDroppedMaintenance(placement.id, dropped);
+    sayInChat(`${who} stops maintaining ${dropped.map(item => item.name).join(', ')} (took ${details.total} damage in one turn).`);
   }
 
   function clearMaintainedAbilitiesAtCombatEnd() {
@@ -4916,10 +4845,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function queueHeroicResourcePrompt(config) {
+  function queueHeroicResourcePrompt(config, isCurrent = () => true) {
     heroicResourcePromptQueue = heroicResourcePromptQueue
       .catch(() => {})
-      .then(() => showHeroicResourcePrompt(config));
+      .then(() => isCurrent() ? showHeroicResourcePrompt(config) : { applied: false });
     return heroicResourcePromptQueue;
   }
 
@@ -4993,9 +4922,8 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  // Heroic-resource prompts at turn boundaries belong to the user who
-  // initiated the accepted canonical transition. The selected token's linked
-  // character sheet still supplies the resource and feature rules.
+  // The selected token's sheet supplies the rules. At turn start the server
+  // chooses the connected player or Director who should answer the prompt.
   // - turnStart/turnEnd run only on the canonical boundary winner.
   // - All other events (damage, power rolls, ...) fire only on the single
   //   client that ran the action. That client routes the offer to the
@@ -5005,44 +4933,73 @@ export function mountBoardInteractions(store, routes = {}) {
   //   Exception: silent autoApply rules are applied immediately by the GM
   //   (the GM may write any sheet), so they don't wait on the controller's
   //   client being open.
+  function attachTurnMaintenance(rules) {
+    const firstGain = rules.find(rule => rule.effect.kind === 'gain');
+    if (firstGain) return rules.map(rule => ({ ...rule, maintenanceOffer: rule === firstGain }));
+    return [...rules, { id: 'maintained-casts-upkeep', event: 'turnStart', enabled: true, maintenanceOffer: true,
+      filter: { whose: 'self' }, effect: { kind: 'gain', amount: 0 }, limit: { scope: 'round', key: 'maintained-casts-upkeep', markOn: 'offered' } }];
+  }
+
+  function heroicResourceCombatTiming() {
+    return { active: combatActive, encounterId: combatEncounterId, round: combatRound, turnId: activeCombatantId };
+  }
+
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
     if (!eventType) return;
+    const timing = heroicResourceCombatTiming();
     // The action that caused this (read before anything waits): a gain it gives is undone with it.
     const undoGroup = globalThis.vttUndoGroup?.id || '';
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
     const currentUserId = normalizeProfileId(getCurrentUserId());
-    for (const placement of placements) {
-      const profileId = getAutomationProfileIdForPlacement(placement.id);
-      if (!profileId) continue;
-      // The hero's player is asked, the start of their turn too (it was whoever started the turn); the Director
-      // when the hero has no player, or when the player's page does not take it up (runPendingHeroResourcePrompt).
-      const controllerId = getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+    const encounterBoundary = eventType === 'combatStart' || eventType === 'combatEnd';
+    async function processPlacement(placement, profileId) {
+      const linkedPlayer = getLinkedProfileUserIdForPlacement(placement.id);
+      const turnRecipient = eventType === 'turnStart' ? normalizeProfileId(payload.resourceRecipientId) : null;
+      const directorStartsDummyTurn = eventType === 'turnStart' && isGmUser() && isDummyId(profileId);
+      const controllerId = turnRecipient || linkedPlayer || (directorStartsDummyTurn ? currentUserId : normalizeProfileId(profileId));
       const isController = Boolean(controllerId) && controllerId === currentUserId;
+      if (encounterBoundary) characterSummaryCache.delete(profileId);
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
-      if (!automation.rules.length) continue;
+      const hasCasts = eventType === 'turnStart' && getMaintainedAbilities(placement).length > 0;
+      if (!sheet || (!automation.rules.length && !hasCasts)) return;
       const env = getHeroicResourceRuleEnv(placement.id);
-      for (const rule of automation.rules) {
-        if (!ruleMatchesHeroicResourceEvent(rule, eventType, payload, env)) continue;
+      const matching = automation.rules.filter(rule => ruleMatchesHeroicResourceEvent(rule, eventType, payload, env));
+      for (const rule of hasCasts ? attachTurnMaintenance(matching) : matching) {
+        if (!heroicResourceTimingAllows(rule, eventType, timing, heroicResourceCombatTiming())) continue;
         const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
         if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
-        if (isController || (rule.autoApply && isGmUser())) {
-          await offerHeroicResourceRule({
-            eventType,
-            payload,
-            placement,
-            profileId,
-            sheet,
-            resource,
-            rule,
-            eventTargetId,
-            undoGroup,
-          });
+        if (isController || (rule.autoApply && !rule.maintenanceOffer && isGmUser())) {
+          // A question asked on this page at the start of a turn is also written on the hero's token until it is
+          // answered: a page reloaded while it is open shows it again (Brandon, November 23, 2026). It is already
+          // this page's, so no other page takes it up.
+          const kept = isController && eventType === 'turnStart' && (!rule.autoApply || rule.maintenanceOffer)
+            ? keepHeroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId: currentUserId, rule, eventTargetId, undoGroup, timing, claimedBy: currentUserId })
+            : null;
+          try {
+            await offerHeroicResourceRule({
+              eventType,
+              timing,
+              payload,
+              placement,
+              profileId,
+              sheet,
+              resource,
+              freshSheet: encounterBoundary && rule.autoApply && rule === matching[0],
+              rule,
+              eventTargetId,
+              undoGroup,
+              stillOffered: kept ? () => heroResourcePromptRecordStands(placement.id, kept.id) : null,
+            });
+          } finally {
+            if (kept) removePendingHeroResourcePromptRecord(placement.id, kept.id);
+          }
         } else {
           routeHeroicResourcePromptToOwner({
             eventType,
+            timing,
             payload,
             placement,
             profileId,
@@ -5053,6 +5010,15 @@ export function mountBoardInteractions(store, routes = {}) {
           });
         }
       }
+    }
+    function run(placement) {
+      const profileId = getAutomationProfileIdForPlacement(placement.id);
+      if (profileId) return runAfterResourceBalance(profileId, eventType, () => processPlacement(placement, profileId));
+    }
+    if (encounterBoundary) {
+      await Promise.all(placements.map(run));
+    } else {
+      for (const placement of placements) await run(placement);
     }
   }
 
@@ -5082,15 +5048,16 @@ export function mountBoardInteractions(store, routes = {}) {
     return trimmed;
   }
 
-  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '' }) {
+  // The question as it is written on the hero's token for another page (or this one, after a reload) to show.
+  function heroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
     const rulePayload = cloneJsonSafe(rule);
-    if (!rulePayload) return false;
+    if (!rulePayload) return null;
     pendingHeroResourcePromptCounter += 1;
-    const record = {
+    return {
       id: `hrp_${Date.now()}_${pendingHeroResourcePromptCounter}_${Math.random().toString(36).slice(2, 7)}`,
       // Whose CHARACTER the resource belongs to (the sheet that gets written).
       profileId: normalizeProfileId(profileId),
-      // Whose client should show a non-turn prompt. Falls back to the linked
+      // Whose client should show the prompt. Falls back to the linked
       // character profile for records written by older clients.
       recipientUserId: normalizeProfileId(recipientUserId) ?? normalizeProfileId(profileId),
       eventType,
@@ -5100,9 +5067,34 @@ export function mountBoardInteractions(store, routes = {}) {
       // What happened, worded on this page (the other page may not know the creatures' names yet).
       sentence: heroicResourceEventSentence(eventType, payload, placement),
       undoGroup: typeof undoGroup === 'string' ? undoGroup : '',
-      round: combatRound,
+      round: timing.round,
+      timing,
       createdAt: Date.now(),
     };
+  }
+
+  // This page's own open question, kept on the token while it is open. Null when it could not be written.
+  function keepHeroResourcePromptRecord({ claimedBy, ...details }) {
+    const record = heroResourcePromptRecord(details);
+    if (!record) return null;
+    record.claimedBy = claimedBy;
+    handledHeroResourcePromptIds.add(record.id);
+    const written = updatePlacementById(details.placement.id, (target) => {
+      const existing = Array.isArray(target.pendingHeroResourcePrompts) ? target.pendingHeroResourcePrompts : [];
+      target.pendingHeroResourcePrompts = [...existing, record];
+    });
+    return written ? record : null;
+  }
+
+  /** Whether a kept question is still waiting on the token: false once any page has answered it. */
+  function heroResourcePromptRecordStands(placementId, recordId) {
+    const records = getPlacementFromStore(placementId)?.pendingHeroResourcePrompts;
+    return Array.isArray(records) && records.some((record) => record?.id === recordId);
+  }
+
+  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId, undoGroup = '', timing = heroicResourceCombatTiming() }) {
+    const record = heroResourcePromptRecord({ eventType, payload, placement, profileId, recipientUserId, rule, eventTargetId, undoGroup, timing });
+    if (!record) return false;
     // Mark offered-limits on the routing client — it is the only client that
     // sees this event, so this is what prevents duplicate records for
     // once-per-round/turn rules.
@@ -5135,24 +5127,31 @@ export function mountBoardInteractions(store, routes = {}) {
         if (typeof record.id !== 'string' || !record.id) continue;
         const recipient = normalizeProfileId(record.recipientUserId) ?? normalizeProfileId(record.profileId);
         const mine = recipient === currentUserId;
+        // A page that shows the question puts its user's name on the record and leaves it on the token until it is
+        // answered, so the same user's page shows it again after a reload (Brandon, November 23, 2026). It used to
+        // be taken off as it was shown, and a reload lost the gain. Another user's open question is left alone.
+        const claimedBy = normalizeProfileId(record.claimedBy);
+        if (claimedBy && claimedBy !== currentUserId) continue;
         // Nobody took it up (the player is not on): the Director is asked instead.
-        const unclaimed = !mine && isGmUser() && Date.now() - (Number(record.createdAt) || 0) > HERO_PROMPT_DIRECTOR_AFTER_MS;
-        if (!mine && !unclaimed) continue;
+        const unclaimed = !mine && !claimedBy && isGmUser() && Date.now() - (Number(record.createdAt) || 0) > HERO_PROMPT_DIRECTOR_AFTER_MS;
+        if (!mine && !unclaimed && claimedBy !== currentUserId) continue;
         if (handledHeroResourcePromptIds.has(record.id)) continue;
         handledHeroResourcePromptIds.add(record.id);
-        removePendingHeroResourcePromptRecord(placement.id, record.id);
+        if (!claimedBy) claimPendingHeroResourcePromptRecord(placement.id, record.id, currentUserId);
         runPendingHeroResourcePrompt(placement.id, record).catch((err) => {
           console.warn('[VTT] pending heroic resource prompt failed', err);
         });
       }
     }
   }
-  // The Director's page looks again now and then for records nobody took up.
+  // Every page looks again now and then. The Director's, for records nobody took up. A player's, because a page
+  // that has just loaded reads its tokens once, before the scene's saved tokens have arrived: its own question,
+  // still open when it was reloaded, was never seen again (November 23, 2026).
   if (typeof window !== 'undefined') {
     window.setInterval(() => {
       try {
+        processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
         if (isGmUser()) {
-          processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
           getActiveScenePlacements(boardApi.getState?.() ?? {}).forEach((placement) => { if (placement?.readyTriggerPayloads && !placement.monster) maybePromptHeroTriggerPopups(placement); });
         }
       } catch (error) { /* not ready */ }
@@ -5174,13 +5173,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const rule = record.rule && typeof record.rule === 'object' ? record.rule : null;
       if (!rule || !rule.effect || typeof rule.effect !== 'object') return;
-      // An offer from an earlier round (or after the fight) is not made any more.
-      if (rule.limit?.scope === 'round' && Number.isFinite(Number(record.round)) && Number(record.round) !== combatRound) return;
+      // Older saved prompts recorded only their round. Round zero was outside combat.
+      const timing = record.timing ?? { active: Number(record.round) > 0, round: Number(record.round) };
+      if (!heroicResourceTimingAllows(rule, record.eventType, timing, heroicResourceCombatTiming())) return;
       const sheet = await getAutomationSheetForPlacement(placementId);
       const resource = sheet?.hero?.resource;
-      if (!sheet || !resource) return;
+      if (!sheet || (!resource && !rule.maintenanceOffer)) return;
       await offerHeroicResourceRule({
         eventType: record.eventType || 'event',
+        timing,
         payload: record.payload && typeof record.payload === 'object' ? record.payload : {},
         placement,
         profileId: normalizeProfileId(record.profileId),
@@ -5191,10 +5192,19 @@ export function mountBoardInteractions(store, routes = {}) {
         undoGroup: record.undoGroup || '',
         sentence: record.sentence || '',
         routed: true,
+        stillOffered: () => heroResourcePromptRecordStands(placementId, record.id),
       });
     } finally {
       removePendingHeroResourcePromptRecord(placementId, record.id);
     }
+  }
+
+  function claimPendingHeroResourcePromptRecord(placementId, recordId, userId) {
+    if (!placementId || !recordId || !userId) return;
+    updatePlacementById(placementId, (target) => {
+      if (!Array.isArray(target.pendingHeroResourcePrompts)) return;
+      target.pendingHeroResourcePrompts = target.pendingHeroResourcePrompts.map((r) => (r && r.id === recordId && !r.claimedBy ? { ...r, claimedBy: userId } : r));
+    });
   }
 
   function removePendingHeroResourcePromptRecord(placementId, recordId) {
@@ -5208,7 +5218,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup = '', sentence = '', routed = false }) {
+  async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, timing, undoGroup = '', sentence = '', routed = false, freshSheet = false, stillOffered = null }) {
     // Once per round (or turn, or fight): not while it is used, nor while its popup is already open on this page.
     const limitKey = rule.limit ? heroicResourceLimitKey(rule, placement.id, eventTargetId) : '';
     const lockKey = limitKey ? `${placement.id}|${limitKey}` : '';
@@ -5217,33 +5227,45 @@ export function mountBoardInteractions(store, routes = {}) {
     const reservedBySender = routed && rule.limit?.markOn === 'offered';
     if (limitKey && !reservedBySender && hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) return;
     if (lockKey) pendingResourceLimitKeys.add(lockKey);
-    const roundAtOffer = combatRound;
     try {
-      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer });
+      return await offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed, stillOffered });
     } finally {
       if (lockKey) pendingResourceLimitKeys.delete(lockKey);
     }
   }
 
-  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, roundAtOffer }) {
+  async function offerHeroicResourceRuleNow({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId, undoGroup, sentence, timing, freshSheet, routed, stillOffered = null }) {
+    // The same question open on two pages (a reload, a second window): the first answer is the answer.
+    const answeredElsewhere = () => typeof stillOffered === 'function' && !stillOffered();
     // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
     // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
     // the gain itself was right, being an amount).
-    characterSummaryCache.delete(profileId);
-    const latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    let latest = sheet;
+    if (!freshSheet) {
+      characterSummaryCache.delete(profileId);
+      latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    }
+    const isCurrent = () => heroicResourceTimingAllows(rule, eventType, timing, heroicResourceCombatTiming());
+    if (!isCurrent()) return;
     if (latest?.hero?.resource && typeof latest.hero.resource === 'object') {
       sheet = latest;
       resource = latest.hero.resource;
     }
     noteResourceLevel(profileId, resource?.value);
     const context = getSheetHeroicResourceContext(sheet, resource);
+    const opensBalance = eventType === 'combatStart' || (eventType === 'turnStart' && timing.round === 1 && rule.effect.kind === 'gain');
+    const openingValue = opensBalance && timing.encounterId && timing.encounterId === resourceOpeningEncounterId
+      ? heroicResourceOpeningBalance(resource?.automation, context) : null;
+    const opening = openingValue == null ? null : { openingEncounterId: timing.encounterId, openingValue };
     const preview = previewHeroicResourceAmount(rule.effect.amount, context);
-    const shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
+    let shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
+    const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && rule.maintenanceOffer !== false
+      ? getMaintainedAbilities(getPlacementFromStore(placement.id) || placement) : [];
     const initialResolved = shouldRollAfterPrompt
       ? preview
       : resolveHeroicResourceAmount(rule.effect.amount, context);
     let amount = Math.max(0, Number.parseInt(initialResolved.amount, 10) || 0);
-    if (!amount && rule.effect.kind !== 'set' && !shouldRollAfterPrompt) return;
+    if (!amount && rule.effect.kind !== 'set' && !shouldRollAfterPrompt && !maintained.length) return;
     let change = normalizeHeroicResourceChange(rule, sheet, amount);
     const action = rule.effect.kind === 'set'
       ? 'Set'
@@ -5271,15 +5293,26 @@ export function mountBoardInteractions(store, routes = {}) {
     if (rule.limit?.markOn === 'offered') {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
-    const maintained = eventType === 'turnStart' && rule.effect.kind === 'gain' && !shouldRollAfterPrompt
-      ? getMaintainedAbilities(placement)
-      : [];
     if (maintained.length) {
+      const sceneId = getActiveSceneId(), offeredEncounter = combatEncounterId;
+      if (shouldRollAfterPrompt) {
+        const roll = await queueHeroicResourcePrompt({ title: resourceName, message: 'Roll ' + preview.label + ' for the gain available before upkeep?', applyLabel: 'Roll', dismissLabel: 'Cancel' }, isCurrent);
+        if (!roll?.applied) return;
+        amount = Math.max(0, Number(resolveHeroicResourceAmount(rule.effect.amount, context).amount) || 0);
+        shouldRollAfterPrompt = false;
+      }
       const choice = await queueMaintainPrompt({ placement, maintained, gain: amount, resourceName, current: change.current });
       if (!choice?.applied) return;
-      setMaintainedAbilities(placement.id, choice.kept);
-      endZonesOfDroppedMaintenance(placement.id, maintained.filter((item) => !choice.kept.some((keep) => keep.id === item.id)));
-      const upkeep = choice.kept.reduce((sum, item) => sum + item.value, 0);
+      // People take a while to answer, and the Director moves on meanwhile (Brandon, November 23, 2026: "there has to
+      // be account for pause"): the answer counts for as long as this fight goes on, whoever's turn it now is. It
+      // was dropped without a word once the next creature's turn had begun. After the fight it is said, not hidden.
+      if (!combatActive || sceneId !== getActiveSceneId() || offeredEncounter !== combatEncounterId) { updateStatus('The fight is over: that start-of-turn choice was not applied.'); return; }
+      if (answeredElsewhere()) return;
+      const fresh = getPlacementFromStore(placement.id);
+      if (!fresh) return;
+      const { remaining, dropped, upkeep } = reconcileMaintenanceChoice(getMaintainedAbilities(fresh), maintained, choice.kept);
+      setMaintainedAbilities(placement.id, remaining);
+      endZonesOfDroppedMaintenance(placement.id, dropped);
       amount = Math.max(0, amount - upkeep);
       change = normalizeHeroicResourceChange(rule, sheet, amount);
       if (choice.again.length) runMaintainedAgain(placement, profileId, choice.again);
@@ -5288,28 +5321,30 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
     } else if (!rule.autoApply) {
+      // When the player opens the very first turn, the Director may still be saving the opening
+      // balance. The gain is a delta; show that amount until the server confirms the new total.
+      const firstTurnOnPlayer = eventType === 'turnStart' && opening && !routed && !isGmUser();
+      const offeredAmount = shouldRollAfterPrompt ? (preview.label || 'dice') : amount;
+      let detail = shouldRollAfterPrompt ? `${change.current} + ${offeredAmount}` : `${change.current} -> ${change.next}`;
+      if (firstTurnOnPlayer) detail = `+${offeredAmount} ${resourceName}`;
+      if (rule.effect.kind === 'damage') detail = `${tokenLabel(placement) || 'Hero'} will take ${offeredAmount} damage.`;
       // Saying Cancel leaves the once-per-round free (it is only used when the gain is taken).
       const promptResult = await queueHeroicResourcePrompt({
         title: `${tokenLabel(placement) || 'Hero'} - ${resourceName}`,
         message: question,
-        detail: rule.effect.kind === 'damage'
-          ? `${tokenLabel(placement) || 'Hero'} will take ${shouldRollAfterPrompt ? (preview.label || 'dice') : amount} damage.`
-          : shouldRollAfterPrompt
-            ? `${change.current} + ${preview.label || 'dice'}`
-            : `${change.current} -> ${change.next}`,
+        detail,
         applyLabel: rule.applyLabel || (rule.effect.kind === 'damage' ? 'Take the damage' : 'Yes'),
         dismissLabel: rule.cancelLabel || 'Cancel',
-      });
+      }, isCurrent);
       if (!promptResult?.applied) return;
-      // Answered late: the round it was for is over, or the fight is.
-      if (rule.limit?.scope === 'round' && combatRound !== roundAtOffer) { updateStatus('That gain was for an earlier round.'); return; }
-      if (!['combatStart', 'combatEnd'].includes(eventType) && !combatActive && rule.limit) { updateStatus('That gain was for a fight that is over.'); return; }
+      if (answeredElsewhere()) return;
     }
-    return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }));
+    if (!isCurrent()) { updateStatus('That resource offer has expired.'); return; }
+    return inCausingUndoGroup(undoGroup, `${tokenLabel(placement) || 'Hero'}: ${resourceName}`, () => takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName, opening }));
   }
 
   // The gain (or loss, or damage) taken: the limit used now, then the write, all under the causing action's undo.
-  async function takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName }) {
+  async function takeHeroicResourceRule({ eventType, placement, profileId, sheet, rule, eventTargetId, amount, change, shouldRollAfterPrompt, context, action, resourceName, opening }) {
     if (rule.limit) markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     if (shouldRollAfterPrompt) {
       const resolved = resolveHeroicResourceAmount(rule.effect.amount, context);
@@ -5326,7 +5361,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // that copy was behind: a turn's gain or the reset at the end of a fight was then simply lost. "Set to N"
     // (the start and the end of a fight) is a set whatever the number was.
     const saved = await syncHeroResourceValueForProfile(profileId,
-      rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet);
+      rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet, opening);
     if (!saved) {
       characterSummaryCache.delete(profileId);
       if (rule.limit) unmarkHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
@@ -5343,12 +5378,13 @@ export function mountBoardInteractions(store, routes = {}) {
   // refresh the same way.
   // `write` is {delta: n} (an amount the server adds to its own number) or {value: n} (a set). The answer is where
   // the sheet now stands, and that is what the copy kept here is given. Returns {resource} or false.
-  async function syncHeroResourceValueForProfile(profileId, write, sheetForCache = null) {
+  async function syncHeroResourceValueForProfile(profileId, write, sheetForCache = null, opening = null) {
     if (!profileId) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     try {
       const answer = await confirmResourceWrite(endpoint, {
         character: profileId,
+        ...opening,
         ...(write && write.value === undefined && Number.isFinite(Number(write.delta))
           ? { delta: String(Math.trunc(Number(write.delta))) }
           : { value: String(Math.trunc(Number(write?.value) || 0)) }),
@@ -5987,7 +6023,6 @@ export function mountBoardInteractions(store, routes = {}) {
     updatePlacementById(owner.id, (target) => {
       removeAutomationAuraRecord(target, aura.id);
     });
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     if (activeTokenSettingsId === owner.id && typeof refreshTokenSettings === 'function') {
       refreshTokenSettings();
     }
@@ -6019,55 +6054,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     return persistentZoneRuntime.get(zoneId);
   }
-  let zoneOverlayLayer = null;
-
-  function ensurePersistentZoneOverlayLayer() {
-    if (zoneOverlayLayer && document.body?.contains(zoneOverlayLayer)) {
-      return zoneOverlayLayer;
-    }
-    if (!mapTransform) return null;
-    const layer = document.createElement('div');
-    layer.className = 'vtt-persistent-zones';
-    // Wire the End button click directly on the layer (capture phase) so
-    // the map-surface's pan/pointer handlers can't swallow the click before
-    // our document-level listener sees it.
-    layer.addEventListener('click', (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      const endBtn = target.closest('[data-zone-end]');
-      if (!endBtn) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const zoneId = endBtn.getAttribute('data-zone-end');
-      if (!zoneId || endBtn.disabled) return;
-      endBtn.disabled = true;
-      endBtn.textContent = 'Ending…';
-      Promise.resolve(removePersistentZone(zoneId, { reason: 'manually ended' }))
-        .then((removed) => {
-          if (removed || !endBtn.isConnected) return;
-          endBtn.disabled = false;
-          endBtn.textContent = 'End';
-        })
-        .catch((error) => {
-          console.warn('[VTT] persistent zone removal failed', error);
-          if (!endBtn.isConnected) return;
-          endBtn.disabled = false;
-          endBtn.textContent = 'End';
-        });
-    }, true);
-    layer.addEventListener('pointerdown', (event) => {
-      // Prevent the board pan handler from triggering when interacting with
-      // the End button or the zone label area.
-      const target = event.target instanceof Element ? event.target : null;
-      if (isPersistentZoneControlTarget(target)) {
-        event.stopPropagation();
-      }
-    }, true);
-    mapTransform.appendChild(layer);
-    zoneOverlayLayer = layer;
-    return layer;
-  }
-
   function getScenePlacementsFromStore(sceneId) {
     if (!sceneId) return [];
     const state = boardApi.getState?.() ?? {};
@@ -6147,6 +6133,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ownerName: ownerPlacement ? tokenLabel(ownerPlacement) : payload.casterName || '',
       abilityId: payload.abilityId || '',
       abilityName: payload.abilityName || 'Persistent Zone',
+      ...(payload.castId ? { castId: payload.castId } : {}),
       template: {
         column: Number(template.column) || 0,
         row: Number(template.row) || 0,
@@ -6211,7 +6198,7 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       await awaitSuccessfulPlacementSave(update);
     } catch (error) {
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       if (typeof detail.reject === 'function') detail.reject(error);
       else resolve?.({registered:false,reason:'save-unconfirmed'});
       return;
@@ -6224,18 +6211,12 @@ export function mountBoardInteractions(store, routes = {}) {
         if (occupant?.id) entered.add(occupant.id);
       }
     }
-    renderPersistentZoneOverlays();
+    scheduleZoneEndPrompts();
     resolve?.({ registered: true, zoneId, zoneCount: getPersistentZonesForScene(sceneId).length });
   }
 
-  function renderPersistentZoneOverlays() {
+  function scheduleZoneEndPrompts() {
     if (isGmUser()) queueMicrotask(() => { try { maybePromptZoneEnds(); } catch (error) { console.warn('[VTT] zone end popup', error); } });
-    const state=boardApi.getState?.() ?? {};
-    const sceneId=state.boardState?.activeSceneId ?? null;
-    renderPersistentZones({layer:ensurePersistentZoneOverlayLayer(),zones:getPersistentZonesForScene(sceneId),
-      view:viewState,gmViewing:isGmUser(),canEndZone:canEndPersistentZone,
-      levelContext:{viewerLevelId:getViewerLevelIdForCurrentUser(state,sceneId),
-        levels:buildLevelViewModel({mapLevels:getActiveSceneTokenLevelState(state)})}});
   }
 
   function escapeZoneText(value) {
@@ -6274,7 +6255,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }, { returnSavePromise: true });
     if (!updateResult?.updated || !removed.length) return false;
 
-    renderPersistentZoneOverlays();
+    scheduleZoneEndPrompts();
     const saveResult = updateResult.savePromise
       ? await updateResult.savePromise
       : { success: true };
@@ -6329,7 +6310,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }));
     }
     persistBoardStateSnapshot({}, ops);
-    renderPersistentZoneOverlays();
+    scheduleZoneEndPrompts();
     if (removedCount && window.dashboardChat?.sendMessage) {
       window.dashboardChat.sendMessage({
         message: `${removedCount} persistent zone${removedCount === 1 ? '' : 's'} cleared${reason ? ` (${reason})` : ''}.`,
@@ -7004,7 +6985,6 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }, { returnSavePromise: true });
     try { if (update?.updated) await awaitSuccessfulPlacementSave(update); } catch (error) { resolve?.({ applied: false, reason: 'save' }); return; }
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     resolve?.({ applied: true, radius, name: record.automation?.abilityName || payload.aura });
   }
 
@@ -7061,7 +7041,6 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       });
     });
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
   }
 
   // A fight starts: a hero's aura that says autoOn "combatStart" (the Null Field) is switched on if it is not, by
@@ -7160,7 +7139,6 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(error);
       return;
     }
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     if (activeTokenSettingsId === placementId && typeof refreshTokenSettings === 'function') {
       refreshTokenSettings();
     }
@@ -7239,6 +7217,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (eventType === 'actionUsed') {
       markTurnActionUsedFromAutomation(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+    }
+    if (eventType === 'maintenanceCastResolved' || (eventType === 'actionUsed' && !payload.payload?.castId)) {
       offerMaintainPersistentAbility(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}).catch((err) => {
         console.warn('[VTT] maintain question failed', err);
       });
@@ -7324,6 +7304,16 @@ export function mountBoardInteractions(store, routes = {}) {
       getPlacementMark,
       getPlacementFromStore,
       getResourceLevel: resourceLevelForPlacement,
+      getTriggerRange(id, ref, trigger) {
+        const placement = getPlacementFromStore(id);
+        if (!placement) return null;
+        const hero = characterSummaryCache.get(sheetIdForPlacement(placement))?.hero;
+        const api = window.AbilityAutomationPrimitives;
+        const fact = api?.actionNumberSource(ref, { stats: hero?.stats || placement.monster?.stats, victories: hero?.victories,
+          ability: ref.source === 'abilityRange' ? abilityForPlacement(id, ref.name) : null, trigger });
+        const raw = fact?.raw;
+        return raw == null || String(raw).trim() === '' || !Number.isSafeInteger(Number(raw)) ? null : api.adjustActionNumber(ref, Number(raw));
+      },
       isInsideAura: isInsideAuraOf,
       hasEndableCondition: (casterId, spec) => endableConditionsFor(casterId, spec).length > 0,
       isTriggerActionAvailable(casterId) {
@@ -7347,7 +7337,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const casterPlacement = getPlacementFromStore(casterId);
         const otherPlacement = getPlacementFromStore(otherId);
         if (!casterPlacement || !otherPlacement) return null;
-        return placementSquareDistance(casterPlacement, otherPlacement, getActiveSceneTokenLevelState());
+        return abilityTargetDistance(casterPlacement, otherPlacement);
       },
       // Line of effect between two tokens' middles, past the map's walls (null when it can't be told).
       hasLineOfEffect(casterId, otherId) {
@@ -7376,6 +7366,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function zoneBelongsToMaintained(zone, item) {
     if (!zone || !item) return false;
+    if (zone.castId || item.castId) return Boolean(zone.castId) && zone.castId === item.castId;
     if (item.abilityId && zone.abilityId) return zone.abilityId === item.abilityId;
     const name = String(item.name || '').trim().toLowerCase();
     return Boolean(name) && String(zone.abilityName || '').trim().toLowerCase() === name;
@@ -7417,7 +7408,7 @@ export function mountBoardInteractions(store, routes = {}) {
           target.persistentZones = records.map((record) => (record && ids.includes(record.id) ? { ...record, endDue: { reason, at } } : record));
         });
       });
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       maybePromptZoneEnds();
     }
     return true;
@@ -7452,7 +7443,7 @@ export function mountBoardInteractions(store, routes = {}) {
             });
           }
         }
-        renderPersistentZoneOverlays();
+        scheduleZoneEndPrompts();
       })
       .catch((error) => console.warn('[VTT] zone end popup failed', error))
       .finally(() => {
@@ -8292,38 +8283,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Note: mergeBoardStateSnapshot is now exported at module level and used directly
 
-  function safeStableStringify(value) {
-    const seen = new WeakSet();
-
-    function serialize(input) {
-      if (input === null || typeof input !== 'object') {
-        return input;
-      }
-
-      if (seen.has(input)) {
-        return null;
-      }
-      seen.add(input);
-
-      if (Array.isArray(input)) {
-        return input.map((item) => serialize(item));
-      }
-
-      const result = {};
-      const keys = Object.keys(input).sort();
-      for (const key of keys) {
-        result[key] = serialize(input[key]);
-      }
-      return result;
-    }
-
-    try {
-      return JSON.stringify(serialize(value));
-    } catch (error) {
-      return null;
-    }
-  }
-
   board.addEventListener('keydown', (event) => {
     if ((pendingDamageHeal || damageHealUi) && event.key === 'Escape') {
       event.preventDefault();
@@ -8500,92 +8459,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  mapSurface.addEventListener(
-    'wheel',
-    (event) => {
-      if (!viewState.mapLoaded) return;
-      event.preventDefault();
-      const pointer = getPointerPosition(event, board);
-      const previousScale = viewState.scale;
-      const zoomIntensity = 0.0018;
-      const scaleFactor = Math.exp(-event.deltaY * zoomIntensity);
-      const nextScale = clamp(previousScale * scaleFactor, viewState.minScale, viewState.maxScale);
-      if (nextScale === previousScale) return;
-
-      const zoomRatio = nextScale / previousScale;
-      viewState.translation.x = pointer.x - (pointer.x - viewState.translation.x) * zoomRatio;
-      viewState.translation.y = pointer.y - (pointer.y - viewState.translation.y) * zoomRatio;
-      viewState.scale = nextScale;
-      applyTransform();
-    },
-    { passive: false }
-  );
-
-  // A mouse chord changes `buttons` through pointermove, not another
-  // pointerdown/up. Route camera gestures before either movement picker.
-  let movementPanActive = false;
-  let movementRightPress = null;
-  const hasHeldMovement = () => !!(viewState.dragState || viewState.dragCandidate || pendingAutomationMove);
-  function startMovementPan(event) {
-    movementPanActive = true;
-    viewState.isPanning = true;
-    viewState.pointerId = event.pointerId;
-    viewState.lastPointer = { x: event.clientX, y: event.clientY };
-    mapSurface.classList.add('is-panning');
-    try { mapSurface.setPointerCapture(event.pointerId); } catch (_) {}
-  }
-  mapSurface.addEventListener('pointerdown', (event) => {
-    if (event.button !== 2 || !hasHeldMovement() || !viewState.mapLoaded) return;
-    startMovementPan(event);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, true);
-  mapSurface.addEventListener('pointermove', (event) => {
-    if (event.pointerType !== 'mouse' || (!movementPanActive && !hasHeldMovement())) return;
-    if (movementPanActive && event.pointerId !== viewState.pointerId) return;
-    if (!(event.buttons & 2)) {
-      // The right button has come up. A quick click made while a token is held drops a path node
-      // where the token is held; a press that pulled the map never does (right-press.mjs).
-      const clicked = rightPressClicked(movementRightPress, event.clientX, event.clientY, performance.now());
-      movementRightPress = null;
-      if (clicked && viewState.dragState) addExternalMeasurementNode();
-      if (movementPanActive) endPan(event);
-      return;
-    }
-    if (!movementPanActive) {
-      if ((event.buttons & 1) && (viewState.dragState || viewState.dragCandidate)) {
-        // A right press with a token held: neither a node nor a pull of the map until it moves or lifts.
-        // The token goes on following the pointer meanwhile, so this move is left to the drag.
-        if (!movementRightPress) movementRightPress = rightPressAt(event.clientX, event.clientY, performance.now());
-        if (!rightPressPulls(movementRightPress, event.clientX, event.clientY)) return;
-        movementRightPress = null;
-      }
-      startMovementPan(event);
-    }
-    const dx = event.clientX - viewState.lastPointer.x;
-    const dy = event.clientY - viewState.lastPointer.y;
-    viewState.translation.x += dx;
-    viewState.translation.y += dy;
-    viewState.lastPointer = { x: event.clientX, y: event.clientY };
-    applyTransform();
-    if (viewState.dragCandidate) {
-      // Panning alone must not activate the pending left-button drag.
-      viewState.dragCandidate.startClient.x += dx;
-      viewState.dragCandidate.startClient.y += dy;
-    }
-    if (!(event.buttons & 1) && event.button === 0) {
-      // Left was released first while right remains down: commit once, then
-      // retain camera capture until the right button is released.
-      handlePointerUp(event);
-      try { mapSurface.setPointerCapture(event.pointerId); } catch (_) {}
-    } else if (viewState.dragState && (event.buttons & 1)) {
-      updateTokenDrag(event);
-    }
-    if (pendingAutomationMove) handleAutomationMovePointerMove(event);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, true);
-
   mapSurface.addEventListener('pointerdown', async (event) => {
     if (isPersistentZoneControlTarget(event.target)) {
       return;
@@ -8663,19 +8536,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-
-    if (
-      mapLevelCutoutEditorActive &&
-      event.target &&
-      event.target.closest('.vtt-map-level-cutout-editor__toolbar')
-    ) {
-      return;
-    }
-
-    // When fog-select mode is active, let the fog handler manage pointer events
-    if (isFogSelectActive() && event.button === 0) {
-      return;
-    }
 
     if (event.altKey && (event.button === 0 || event.button === 2)) {
       // Alt+right-click moves everyone's view to the spot: the Director's only (Brandon, October 2026). A player's is
@@ -8806,15 +8666,6 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTokenSettings({ preserveMonsterStatBlock: true });
       event.preventDefault();
       focusBoard();
-      viewState.isPanning = true;
-      viewState.pointerId = event.pointerId;
-      viewState.lastPointer = { x: event.clientX, y: event.clientY };
-      mapSurface.classList.add('is-panning');
-      try {
-        mapSurface.setPointerCapture(event.pointerId);
-      } catch (error) {
-        console.warn('[VTT] Unable to set pointer capture', error);
-      }
       return;
     }
 
@@ -8879,22 +8730,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     if (!presentation.visible) {
       return false;
-    }
-
-    const isCellFogged = createFogChecker(state, viewerLevelId);
-    if (typeof isCellFogged === 'function') {
-      let hasVisibleCell = false;
-      for (let dx = 0; dx < normalized.width && !hasVisibleCell; dx += 1) {
-        for (let dy = 0; dy < normalized.height; dy += 1) {
-          if (!isCellFogged(normalized.column + dx, normalized.row + dy)) {
-            hasVisibleCell = true;
-            break;
-          }
-        }
-      }
-      if (!hasVisibleCell) {
-        return false;
-      }
     }
 
     return true;
@@ -9005,36 +8840,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    if (!viewState.isPanning || event.pointerId !== viewState.pointerId) {
-      updateHoverFromPointer(event);
-      return;
-    }
-
-    const deltaX = event.clientX - viewState.lastPointer.x;
-    const deltaY = event.clientY - viewState.lastPointer.y;
-    viewState.translation.x += deltaX;
-    viewState.translation.y += deltaY;
-    viewState.lastPointer = { x: event.clientX, y: event.clientY };
-    applyTransform();
+    updateHoverFromPointer(event);
   });
-
-  const endPan = (event) => {
-    if (viewState.pointerId !== null && event.pointerId !== viewState.pointerId) {
-      return;
-    }
-
-    movementPanActive = false;
-    viewState.isPanning = false;
-    viewState.pointerId = null;
-    mapSurface.classList.remove('is-panning');
-    try {
-      if (viewState.dragState?.pointerId !== event.pointerId && viewState.dragCandidate?.pointerId !== event.pointerId) {
-        mapSurface.releasePointerCapture?.(event.pointerId);
-      }
-    } catch (error) {
-      // Ignore capture release errors
-    }
-  };
 
   const handlePointerUp = (event) => {
     if (isCustomConditionDialogOpen()) {
@@ -9060,9 +8867,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    if (event.button === 2) {
-      endPan(event);
-    }
   };
 
   const handlePointerCancel = (event) => {
@@ -9075,7 +8879,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     clearDragCandidate(event.pointerId);
     cancelSelectionBox();
-    endPan(event);
   };
 
   const handlePointerLeave = (event) => {
@@ -9088,7 +8891,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     clearDragCandidate(event.pointerId);
     cancelSelectionBox();
-    endPan(event);
 
     if (hoveredTokenId) {
       setBoardTokenHover(hoveredTokenId, false);
@@ -9348,23 +9150,18 @@ export function mountBoardInteractions(store, routes = {}) {
   });
 
   const applyGridState = (gridState = {}) => {
-    if (!grid) return;
 
     const normalizedGrid = normalizeGridState(gridState);
     const size = normalizedGrid.size;
     const dimension = `${size}px`;
-    grid.style.setProperty('--vtt-grid-size', dimension);
     mapSurface.style.setProperty('--vtt-grid-size', dimension);
     viewState.gridOrigin = {
       x: normalizedGrid.offsetX,
       y: normalizedGrid.offsetY,
     };
     applyGridOffsets();
-    const isVisible = normalizedGrid.visible;
-    grid.classList.toggle('is-visible', Boolean(isVisible));
     viewState.gridSize = size;
     templateTool.notifyGridChanged();
-    mapLevelCutoutTool.notifyGridChanged();
   };
 
   const applyStateToBoard = (state = {}) => {
@@ -9384,8 +9181,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (activeSceneId !== lastActiveSceneId) {
         lastActiveSceneId = activeSceneId;
         closeDamageHealWidget({ restoreMessage: false });
-        mapLevelRenderer.reset();
-        mapLevelCutoutTool.reset();
         // Levels v2 §5.2: drop the previous scene's view-follow baseline so
         // entering a new scene establishes a fresh baseline (no auto-pan on
         // first observation).
@@ -9432,14 +9227,14 @@ export function mountBoardInteractions(store, routes = {}) {
       renderTokens(state, tokenLayer, viewState);
       scheduleActiveSceneTriggerRegistration();
       scheduleMonsterDefenseRepair();
-      renderFog(state);
-      renderFogSelection();
+
+
       renderStairs(state);
       templateTool.notifyMapState();
       applyCombatStateFromBoardState(state);
       // Persistent zones live on placements now, so any synced state change
       // (including remote casts/removals) re-renders the overlays here.
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       // Heroic-resource prompts addressed to this client's player ride
       // placement state; pick up any new ones. Async + internally deduped.
       processPendingHeroResourcePrompts(state);
@@ -9465,21 +9260,8 @@ export function mountBoardInteractions(store, routes = {}) {
   // compatibility-store subscription would redraw unrelated board domains.
   scheduleActiveSceneTriggerRegistration();
 
-  if (grid && (!boardApi || typeof boardApi.updateState !== 'function')) {
-    const toggleGridButton = document.querySelector('[data-action="toggle-grid"]');
-    toggleGridButton?.addEventListener('click', () => {
-      grid.classList.toggle('is-visible');
-    });
-  }
-
-  // Mount fog of war system
   const userState = boardApi.getState?.()?.user ?? {};
-  mountFogOfWar({
-    boardApi,
-    viewState,
-    isGm: Boolean(userState.isGM),
-    getActiveLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
-  });
+  if (userState.isGM) mountVisionPanel();
 
   // Mount stairs side panel (GM-only floating panel like fog).
   mountStairsPanel({
@@ -9792,36 +9574,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // The same point with the height of what is drawn under the pointer ({x, y, height}), for what a click puts down.
   function getLocalMapPointAt(event) {
-    // 3D board: the point the pointer lands on, with its height.
-    if (window.vtt3d?.active) {
-      const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
-      return hit ? { x: hit.x, y: hit.y, height: hit.height } : null;
-    }
-    const raw = getLocalMapPoint(event, { terrain: false });
-    if (!raw) return null;
-    return window.terrainPrototype?.unprojectAt?.(raw) ?? { ...(getLocalMapPoint(event) ?? raw), height: 0 };
+    return getLocalMapPoint(event);
   }
-  // `standingOn` (a token id) reads the pointer at the height that token stands at: see unproject in terrain-prototype.js.
-  function getLocalMapPoint(event, { terrain = true, standingOn = null } = {}) {
-    // 3D board: the map point under the pointer on the 3D surfaces, or on the
-    // level that token stands at when `standingOn` names one.
-    if (window.vtt3d?.active) {
-      const own = standingOn ? getPlacementFromStore(String(standingOn)) : null;
-      const plane = own ? window.terrainPrototype?.groundFor?.(own) : null;
-      const hit = window.vtt3d.clientToMap(event.clientX, event.clientY, Number.isFinite(plane) ? { plane } : {});
-      return hit ? { x: hit.x, y: hit.y, height: hit.height, levelId: hit.levelId } : null;
-    }
-    const pointer = getPointerPosition(event, mapSurface);
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const translation = viewState.translation ?? { x: 0, y: 0 };
-    const offsetX = Number.isFinite(translation.x) ? translation.x : 0;
-    const offsetY = Number.isFinite(translation.y) ? translation.y : 0;
-    const localX = (pointer.x - offsetX) / scale;
-    const localY = (pointer.y - offsetY) / scale;
-    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
-      return null;
-    }
-    return terrain ? (window.terrainPrototype?.unproject({x:localX,y:localY}, standingOn ? { standingOn } : undefined) ?? {x:localX,y:localY}) : {x:localX,y:localY};
+
+  function getLocalMapPoint(event, {standingOn = null} = {}) {
+    const own = standingOn ? getPlacementFromStore(String(standingOn)) : null;
+    const plane = own ? window.terrainPrototype?.groundFor?.(own) : null;
+    return window.vtt3d?.clientToMap(event.clientX, event.clientY, Number.isFinite(plane) ? {plane} : {}) ?? null;
   }
 
   function getMapImagePoint(localPoint) {
@@ -10619,8 +10378,6 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function loadMap(url) {
-    const visibilityState=boardApi.getState?.() ?? {};
-    beginPlayerVisibility(visibilityState, {isGm:isGmUser(),levelId:getViewerLevelIdForCurrentUser(visibilityState,visibilityState.boardState?.activeSceneId)});
     recordSyncDiagnostic('mapLoads', {
       hasUrl: Boolean(url),
     });
@@ -10634,8 +10391,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     viewState.activeMapUrl = url || null;
     viewState.mapLoaded = false;
-    mapLevelCutoutTool.reset();
-    mapLevelRenderer.reset();
     clearDragCandidate();
     if (viewState.dragState) {
       try {
@@ -10651,10 +10406,7 @@ export function mountBoardInteractions(store, routes = {}) {
     mapImage.hidden = true;
     mapBackdrop.hidden = !url;
     mapTransform.hidden = !url;
-    if (grid) {
-      grid.hidden = !url;
-    }
-    resetView();
+
     applyGridOffsets();
 
     if (!url) {
@@ -10666,7 +10418,6 @@ export function mountBoardInteractions(store, routes = {}) {
       resetCombatGroups();
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
-      mapLevelCutoutTool.reset();
       return;
     }
 
@@ -10691,12 +10442,9 @@ export function mountBoardInteractions(store, routes = {}) {
       mapImage.hidden = false;
       mapBackdrop.hidden = false;
       mapTransform.hidden = false;
-      if (grid) {
-        grid.hidden = false;
-        applyGridState(boardApi.getState?.().grid ?? {});
-      }
+      applyGridState(boardApi.getState?.().grid ?? {});
       const latestState = boardApi.getState?.() ?? {};
-      renderFog(latestState);
+
       const activeSceneId = latestState.boardState?.activeSceneId ?? null;
       syncMapLevelsForState(latestState, activeSceneId);
       if (status) {
@@ -10704,7 +10452,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       updateSceneMeta(activeSceneFromState());
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-      renderPersistentZoneOverlays();
+      scheduleZoneEndPrompts();
       templateTool.notifyMapState();
     };
     const handleMapImageError = () => {
@@ -10719,9 +10467,7 @@ export function mountBoardInteractions(store, routes = {}) {
       mapTransform.hidden = true;
       mapTransform.style.width = '';
       mapTransform.style.height = '';
-      if (grid) {
-        grid.hidden = true;
-      }
+
       emptyState?.removeAttribute('hidden');
       if (status) {
         status.textContent = 'Unable to display the uploaded map.';
@@ -10729,7 +10475,6 @@ export function mountBoardInteractions(store, routes = {}) {
       viewState.mapPixelSize = { width: 0, height: 0 };
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.reset();
-      mapLevelCutoutTool.reset();
     };
     mapImage.onload = handleMapImageLoad;
     mapImage.onerror = handleMapImageError;
@@ -10949,15 +10694,9 @@ export function mountBoardInteractions(store, routes = {}) {
   function syncMapLevelsForState(state = {}, sceneId = null) {
     const following = document.querySelector('[data-floor-follow-mode]');
     if (following && !following.disabled) following.value = state.boardState?.sceneState?.[sceneId]?.userLevelState?.[getCurrentUserId()]?.followToken === false ? 'browse' : 'follow';
-    const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
+    const mapLevels = state.boardState?.sceneState?.[sceneId]?.mapLevels ?? null;
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
     setDrawingContext({ sceneId: sceneId || DEFAULT_SCENE_ID, levelId: viewerLevelId || BASE_MAP_LEVEL_ID });
-    mapLevelRenderer.sync(mapLevels, {
-      sceneGrid: state.grid ?? null,
-      view: viewState,
-      activeLevelId: viewerLevelId,
-    });
-    mapLevelCutoutTool.notifyMapLevelsChange(mapLevels);
     // Levels v2 (§5.1): the level nav must include the virtual Level 0
     // so the GM can browse to and from the base map. The control-state
     // helper synthesizes Level 0 when `includeBaseLevel: true`.
@@ -11127,32 +10866,6 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
 
-  function resolveGridBounds(view = viewState) {
-    const mapWidth = Number.isFinite(view?.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(view?.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return { columns: 0, rows: 0 };
-    }
-
-    const offsets = view.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
-    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-
-    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
-    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
-    if (innerWidth <= 0 || innerHeight <= 0) {
-      return { columns: 0, rows: 0 };
-    }
-
-    return {
-      columns: innerWidth / gridSize,
-      rows: innerHeight / gridSize,
-    };
-  }
-
   function roundToPrecision(value, precision = 4) {
     if (!Number.isFinite(value)) {
       return 0;
@@ -11187,7 +10900,6 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function calibrateToBoard() {
-    const boardRect = board.getBoundingClientRect();
     const styles = getComputedStyle(mapBackdrop);
     const paddingTop = parseFloat(styles.paddingTop || '0');
     const paddingRight = parseFloat(styles.paddingRight || '0');
@@ -11209,19 +10921,6 @@ export function mountBoardInteractions(store, routes = {}) {
       left: paddingLeft,
     });
 
-    const scaleX = boardRect.width / mapWidth;
-    const scaleY = boardRect.height / mapHeight;
-    const initialScale = Number.isFinite(Math.min(scaleX, scaleY))
-      ? Math.min(1, Math.min(scaleX, scaleY))
-      : 1;
-
-    viewState.scale = clamp(initialScale, 0.02, 1);
-    viewState.minScale = Math.min(viewState.scale, 0.05);
-    viewState.maxScale = Math.max(5, viewState.scale * 6);
-
-    viewState.translation.x = (boardRect.width - mapWidth * viewState.scale) / 2;
-    viewState.translation.y = (boardRect.height - mapHeight * viewState.scale) / 2;
-    applyTransform();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     templateTool.notifyMapState();
   }
@@ -11248,32 +10947,9 @@ export function mountBoardInteractions(store, routes = {}) {
   // The same for several tokens at once: the view is centred on the middle of them all, and each sends out its
   // pulse. Returns how many of them are drawn on this page (a token on a floor not being viewed is not).
   function centerOnBoardTokens(placementIds) {
-    // 3D board: the camera turns to the tokens; the pulses mark where they stand.
-    if (globalThis.vtt3d?.active) {
-      const shown = globalThis.vtt3d.focusTokens?.(placementIds) ?? [];
-      shown.forEach(point => mapPings.pulseAt(point.x, point.y, point.z));
-      return shown.length;
-    }
-    const wanted = new Set(placementIds);
-    const rects = Array.from(tokenLayer.querySelectorAll('[data-placement-id]'))
-      .filter(node => wanted.has(node.dataset.placementId) && !node.hidden)
-      .map(node => node.getBoundingClientRect())
-      .filter(rect => rect.width && rect.height);
-    if (!rects.length) return 0;
-    const boardRect = board.getBoundingClientRect(), surfaceRect = mapSurface.getBoundingClientRect();
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    // Where each token is in the board's own measure: that does not change when the view is moved.
-    const points = rects.map(rect => ({
-      x: (rect.left + rect.width/2 - surfaceRect.left - viewState.translation.x) / scale,
-      y: (rect.top + rect.height/2 - surfaceRect.top - viewState.translation.y) / scale,
-    }));
-    const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
-    const top = Math.min(...rects.map(rect => rect.top)), bottom = Math.max(...rects.map(rect => rect.bottom));
-    viewState.translation.x += boardRect.left + boardRect.width/2 - (left + right)/2;
-    viewState.translation.y += boardRect.top + boardRect.height/2 - (top + bottom)/2;
-    applyTransform();
-    points.forEach(point => mapPings.pulseAt(point.x, point.y));
-    return rects.length;
+    const shown = globalThis.vtt3d?.focusTokens?.(placementIds) ?? [];
+    shown.forEach(point => mapPings.pulseAt(point.x, point.y, point.z));
+    return shown.length;
   }
 
   /** Pulses tokens where they stand, on this page only, without moving the view. Returns how many were pulsed. */
@@ -11291,16 +10967,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       return pulsed;
     }
-    const set = new Set(wanted), surfaceRect = mapSurface.getBoundingClientRect();
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const rects = Array.from(tokenLayer.querySelectorAll('[data-placement-id]'))
-      .filter(node => set.has(node.dataset.placementId) && !node.hidden)
-      .map(node => node.getBoundingClientRect())
-      .filter(rect => rect.width && rect.height);
-    rects.forEach(rect => mapPings.pulseAt(
-      (rect.left + rect.width / 2 - surfaceRect.left - viewState.translation.x) / scale,
-      (rect.top + rect.height / 2 - surfaceRect.top - viewState.translation.y) / scale));
-    return rects.length;
+    return 0;
   }
 
   // Right-click an entry in the turn tracker: its token, or each token of its group, pulses on the map so it is easy
@@ -11347,24 +11014,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return `Viewing ${shown} of the ${asked} selected tokens. The ${asked - shown === 1 ? 'other is' : 'others are'} not drawn on this page.`;
   }
 
-  function applyTransform() {
-    if (!mapTransform) return;
-    mapTransform.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
-    mapTransform.style.setProperty('--vtt-map-scale', String(viewState.scale));
-    const overlayScale = viewState.scale ? 1 / viewState.scale : 1;
-    mapTransform.style.setProperty('--vtt-overlay-scale', String(overlayScale));
-    if (grid) {
-      const lineWidth = Math.max(1, 1 / viewState.scale);
-      grid.style.setProperty('--vtt-grid-line-width', `${lineWidth}px`);
-    }
-  }
-
-  function resetView() {
-    viewState.scale = 1;
-    viewState.translation = { x: 0, y: 0 };
-    applyTransform();
-  }
-
   function applyGridOffsets(insets = viewState.mapInsets, origin = viewState.gridOrigin) {
     const { top = 0, right = 0, bottom = 0, left = 0 } = insets ?? {};
     const sanitize = (value) => (Number.isFinite(value) ? value : 0);
@@ -11387,24 +11036,7 @@ export function mountBoardInteractions(store, routes = {}) {
     viewState.mapInsets = nextInsets;
     viewState.gridOrigin = nextOrigin;
     viewState.gridOffsets = nextOffsets;
-    if (mapLevelRenderer.element) {
-      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
-      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
-      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
-      mapLevelRenderer.element.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
-    }
-    if (!grid) {
-      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-      return;
-    }
-    grid.style.setProperty('--vtt-grid-offset-top', `${nextInsets.top}px`);
-    grid.style.setProperty('--vtt-grid-offset-right', `${nextInsets.right}px`);
-    grid.style.setProperty('--vtt-grid-offset-bottom', `${nextInsets.bottom}px`);
-    grid.style.setProperty('--vtt-grid-offset-left', `${nextInsets.left}px`);
-    grid.style.setProperty('--vtt-grid-origin-x', `${nextOrigin.x}px`);
-    grid.style.setProperty('--vtt-grid-origin-y', `${nextOrigin.y}px`);
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-    templateTool.notifyGridChanged();
+
   }
 
   function setUploadingState(isUploading) {
@@ -11444,35 +11076,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return Math.min(Math.max(value, min), max);
   }
 
-  function renderAuras(state = {}, layer, view) {
-    const gmViewing = isGmUser();
-    const sceneId = state?.boardState?.activeSceneId ?? null;
-    const levelId = sceneId ? getViewerLevelIdForCurrentUser(state, sceneId) : null;
-    // A token being dragged is drawn where the drag has it, and so is its aura.
-    const dragged = view?.dragState?.previewPositions ?? null;
-    const placements = getActiveScenePlacements(state);
-    renderTokenAuras({placements:dragged?.size ? placements.map((placement) => (dragged.has(placement?.id) ? { ...placement, ...auraDragPosition(dragged.get(placement.id)) } : placement)) : placements,
-      layer,view,gmViewing,
-      tokenLevelState:getActiveSceneTokenLevelState(state),auraViewerLevelId:levelId,
-      isCellFogged:gmViewing ? null : createFogChecker(state,levelId)});
-  }
-
-  function auraDragPosition(preview = {}) {
-    return { ...(Number.isFinite(preview?.column) ? { column: preview.column } : {}), ...(Number.isFinite(preview?.row) ? { row: preview.row } : {}) };
-  }
-
-  // Auras were not redrawn at all while anything was being dragged, to spare the cost on every frame of every
-  // drag; so an aura sat where its token had been until the drop. It is paid now only for a drag that has an
-  // aura in it: "tied to a token" means it goes with the token as it moves.
-  function dragCarriesAura(dragState) {
-    if (!auraLayer || !dragState?.previewPositions?.size) return false;
-    const ids = new Set(dragState.previewPositions.keys());
-    return Array.from(auraLayer.children).some((aura) => ids.has(aura?.dataset?.placementId));
-  }
-
   function renderTokens(state = {}, layer, view, options = {}) {
-    if (pendingAutomationTarget) renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
-    if (pendingAutomationArea) updateAutomationAreaRange();
     recordSyncDiagnostic('tokenLayerReconciliations', {
       sceneId: state?.boardState?.activeSceneId ?? null,
       skipTracker: Boolean(options?.skipTracker),
@@ -11561,7 +11165,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
     // Pre-compute fog checker once (null when fog inactive or GM viewing).
     // Per-level fog: gate on the viewer's current level.
-    const isCellFogged = gmViewing ? null : createFogChecker(state, viewerLevelId);
     placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
@@ -11606,8 +11209,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const levelPlacement = { ...placement, column, row, width, height };
       const presentation = resolveVisibleTokenPresentation(levelPlacement, tokenLevelState, {
         viewerLevelId,
-        gmViewing: gmViewing || Boolean(window.vtt3dBoard),
-        isCellFogged: window.vtt3dBoard ? null : isCellFogged,
+        gmViewing: true,
+        isCellFogged: null,
       });
       if (!presentation) {
         return;
@@ -11795,13 +11398,7 @@ export function mountBoardInteractions(store, routes = {}) {
       updateCombatTracker(trackerEntries, { activeIds: activeCombatantIds });
     }
 
-    // Skip aura rendering during active drag for performance; auras snap on drop
-    if (!viewState.dragState || dragCarriesAura(viewState.dragState)) {
-      renderAuras(state, auraLayer, view);
-    }
   }
-
-
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
     clearTokenMapLevelVisibilityMask(token);
@@ -14435,10 +14032,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const startRound = combatRound;
     if (!combatV2Enabled) {
       startNewFightCleanSlate(startingSceneId);
-      resetPlayerSurgesToZero('combat-start').finally(() => {
-        fireTimingBoundary('combatStart', { round: startRound });
-        fireTimingBoundary('roundStart', { round: startRound });
-      });
+      fireCombatStartBoundaries(startRound);
     }
     updateStartCombatButton();
     refreshCombatTracker();
@@ -15688,6 +15282,11 @@ export function mountBoardInteractions(store, routes = {}) {
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
     // An ability of a token by name, for useAbility. "signature": the one whose keywords or text say so, else its
     // first action. Monsters from their stat block; heroes from the sheet the VTT holds.
+    getTargetFacts: function (id) {
+      const token = getPlacementFromStore(id);
+      const kind = objectRulesFor(token) ? 'object' : token?.monster || (token && isPlayerCharacterPlacement(token)) ? 'creature' : null;
+      return { kind };
+    },
     getAbility: async function (payload) {
       const found = abilityForPlacement(payload?.placementId, payload?.name);
       if (found || !payload?.placementId) return found;
@@ -15737,13 +15336,17 @@ export function mountBoardInteractions(store, routes = {}) {
     getStandFirmState: function (placementId, context) {
       return resolveStandFirmForPlacement(placementId, context && typeof context === 'object' ? context : {});
     },
+    /** Whether a fight is on and it is this token's turn (the "already used your action" question is asked only then). */
+    isTurnOf: function (placementId) {
+      return Boolean(combatActive && placementId && activeCombatantId === placementId);
+    },
     // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
     // between occupied squares, including floor height; null for missing tokens/floors.
     getDistanceBetween: function (idA, idB) {
       const a = getPlacementFromStore(idA);
       const b = getPlacementFromStore(idB);
       if (!a || !b) return null;
-      return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
+      return abilityTargetDistance(a, b);
     },
     // The minion squad a token belongs to: members, the shared Stamina pool, how many are still
     // standing, and its captain. null when the token is not in a squad.
@@ -16417,30 +16020,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isGmUser()) {
       return true;
     }
-    const normalized = normalizePlacementForRender(placement);
-    if (!normalized || normalized.hidden) {
-      return false;
-    }
-    const metadata =
-      placement.metadata && typeof placement.metadata === 'object'
-        ? placement.metadata
-        : {};
-    const explicitTeam = normalizeCombatTeam(
-      placement.team
-        ?? placement.combatTeam
-        ?? metadata.team
-        ?? metadata.combatTeam
-        ?? null
-    );
-    if (explicitTeam) {
-      return explicitTeam === 'ally';
-    }
-    return !(
-      placement.monster
-      || placement.monsterId
-      || metadata.monster
-      || metadata.monsterId
-    );
+    return canPlayerMovePlacement(placement);
   }
 
   function normalizeProfileId(value) {
@@ -18079,125 +17659,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function findRenderedPlacementAtPoint(event) {
     if (event?.vtt3dPick) return event.vtt3dPick.placement;
-    if (!renderedPlacements.length) {
-      return null;
-    }
-
-    const pointer = getPointerPosition(event, mapSurface);
-    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const translation = viewState.translation ?? { x: 0, y: 0 };
-    const offsetX = Number.isFinite(translation.x) ? translation.x : 0;
-    const offsetY = Number.isFinite(translation.y) ? translation.y : 0;
-    const localX = (pointer.x - offsetX) / scale;
-    const localY = (pointer.y - offsetY) / scale;
-
-    if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
-      return null;
-    }
-
-    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
-    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return null;
-    }
-
-    const offsets = viewState.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
-
-    const innerWidth = Math.max(0, mapWidth - offsetLeft - offsetRight);
-    const innerHeight = Math.max(0, mapHeight - offsetTop - offsetBottom);
-    if (innerWidth <= 0 || innerHeight <= 0) {
-      return null;
-    }
-
-    if (
-      !window.terrainPrototype?.active && !window.vtt3d?.active && (localX < offsetLeft ||
-      localX > offsetLeft + innerWidth ||
-      localY < offsetTop ||
-      localY > offsetTop + innerHeight)
-    ) {
-      return null;
-    }
-
-    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-    if (!Number.isFinite(gridSize) || gridSize <= 0) {
-      return null;
-    }
-
-    const pointX = localX - offsetLeft;
-    const pointY = localY - offsetTop;
-    let pointCell = {
-      column: Math.floor(pointX / gridSize),
-      row: Math.floor(pointY / gridSize),
-    };
-    const gmViewing = isGmUser();
-    const state = boardApi.getState?.() ?? {};
-    const tokenLevelState = getActiveSceneTokenLevelState(state);
-    const activeSceneKey = state?.boardState?.activeSceneId ?? null;
-    const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
-
-    for (let index = renderedPlacements.length - 1; index >= 0; index -= 1) {
-      const placement = renderedPlacements[index];
-      if(window.visionPrototype?.tokenVisible && !window.visionPrototype.tokenVisible(placement?.id))continue;
-      if (!placement || typeof placement !== 'object') {
-        continue;
-      }
-
-      const column = Number.isFinite(placement.column) ? placement.column : 0;
-      const row = Number.isFinite(placement.row) ? placement.row : 0;
-      const width = Math.max(1, Number.isFinite(placement.width) ? placement.width : 1);
-      const height = Math.max(1, Number.isFinite(placement.height) ? placement.height : 1);
-      // Levels v2 §5.5.5: hit area follows the rendered scale so shrunk
-      // below-level tokens can only be clicked on their visible footprint.
-      // We scale around the token's center to match the CSS
-      // `transform-origin: 50% 50%`.
-      const scale = Number.isFinite(placement.scale) && placement.scale > 0 ? placement.scale : 1;
-      const cellWidth = width * gridSize;
-      const cellHeight = height * gridSize;
-      const cellLeft = column * gridSize;
-      const cellTop = row * gridSize;
-      const centerX = cellLeft + cellWidth / 2;
-      const centerY = cellTop + cellHeight / 2;
-      const halfW = (cellWidth / 2) * scale;
-      const halfH = (cellHeight / 2) * scale;
-      const left = centerX - halfW;
-      const right = centerX + halfW;
-      const top = centerY - halfH;
-      const bottom = centerY + halfH;
-
-      // Terrain sandbox token hit rectangles retain the existing cell/fog authority checks.
-      // On the 3D board (as with terrain) a token is where its projected picture is drawn.
-      const byPicture=window.terrainPrototype?.active||window.vtt3d?.active;
-      const terrainNode=byPicture ? Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placement.id) : null;
-      const terrainRect=terrainNode?.getBoundingClientRect();
-      const terrainHit=terrainRect && event.clientX>=terrainRect.left && event.clientX<terrainRect.right && event.clientY>=terrainRect.top && event.clientY<terrainRect.bottom;
-      if (byPicture ? terrainHit : (pointX >= left && pointX < right && pointY >= top && pointY < bottom)) {
-        if(terrainHit)pointCell={column:Math.floor(column+(event.clientX-terrainRect.left)/terrainRect.width*width),row:Math.floor(row+(event.clientY-terrainRect.top)/terrainRect.height*height)};
-        if (!gmViewing) {
-          const interactable = getTokenLevelPresentation(placement, tokenLevelState, {
-            viewerLevelId,
-            gmViewing: false,
-            mode: 'interaction',
-            cells: [pointCell],
-          }).visible;
-          if (!interactable) {
-            continue;
-          }
-        }
-
-        // For non-GM users, skip tokens hidden by fog of war on the viewer's level.
-        if (!gmViewing && isPositionFogged(state, pointCell.column, pointCell.row, viewerLevelId)) {
-          continue;
-        }
-
-        return placement;
-      }
-    }
-
-    return null;
+    if (!window.vtt3d?.active) return null;
+    const node = document.elementsFromPoint(event.clientX, event.clientY)
+      .find(element => element.closest?.('#vtt-token-layer [data-placement-id]'));
+    const id = node?.closest('[data-placement-id]')?.dataset.placementId
+      ?? window.vtt3dRenderer?.pickAtClient(event.clientX, event.clientY)?.tokenId;
+    if (!id) return null;
+    const placement = getPlacementFromStore(id);
+    if (!placement || isOutOfSightForViewer(placement)) return null;
+    if (!isGmUser() && (isAutomationPlacementHidden(placement) || isInvisibleToViewer(placement))) return null;
+    return placement;
   }
 
   function getActiveScenePlacements(state = {}) {
@@ -18454,14 +17925,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     // 3D board: the square under the pointer on the 3D surfaces, and the floor it is on.
-    const dropHit = window.vtt3d?.active ? window.vtt3d.clientToMap(event.clientX, event.clientY) : null;
-    if (window.vtt3d?.active && !dropHit) return null;
-    const pointer = dropHit ? null : getPointerPosition(event, surface);
-    const scale = Number.isFinite(view.scale) && view.scale !== 0 ? view.scale : 1;
-    const translation = view.translation ?? { x: 0, y: 0 };
-    const localX = dropHit ? dropHit.x : (pointer.x - (Number.isFinite(translation.x) ? translation.x : 0)) / scale;
-    const localY = dropHit ? dropHit.y : (pointer.y - (Number.isFinite(translation.y) ? translation.y : 0)) / scale;
-
+    const dropHit = window.vtt3d?.clientToMap(event.clientX, event.clientY);
+    if (!dropHit) return null;
+    const {x: localX, y: localY} = dropHit;
     if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
       return null;
     }
@@ -18815,10 +18281,7 @@ export function mountBoardInteractions(store, routes = {}) {
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       const target = scenePlacements.find((item) => item && item.id === placementId);
-      if (!target) {
-        blocked = true;
-        return;
-      }
+      if (!target) return;
       if (target.triggeredActionReady === false || target.triggeredActionUsedThisRound === true) {
         blocked = true;
         return;
@@ -19264,7 +18727,7 @@ export function mountBoardInteractions(store, routes = {}) {
       previousStatus,
     };
     // Token targeting takes priority over door/window controls underneath it.
-    mapSurface.classList.add('vtt-manual-token-targeting');
+    board.classList.add('vtt-manual-token-targeting');
 
     clearDamageHealStatusTimeout();
 
@@ -19348,7 +18811,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const previousStatus = pendingDamageHeal.previousStatus;
     pendingDamageHeal = null;
-    mapSurface.classList.remove('vtt-manual-token-targeting');
+    board.classList.remove('vtt-manual-token-targeting');
     clearDamageHealStatusTimeout();
     setDamageHealMode(null);
 
@@ -19656,7 +19119,6 @@ export function mountBoardInteractions(store, routes = {}) {
     else if (suggestedId) startSuggestedTargetPulse(suggestedId);
     // Draw the reach/range box around the source token so the player can see
     // who's actually legal to click. Skipped when distance info is missing.
-    renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
     // A maintained persistent ability used again: the creature carrying its marking is picked for it, through the
     // ordinary pick (so past its range it is warned about, never refused). November 11, 2026.
     const autoPick = Array.isArray(pendingAutomationTarget.targetConfig?.autoPickTargetIds) ? pendingAutomationTarget.targetConfig.autoPickTargetIds : [];
@@ -19664,7 +19126,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const autoPlacement = autoId ? getPlacementFromStore(autoId) : null;
     if (autoPlacement) {
       const request = pendingAutomationTarget;
-      setTimeout(() => { if (pendingAutomationTarget === request) acceptAutomationTargetPlacement(getPlacementFromStore(autoId) || autoPlacement); }, 0);
+      setTimeout(async () => {
+        if (pendingAutomationTarget !== request) return;
+        const target = getPlacementFromStore(autoId);
+        if (!target) return;
+        const far = automationRangeShortfall(request.targetConfig, target);
+        if (far && !await confirmBoardAction(`${tokenLabel(target)} is ${far.distance} squares away, beyond this ability’s range of ${far.range}. Use it on this target anyway?`, { title: 'Maintained target', confirmText: 'Use anyway', cancelText: 'Review targets' })) return;
+        if (pendingAutomationTarget === request && getPlacementFromStore(autoId)) acceptAutomationTargetPlacement(getPlacementFromStore(autoId));
+      }, 0);
     }
   }
 
@@ -19776,57 +19245,6 @@ export function mountBoardInteractions(store, routes = {}) {
     positionAutomationPopup(modal);
   }
 
-  function renderAutomationTargetRangeOverlay(targetConfig) {
-    clearAutomationTargetRangeOverlay();
-    if (!mapTransform || !targetConfig) return;
-    const guide = resolveSelectionRangeGuide(targetConfig);
-    if (!guide) return;
-    const source = resolveAutomationSourcePlacement(guide.sourcePlacement)
-      || (sourceTokenForRange());
-    if (!source) return;
-    if (!automationRangeReachesViewedFloor(guide, source)) return;
-    // For meleeOrRanged we draw the larger of the two — the secondary is the
-    // ranged value, primary is the melee reach.
-    const range = guide.range;
-    if (range <= 0) return;
-    const width = Math.max(1, source.width || 1);
-    const height = Math.max(1, source.height || 1);
-    const overlay = document.createElement('div');
-    overlay.className = 'vtt-automation-target-range';
-    const ring = document.createElement('div');
-    ring.className = 'vtt-automation-target-range__box';
-    overlay.appendChild(ring);
-    mapTransform.appendChild(overlay);
-    positionAutomationCell(
-      ring,
-      (source.column || 0) - range,
-      (source.row || 0) - range,
-      width + range * 2,
-      height + range * 2
-    );
-    automationTargetRangeOverlay = overlay;
-  }
-
-  function clearAutomationTargetRangeOverlay() {
-    automationTargetRangeOverlay?.remove();
-    automationTargetRangeOverlay = null;
-  }
-
-  function automationRangeReachesViewedFloor(guide, source) {
-    const state = boardApi.getState?.() ?? {};
-    const sceneId = state.boardState?.activeSceneId;
-    return selectionRangeReachesFloor(guide, source,
-      getViewerLevelIdForCurrentUser(state, sceneId),
-      resolveSceneTokenLevelState(state, sceneId));
-  }
-
-  function sourceTokenForRange() {
-    // No targetConfig fallback today — without sourcePlacement we can't draw
-    // the box. The runner threads sourcePlacement through for every standard
-    // automation flow, so this branch is the missing-data escape hatch.
-    return null;
-  }
-
   function handleAutomationTargetPointerDown(event) {
     if (!pendingAutomationTarget) {
       return false;
@@ -19872,7 +19290,6 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
-    clearAutomationTargetRangeOverlay();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
     setPickedAutomationTargets([...pickedAutomationTargets.filter((picked) => picked.id !== placement.id), { id: placement.id, name }]);
@@ -20001,7 +19418,6 @@ export function mountBoardInteractions(store, routes = {}) {
       showConditionBanner('The burst has no caster on this map to centre on: place it by hand.', { tone: 'reminder' });
     }
     automationAreaOverlay = renderAutomationAreaOverlay(pendingAutomationArea);
-    updateAutomationAreaRange();
     updateStatus(formatAutomationAreaPrompt(pendingAutomationArea.targetConfig));
   }
 
@@ -20050,21 +19466,13 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderAutomationAreaOverlay(request) {
-    if (!mapTransform) return null;
-    const overlay = document.createElement('div');
-    overlay.className = 'vtt-automation-area';
-    overlay.innerHTML = `
-      <div class="vtt-automation-area__range" data-automation-area-range></div>
-      <div class="vtt-automation-area__preview" data-automation-area-preview>
-        <span>${escapeHtml(request.targetConfig?.label || request.targetConfig?.within || 'Area')}</span>
-      </div>
-      <div class="vtt-automation-area__controls">
-        ${getAutomationAreaDimensions(request.targetConfig).rotatable ? '<button type="button" data-rotate-automation-area title="Turn the shape (R)">Rotate</button>' : ''}
-        <button type="button" data-skip-automation-area>Skip</button>
-      </div>
-    `;
-    mapTransform.appendChild(overlay);
-    return overlay;
+    const controls = document.createElement('div');
+    controls.className = 'vtt-automation-area__controls vtt3d-board-controls';
+    controls.innerHTML = `
+      ${getAutomationAreaDimensions(request.targetConfig).rotatable ? '<button type="button" data-rotate-automation-area title="Turn the shape (R)">Rotate</button>' : ''}
+      <button type="button" data-skip-automation-area>Skip</button>`;
+    window.vtt3d.overlayHost.append(controls);
+    return controls;
   }
 
   // An area's shape (Brandon, November 3, 2026: "different shapes, mainly rectangles and bursts"). Squares are counted
@@ -20103,31 +19511,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return { column: cell.column, row: cell.row, width: dims.width, height: dims.height };
   }
 
-  function updateAutomationAreaRange() {
-    if (!pendingAutomationArea || !automationAreaOverlay) return;
-    const rangeNode = automationAreaOverlay.querySelector('[data-automation-area-range]');
-    if (!(rangeNode instanceof HTMLElement)) return;
-    const guide = resolveSelectionRangeGuide(pendingAutomationArea.targetConfig);
-    const source = resolveAutomationSourcePlacement(guide?.sourcePlacement || pendingAutomationArea.sourcePlacement);
-    // v3 sends distance.within (number); legacy sent range as a string like "10".
-    // Pick whichever is present.
-    const range = guide?.range || 0;
-    if (!source || !Number.isFinite(range) || range <= 0 || !automationRangeReachesViewedFloor(guide, source)) {
-      rangeNode.hidden = true;
-      return;
-    }
-    const width = Math.max(1, source.width || 1);
-    const height = Math.max(1, source.height || 1);
-    positionAutomationCell(
-      rangeNode,
-      (source.column || 0) - range,
-      (source.row || 0) - range,
-      width + range * 2,
-      height + range * 2
-    );
-    rangeNode.hidden = false;
-  }
-
   function handleAutomationAreaPointerMove(event) {
     if (!pendingAutomationArea || !automationAreaOverlay) return;
     const cell = getAutomationGridCellFromEvent(event);
@@ -20140,10 +19523,6 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingAutomationArea.previewCell = cell;
     const box = getAutomationAreaBox(pendingAutomationArea, cell);
     if (!box) return;
-    const preview = automationAreaOverlay.querySelector('[data-automation-area-preview]');
-    if (preview instanceof HTMLElement) {
-      positionAutomationCell(preview, box.column, box.row, box.width, box.height);
-    }
     const affected = findAutomationAreaTargets(box, box.width, box.height, pendingAutomationArea.targetConfig);
     updateAutomationAreaHover(affected);
   }
@@ -21097,6 +20476,7 @@ export function mountBoardInteractions(store, routes = {}) {
       payload,
       resolve,
       reject,
+      rangeOrigin: payload.rangeOrigin ? getPlacementFromStore(payload.rangeOrigin.id) || payload.rangeOrigin : null,
       sourcePlacement: { ...targetPlacement },
       targetPlacement,
       requestedDistance: distance,
@@ -21602,9 +20982,14 @@ export function mountBoardInteractions(store, routes = {}) {
     // moves another creature ("allies shift") moves it the same way: it is passed as its own source.
     const ownMove = Boolean(sourceSnapshot?.id) && sourceSnapshot.id === targetSnapshot?.id && request.movementKind !== 'teleport';
     // A square off the map is never a destination.
-    const listed = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
+    const center = request.rangeOrigin ? { ...targetSnapshot, column: request.rangeOrigin.column, row: request.rangeOrigin.row } : targetSnapshot;
+    const candidates = buildAutomationMoveLegalCells(sourceSnapshot, center, request.effectiveDistance, baseVerb);
+    if (request.rangeOrigin) candidates.push({ column: center.column, row: center.row, width: targetSnapshot.width, height: targetSnapshot.height });
+    const listed = cellsOnMap(candidates, clampPlacementToBounds, targetSnapshot);
     // A push, pull or slide offers only the squares it really reaches along its own straight line (Brandon, November 8,
     // 2026): one a wall or a rising face would stop it short of is not offered. Any square can still be picked, with a warning.
+    // A teleport too (Brandon, November 23, 2026: warn, allow anyway): a square behind a wall is not offered, and
+    // picking it asks first.
     const forcedLine = (baseVerb === 'push' || baseVerb === 'pull' || baseVerb === 'slide') && !ownMove && typeof globalThis.wallPrototype?.forcedBlockedMove === 'function';
     const onMap = forcedLine ? listed.filter((cell) => { try { return !globalThis.wallPrototype.forcedBlockedMove(targetSnapshot, { ...targetSnapshot, column: cell.column, row: cell.row }); } catch (error) { return true; } }) : listed;
     pendingAutomationMove = {
@@ -21738,71 +21123,19 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderAutomationMoveOverlay(request) {
-    if (!mapTransform) {
-      return null;
-    }
-    const overlay = document.createElement('div');
-    overlay.className = 'vtt-automation-move';
-    const rangePresentation = getAutomationMoveRangePresentation({
-      verbLabel: request.verbLabel,
-      distance: request.effectiveDistance,
-    });
-    overlay.dataset.moveKind = rangePresentation.kind;
-    overlay.innerHTML = `
-      <svg class="vtt-automation-move__svg" aria-hidden="true">
-        <line class="vtt-automation-move__arrow" data-automation-move-arrow x1="0" y1="0" x2="0" y2="0"></line>
-      </svg>
-      <div class="vtt-automation-move__legal" data-automation-move-legal></div>
-      <div class="vtt-automation-move__ghost" data-automation-move-ghost>
-        <span>${escapeHtml(request.verbLabel || 'Push')}</span>
-      </div>
-      <div class="vtt-automation-move__controls">
-        <div class="vtt-automation-move__range" role="status">${escapeHtml(rangePresentation.label)}</div>
-        <button type="button" data-skip-automation-move>Skip</button>
-      </div>
-    `;
-    const legalLayer = overlay.querySelector('[data-automation-move-legal]');
-    request.legalCells.forEach((cell) => {
-      const node = document.createElement('div');
-      node.className = 'vtt-automation-move__cell';
-      paintProjectedMovementCell(node, cell, automationMovementShape(cell, true));
-      legalLayer?.appendChild(node);
-    });
-    mapTransform.appendChild(overlay);
-    overlay.addEventListener('keydown', event => {
-      if (!['Enter', ' '].includes(event.key) || !event.target.closest?.('[data-movement-cell]')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const rect = event.target.getBoundingClientRect();
-      handleAutomationMovePointerDown({target: event.target, button: 0, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2, preventDefault() {}});
-    });
-    return overlay;
-  }
-
-  function positionAutomationCell(node, column, row, width = 1, height = 1) {
-    const offsets = viewState.gridOffsets ?? {};
-    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-    const left = (Number.isFinite(offsets.left) ? offsets.left : 0) + column * gridSize;
-    const top = (Number.isFinite(offsets.top) ? offsets.top : 0) + row * gridSize;
-    node.style.left = `${left}px`;
-    node.style.top = `${top}px`;
-    node.style.width = `${Math.max(1, width) * gridSize}px`;
-    node.style.height = `${Math.max(1, height) * gridSize}px`;
+    const presentation = getAutomationMoveRangePresentation({ verbLabel: request.verbLabel, distance: request.effectiveDistance });
+    const controls = document.createElement('div');
+    controls.className = 'vtt-automation-move__controls vtt3d-board-controls';
+    controls.dataset.moveKind = presentation.kind;
+    controls.innerHTML = `<div class="vtt-automation-move__range" role="status">${escapeHtml(presentation.label)}</div>
+      <button type="button" data-skip-automation-move>Skip</button>`;
+    window.vtt3d.overlayHost.append(controls);
+    return controls;
   }
 
   function handleAutomationMovePointerMove(event) {
     const cell = getAutomationGridCellFromEvent(event);
-    if (!cell) return;
-    updateAutomationMovePreview(cell);
-    if (automationMoveOverlay && !pendingAutomationMove?.committing) {
-      const target = pendingAutomationMove.targetSnapshot;
-      updateMovementLoupe(automationMoveOverlay, {
-        event, cell, shape: automationMovementShape(cell, true), scale: viewState.scale || 1,
-        localPoint: getLocalMapPoint(event, {terrain: false}),
-        clampCell: c => clampPlacementToBounds(c.column, c.row, target.width, target.height),
-        legalCells: pendingAutomationMove.legalCells,
-      });
-    }
+    if (cell) updateAutomationMovePreview(cell);
   }
 
   async function handleAutomationMovePointerDown(event) {
@@ -21822,7 +21155,6 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     // Keep direct callers on the same camera path as captured pointer events.
     if (event.button === 2) {
-      startMovementPan(event);
       event.preventDefault();
       return true;
     }
@@ -21873,7 +21205,21 @@ export function mountBoardInteractions(store, routes = {}) {
     if(request.movementKind==='teleport'){
       request.committing=true;
       const origin=getPlacementFromStore(request.targetSnapshot.id);
-      teleportChoice=await promptTeleport(origin,clamped,request.effectiveDistance);
+      teleportChoice=await promptTeleport(origin,clamped,request.effectiveDistance,null,request.rangeOrigin);
+      if (teleportChoice && request.payload?.previewTargets && request.sceneId === getActiveSceneId()) {
+        const spec = request.payload.previewTargets;
+        const caster = getPlacementFromStore(request.payload.sourcePlacement?.id) || request.sourcePlacement;
+        const landing = { ...origin, ...clamped, flightHeight: teleportChoice.height };
+        const nearby = getPlacementsForActiveScene().filter(other => {
+          if (other.id === origin?.id || isAutomationPlacementHidden(other) || !doesAutomationTargetFilterMatch(other, spec.predicate, caster)) return false;
+          const distance = abilityTargetDistance(landing, other);
+          return Number.isFinite(distance) && distance <= spec.within;
+        });
+        const place = await confirmBoardAction('Affected at this landing: ' + (nearby.map(tokenLabel).join(', ') || 'no visible targets') + '.', { title: 'Teleport landing', confirmText: 'Place here', cancelText: 'Pick again' });
+        if (request.sceneId !== getActiveSceneId() || pendingAutomationMove !== request) return true;
+        if (!place) { request.committing = false; return true; }
+      }
+      if (teleportChoice && request.rangeOrigin) teleportChoice = { ...teleportChoice, allowOutOfRange: true };
       if(!teleportChoice||request.sceneId!==getActiveSceneId()){clearAutomationMoveOverlay();request.resolve?.({skipped:true,reason:'user-cancel'});return true;}
     }
     let forcedIntent=null,forcedCollision=null;
@@ -22091,7 +21437,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // Why a picked square is not one the move offers: too far, or (a push or a pull) not farther or closer every step.
   function automationMoveWarning(request, destination) {
     const name = request.targetSnapshot?.name || 'It';
-    const moved = automationChebyshevDistance(request.targetSnapshot, destination);
+    const moved = automationChebyshevDistance(request.rangeOrigin || request.targetSnapshot, destination);
     const allowed = Number(request.effectiveDistance) || 0;
     const verb = String(request.verbLabel || 'move').toLowerCase();
     const by = tokenLabel(getPlacementFromStore(request.sourceSnapshot?.id)) || 'the mover';
@@ -22163,56 +21509,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     pendingAutomationMove.previewCell = cell;
     pendingAutomationMove.previewLanding = predictAutomationMoveLanding(pendingAutomationMove, cell);
-    const ghost = automationMoveOverlay.querySelector('[data-automation-move-ghost]');
-    const arrow = automationMoveOverlay.querySelector('[data-automation-move-arrow]');
-    if (ghost instanceof HTMLElement) {
-      paintProjectedMovementCell(ghost, cell, automationMovementShape(cell));
-    }
-    automationMoveOverlay.querySelectorAll('[data-movement-cell]').forEach(button => {
-      button.setAttribute('aria-pressed', String(Number(button.dataset.column) === cell.column && Number(button.dataset.row) === cell.row));
-    });
-    if (arrow instanceof SVGLineElement) {
-      const start = automationMovementShape(pendingAutomationMove.targetSnapshot).center;
-      const end = automationMovementShape(cell).center;
-      arrow.setAttribute('x1', String(start.x));
-      arrow.setAttribute('y1', String(start.y));
-      arrow.setAttribute('x2', String(end.x));
-      arrow.setAttribute('y2', String(end.y));
-    }
-  }
-
-  function getCellPixelCenter(cell) {
-    const offsets = viewState.gridOffsets ?? {};
-    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
-    const left = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const top = Number.isFinite(offsets.top) ? offsets.top : 0;
-    return {
-      x: left + (cell.column + Math.max(1, cell.width || 1) / 2) * gridSize,
-      y: top + (cell.row + Math.max(1, cell.height || 1) / 2) * gridSize,
-    };
   }
 
   function getAutomationGridCellFromEvent(event) {
     if (event?.vtt3dPick) return event.vtt3dPick.cell;
-    if (pendingAutomationMove) {
-      const button = event.target instanceof Element ? event.target.closest('[data-movement-cell]') : null;
-      if (button && automationMoveOverlay?.contains(button)) {
-        return button.disabled ? pendingAutomationMove.previewCell : {column: Number(button.dataset.column), row: Number(button.dataset.row)};
-      }
-      if (event.target instanceof Element && event.target.closest('[data-movement-loupe]')) return pendingAutomationMove.previewCell;
-      // An offered square is picked as it is drawn on the screen: the pointer is tested against
-      // the painted squares themselves, so a square hanging over a drop is the one that is clicked.
-      const painted = Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
-        ? paintedCellAt(automationMoveOverlay?.querySelectorAll('[data-automation-move-legal] > .vtt-automation-move__cell'), event.clientX, event.clientY) : null;
-      if (painted) return pendingAutomationMove.legalCells.find(cell => cell.column === painted.column && cell.row === painted.row) || painted;
-      const point = getLocalMapPoint(event, {terrain: false});
-      // Pick the same shapes we paint, including upper-floor supports. Later
-      // cells win overlaps, matching the guide's visual stacking order.
-      for (let i = pendingAutomationMove.legalCells.length - 1; point && i >= 0; i--) {
-        const cell = pendingAutomationMove.legalCells[i];
-        if (movementCellContains(automationMovementShape(cell, true), point)) return cell;
-      }
-    }
     const localPoint = getLocalMapPoint(event, {terrain: Boolean(pendingAutomationMove)});
     const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
     if (!gridPoint) {
@@ -22223,31 +21523,6 @@ export function mountBoardInteractions(store, routes = {}) {
       pendingAutomationMove?.targetSnapshot.width || 1,
       pendingAutomationMove?.targetSnapshot.height || 1
     );
-  }
-
-  function automationMovementShape(cell, singleSquare = false) {
-    const offsets = viewState.gridOffsets || {};
-    const terrain = window.terrainPrototype;
-    const target = {...pendingAutomationMove.targetSnapshot, ...cell, ...(singleSquare ? {width: 1, height: 1} : {})};
-    // Destination squares follow ground, not a flying token's altitude.
-    const standing = {...target, movementMode: 'ground'};
-    // A square over a drop is drawn where the creature would land: on the ledge or island under
-    // it, not on the ground far beneath. Its height comes from the creature's own height now.
-    // A teleport picks its height afterwards, so its squares stay on the creature's own footing.
-    // The plate under each square is looked up once and kept while the picker is open.
-    const request = pendingAutomationMove, key = `${target.column},${target.row},${target.width},${target.height}`;
-    request.landings ??= new Map();
-    if (!request.landings.has(key)) {
-      const mover = request.movementKind === 'teleport' ? null : (getPlacementFromStore(request.targetSnapshot.id) || null);
-      const altitude = mover && terrain?.active && terrain.landingHeight ? (request.altitude ??= terrain.groundFor(mover)) : null;
-      request.landings.set(key, altitude === null ? null : terrain.landingHeight(standing, altitude));
-    }
-    const caught = request.landings.get(key);
-    // On the plate that catches it the square is flat; a corner on the edge of the ledge above does not lift it.
-    const footing = caught === null ? null : terrain.groundFor(standing);
-    const heightAt = point => offeredCornerHeight(caught, footing, terrain.groundFor(standing, point));
-    const project = terrain?.active ? point => terrain.project(point.x, point.y, heightAt(point)) : point => point;
-    return projectedMovementCell(target, {left: offsets.left || 0, top: offsets.top || 0, size: viewState.gridSize || 64}, project);
   }
 
   function automationChebyshevDistance(left, right) {
@@ -22531,7 +21806,9 @@ export function mountBoardInteractions(store, routes = {}) {
       : (Number.parseInt(targetConfig.count, 10) || 1);
     const upTo = (typeof targetConfig.count === 'object' && targetConfig.count?.mode === 'upTo');
     const countLabel = countVal > 1 ? `${upTo ? 'up to ' : ''}${countVal}` : (upTo ? 'up to 1' : 'one');
-    const creature = String(targetConfig.creature || targetConfig.predicate || 'target');
+    // Plain words for the joined kinds ("creatureOrObject" reads "creature or object"); the others as written.
+    const rawCreature = String(targetConfig.creature || targetConfig.predicate || 'target');
+    const creature = window.AbilityAutomationPrimitives?.targetPredicateWords?.(rawCreature, countVal) ?? rawCreature;
     const distance = targetConfig.distance && typeof targetConfig.distance === 'object'
       ? targetConfig.distance
       : null;
@@ -22562,7 +21839,6 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
-    clearAutomationTargetRangeOverlay();
     setPickedAutomationTargets([]);
     updateStatus(message || 'Target selection canceled.');
     request.resolve?.({ canceled: true });
@@ -22577,7 +21853,6 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
-    clearAutomationTargetRangeOverlay();
     clearPickedAutomationTargetsSoon();
     updateStatus(message || 'Target selection skipped.');
     request.resolve?.({ skipped: true });
@@ -22592,7 +21867,6 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingAutomationTarget = null;
     stopSuggestedTargetPulse();
     clearAutomationTargetPrompt();
-    clearAutomationTargetRangeOverlay();
     clearPickedAutomationTargetsSoon();
     updateStatus(message || 'Target selection complete.');
     request.resolve?.({ done: true });
@@ -24455,7 +23729,6 @@ export function mountBoardInteractions(store, routes = {}) {
           target.aura.enabled = Boolean(enabled);
         });
         refreshTokenSettings();
-        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
       });
     }
 
@@ -24472,7 +23745,6 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           target.aura.radius = radius;
         });
-        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
       });
     }
 
@@ -24488,7 +23760,6 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           target.aura.color = color;
         });
-        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
       });
     }
 
@@ -24504,7 +23775,6 @@ export function mountBoardInteractions(store, routes = {}) {
         const auraId = target.dataset.tokenSettingsAutomationAuraToggle || '';
         const enabled = target.checked;
         updateAutomationAuraEnabled(activeTokenSettingsId, auraId, enabled);
-        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
         refreshTokenSettings();
       });
     }
@@ -24914,7 +24184,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     refreshTokenSettings();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     triggerTokenFallAnimations(fallenIds);
 
     if (status) {
@@ -26714,937 +25983,9 @@ export function mountBoardInteractions(store, routes = {}) {
     return boardDraft.sceneState[key];
   }
 
-function createMapLevelCutoutTool() {
-  const root = mapLevelRenderer.element;
-  if (!root || !mapSurface) {
-    return {
-      toggle() {},
-      editLevel() {},
-      reset() {},
-      notifyGridChanged() {},
-      notifyMapLevelsChange() {},
-      isEditingLevel() {
-        return false;
-      },
-    };
-  }
-
-  const editor = document.createElement('div');
-  editor.className = 'vtt-map-level-cutout-editor';
-  editor.hidden = true;
-  editor.setAttribute('aria-hidden', 'true');
-
-  const handlesLayer = document.createElement('div');
-  handlesLayer.className = 'vtt-map-level-cutout-editor__handles';
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'vtt-map-level-cutout-editor__toolbar';
-
-  const toolbarHeader = document.createElement('div');
-  toolbarHeader.className = 'vtt-map-level-cutout-editor__header';
-
-  const toolbarTitle = document.createElement('span');
-  toolbarTitle.className = 'vtt-map-level-cutout-editor__title';
-  toolbarTitle.textContent = 'Level Cutouts';
-
-  const exitButton = document.createElement('button');
-  exitButton.type = 'button';
-  exitButton.className = 'vtt-map-level-cutout-editor__exit';
-  exitButton.setAttribute('aria-label', 'Close level cutout editor');
-  exitButton.textContent = '\u00D7';
-
-  toolbarHeader.append(toolbarTitle, exitButton);
-
-  const controls = document.createElement('div');
-  controls.className = 'vtt-map-level-cutout-editor__controls';
-
-  const removeButton = document.createElement('button');
-  removeButton.type = 'button';
-  removeButton.className =
-    'vtt-map-level-cutout-editor__btn vtt-map-level-cutout-editor__btn--danger';
-  removeButton.textContent = 'Remove';
-
-  const undoButton = document.createElement('button');
-  undoButton.type = 'button';
-  undoButton.className = 'vtt-map-level-cutout-editor__btn';
-  undoButton.textContent = 'Undo';
-
-  const applyButton = document.createElement('button');
-  applyButton.type = 'button';
-  applyButton.className =
-    'vtt-map-level-cutout-editor__btn vtt-map-level-cutout-editor__btn--primary';
-  applyButton.textContent = 'Apply';
-
-  const resetButton = document.createElement('button');
-  resetButton.type = 'button';
-  resetButton.className = 'vtt-map-level-cutout-editor__btn';
-  resetButton.textContent = 'Reset';
-
-  controls.append(removeButton, undoButton, applyButton, resetButton);
-
-  const statusLabel = document.createElement('p');
-  statusLabel.className = 'vtt-map-level-cutout-editor__status';
-  statusLabel.hidden = true;
-
-  toolbar.append(toolbarHeader, controls, statusLabel);
-  editor.append(handlesLayer, toolbar);
-  root.append(editor);
-
-  const DEFAULT_STATUS = 'Drag grid squares, then Remove to stage a cutout.';
-  const STAGED_STATUS = 'Cutout staged. Apply to save or Undo.';
-  let isActive = false;
-  let activeSceneId = null;
-  let activeLevelId = null;
-  let savedCutouts = [];
-  let draftCutouts = [];
-  let history = [];
-  let selection = null;
-  let dragState = null;
-  let cutoutSequence = 0;
-  let toolbarPosition = null;
-  let toolbarDragState = null;
-  let toolbarDimensions = { width: 0, height: 0 };
-
-  function toggle() {
-    if (isActive) {
-      deactivate();
-      return;
-    }
-
-    activate(activeLevelId);
-  }
-
-  function editLevel(levelId, options = {}) {
-    const requestedLevelId = typeof levelId === 'string' ? levelId.trim() : '';
-    if (!requestedLevelId) {
-      return false;
-    }
-
-    if (isActive && activeLevelId === requestedLevelId) {
-      deactivate();
-      return true;
-    }
-
-    if (isActive) {
-      deactivate({ restoreRenderer: true, restoreBoardStatus: false });
-    }
-
-    return activate(requestedLevelId, options);
-  }
-
-  function activate(levelId = null, options = {}) {
-    if (!isGmUser()) {
-      return false;
-    }
-
-    const context = resolveEditableMapLevel(levelId);
-    if (!context) {
-      updateStatus('Select the active map level before editing cutouts.');
-      return false;
-    }
-
-    claimActiveTool('cutouts', () => deactivate());
-    activeSceneId = context.sceneId;
-    activeLevelId = context.level.id;
-    savedCutouts = cloneCutouts(context.level.cutouts);
-    draftCutouts = cloneCutouts(savedCutouts);
-    history = [];
-    selection = null;
-    dragState = null;
-    toolbarPosition = null;
-    isActive = true;
-    mapLevelCutoutEditorActive = true;
-    publishActiveTool('cutouts', 'Edit floor cutouts');
-
-    root.hidden = false;
-    root.removeAttribute('hidden');
-    root.dataset.cutoutEditing = 'true';
-    mapSurface.dataset.mapLevelCutoutEditing = 'true';
-    editor.hidden = false;
-    editor.removeAttribute('hidden');
-    editor.dataset.interactive = 'true';
-    editor.setAttribute('aria-hidden', 'false');
-    const anchorEvent =
-      options && typeof options === 'object' ? options.anchorEvent : null;
-    positionToolbar(anchorEvent);
-    renderDraft();
-    setStatus(DEFAULT_STATUS);
-    updateStatus(`Editing cutouts for ${context.level.name || 'active map level'}.`);
-    syncCutoutToggleButtons();
-    return true;
-  }
-
-  function deactivate(options = {}) {
-    if (!isActive) {
-      return;
-    }
-
-    const {
-      restoreRenderer = true,
-      restoreBoardStatus = true,
-    } = options && typeof options === 'object' ? options : {};
-    const sceneId = activeSceneId;
-
-    isActive = false;
-    mapLevelCutoutEditorActive = false;
-    publishActiveTool('cutouts');
-    editor.hidden = true;
-    editor.setAttribute('hidden', '');
-    editor.setAttribute('aria-hidden', 'true');
-    delete editor.dataset.interactive;
-    delete root.dataset.cutoutEditing;
-    delete mapSurface.dataset.mapLevelCutoutEditing;
-    handlesLayer.replaceChildren();
-    history = [];
-    selection = null;
-    dragState = null;
-    toolbarPosition = null;
-    toolbarDragState = null;
-    toolbar.classList.remove('is-dragging');
-    toolbarHeader.classList.remove('is-dragging');
-    savedCutouts = [];
-    draftCutouts = [];
-    activeSceneId = null;
-    activeLevelId = null;
-    setStatus('');
-
-    if (restoreRenderer) {
-      syncMapLevelsForState(boardApi.getState?.() ?? {}, sceneId);
-    }
-    if (restoreBoardStatus) {
-      restoreStatus(() => true);
-    }
-    syncCutoutToggleButtons();
-  }
-
-  function resetTool() {
-    deactivate({ restoreRenderer: true, restoreBoardStatus: false });
-  }
-
-  function isEditingLevel(levelId = null) {
-    if (!isActive) {
-      return false;
-    }
-
-    const requested = typeof levelId === 'string' ? levelId.trim() : '';
-    return requested ? activeLevelId === requested : true;
-  }
-
-  function notifyGridChanged() {
-    if (!isActive) {
-      return;
-    }
-
-    positionToolbar();
-    renderDraft();
-  }
-
-  function notifyMapLevelsChange() {
-    if (!isActive) {
-      return;
-    }
-
-    const context = resolveEditableMapLevel(activeLevelId);
-    if (!context) {
-      deactivate({ restoreRenderer: false, restoreBoardStatus: true });
-      return;
-    }
-
-    const nextSavedCutouts = cloneCutouts(context.level.cutouts);
-    if (!isDirty()) {
-      savedCutouts = nextSavedCutouts;
-      draftCutouts = cloneCutouts(savedCutouts);
-      history = [];
-    } else {
-      savedCutouts = nextSavedCutouts;
-    }
-
-    renderDraft();
-    syncCutoutToggleButtons();
-  }
-
-  function resolveEditableMapLevel(levelId = null) {
-    if (!viewState.mapLoaded) {
-      return null;
-    }
-
-    const state = boardApi.getState?.() ?? {};
-    const boardState = state.boardState && typeof state.boardState === 'object'
-      ? state.boardState
-      : {};
-    const sceneId = typeof boardState.activeSceneId === 'string' ? boardState.activeSceneId : '';
-    if (!sceneId) {
-      return null;
-    }
-
-    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
-      ? boardState.sceneState
-      : {};
-    const sceneEntry = sceneState[sceneId] && typeof sceneState[sceneId] === 'object'
-      ? sceneState[sceneId]
-      : {};
-    const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
-    const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-    // Levels v2 (§5.1): cutout editing follows the GM's per-user viewer
-    // level (`userLevelState[gmId]`). Level 0 is the base map and has no
-    // cutouts, so the editor is disabled when the GM is viewing it.
-    // When the GM has never browsed in v2 (no entry in `userLevelState`),
-    // the resolver returns `BASE_MAP_LEVEL_ID` and the editor is
-    // intentionally inactive until the GM moves to a stored level.
-    const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
-    if (!viewerLevelId || viewerLevelId === BASE_MAP_LEVEL_ID) {
-      return null;
-    }
-    const activeId = viewerLevelId;
-    const requestedId = typeof levelId === 'string' && levelId.trim()
-      ? levelId.trim()
-      : activeId;
-
-    if (!requestedId || requestedId !== activeId) {
-      return null;
-    }
-
-    const level = mapLevels.levels.find((entry) => entry.id === requestedId) ?? null;
-    const hasMap = typeof level?.mapUrl === 'string' && level.mapUrl.trim().length > 0;
-    if (!level || !hasMap || level.hidden === true) {
-      return null;
-    }
-
-    return { state, boardState, sceneId, sceneGrid, mapLevels, level };
-  }
-
-  function handleEditorPointerDown(event) {
-    if (!isActive || event.button !== 0) {
-      return;
-    }
-    if (event.target && event.target.closest('.vtt-map-level-cutout-editor__toolbar')) {
-      return;
-    }
-
-    const cell = getCutoutCellFromEvent(event);
-    if (!cell) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    dragState = {
-      pointerId: event.pointerId,
-      start: cell,
-      current: cell,
-    };
-    selection = buildSelectionFromCells(dragState.start, dragState.current);
-    try {
-      editor.setPointerCapture?.(event.pointerId);
-    } catch (error) {
-      // Ignore pointer capture issues.
-    }
-    renderDraft();
-  }
-
-  function handleEditorPointerMove(event) {
-    if (!dragState || event.pointerId !== dragState.pointerId || !isActive) {
-      return;
-    }
-
-    const cell = getCutoutCellFromEvent(event);
-    if (!cell) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    dragState.current = cell;
-    selection = buildSelectionFromCells(dragState.start, dragState.current);
-    renderDraft();
-  }
-
-  function handleEditorPointerUp(event) {
-    if (!dragState || event.pointerId !== dragState.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-      editor.releasePointerCapture?.(event.pointerId);
-    } catch (error) {
-      // Ignore pointer release issues.
-    }
-    dragState = null;
-    if (selection) {
-      setStatus('Selection ready. Remove stages it as a cutout.');
-    }
-    updateControls();
-  }
-
-  function getCutoutCellFromEvent(event) {
-    const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      return null;
-    }
-
-    const gridPoint = mapPointToGrid(localPoint, viewState);
-    if (!gridPoint) {
-      return null;
-    }
-
-    const bounds = resolveGridBounds(viewState);
-    if (!Number.isFinite(bounds.columns) || !Number.isFinite(bounds.rows) ||
-        bounds.columns <= 0 || bounds.rows <= 0) {
-      return null;
-    }
-
-    const maxColumn = Math.max(0, Math.ceil(bounds.columns) - 1);
-    const maxRow = Math.max(0, Math.ceil(bounds.rows) - 1);
-    return {
-      column: clamp(Math.floor(gridPoint.column), 0, maxColumn),
-      row: clamp(Math.floor(gridPoint.row), 0, maxRow),
-    };
-  }
-
-  function buildSelectionFromCells(start, current) {
-    if (!start || !current) {
-      return null;
-    }
-
-    const column = Math.min(start.column, current.column);
-    const row = Math.min(start.row, current.row);
-    const width = Math.abs(current.column - start.column) + 1;
-    const height = Math.abs(current.row - start.row) + 1;
-    return normalizeCutout({ column, row, width, height });
-  }
-
-  function removeSelection() {
-    if (!isActive || !selection) {
-      return;
-    }
-
-    const cutout = normalizeCutout({
-      ...selection,
-      id: createCutoutId(),
-    });
-    if (!cutout) {
-      return;
-    }
-
-    history.push(cloneCutouts(draftCutouts));
-    draftCutouts = cloneCutouts([...draftCutouts, cutout]);
-    selection = null;
-    setStatus(STAGED_STATUS);
-    renderDraft();
-  }
-
-  function undoLastCutout() {
-    if (!isActive || history.length === 0) {
-      return;
-    }
-
-    draftCutouts = cloneCutouts(history.pop() ?? []);
-    selection = null;
-    setStatus(history.length ? STAGED_STATUS : DEFAULT_STATUS);
-    renderDraft();
-  }
-
-  function applyChanges() {
-    if (!isActive) {
-      return;
-    }
-
-    if (!isDirty()) {
-      setStatus('No cutout changes to apply.');
-      updateControls();
-      return;
-    }
-
-    const changed = updateActiveLevelCutouts(draftCutouts);
-    if (!changed) {
-      setStatus('Unable to update cutouts for the active map level.');
-      updateControls();
-      return;
-    }
-
-    savedCutouts = cloneCutouts(draftCutouts);
-    history = [];
-    selection = null;
-    setStatus('Cutouts applied.');
-    renderDraft();
-    markSceneStateDirty(activeSceneId, 'mapLevels');
-    persistBoardStateSnapshot();
-    syncCutoutToggleButtons();
-  }
-
-  function resetDraft() {
-    if (!isActive) {
-      return;
-    }
-
-    draftCutouts = cloneCutouts(savedCutouts);
-    history = [];
-    selection = null;
-    setStatus(DEFAULT_STATUS);
-    renderDraft();
-  }
-
-  function updateActiveLevelCutouts(nextCutouts) {
-    if (typeof boardApi.updateState !== 'function' || !activeSceneId || !activeLevelId) {
-      return false;
-    }
-
-    let updated = false;
-    boardApi.updateState?.((draft) => {
-      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-      if (!sceneEntry) {
-        return;
-      }
-
-      const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
-        sceneGrid: sceneEntry.grid ?? null,
-      });
-      // Levels v2: do NOT gate on `mapLevels.activeLevelId`. That field is
-      // legacy and is no longer kept in sync with the GM's current viewer
-      // level (Step 2 froze writes from GM nav; only level-create paths
-      // still touch it). The cutout editor's local `activeLevelId` is the
-      // level the editor opened against — set in `activate()` from the
-      // GM's per-user viewer level via `resolveEditableMapLevel`. We only
-      // need to verify the level still exists in `mapLevels.levels`.
-      const level = mapLevels.levels.find((entry) => entry.id === activeLevelId);
-      if (!level) {
-        return;
-      }
-
-      level.cutouts = cloneCutouts(nextCutouts);
-      sceneEntry.mapLevels = mapLevels;
-      updated = true;
-    });
-
-    return updated;
-  }
-
-  function renderDraft() {
-    handlesLayer.replaceChildren();
-
-    if (!isActive) {
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-    draftCutouts.forEach((cutout) => {
-      const rect = resolveCutoutPixelRect(cutout);
-      if (!rect) {
-        return;
-      }
-
-      const element = document.createElement('div');
-      element.className = 'vtt-map-level-cutout-editor__cutout';
-      element.style.left = `${rect.x}px`;
-      element.style.top = `${rect.y}px`;
-      element.style.width = `${rect.width}px`;
-      element.style.height = `${rect.height}px`;
-      fragment.append(element);
-    });
-
-    if (selection) {
-      const rect = resolveCutoutPixelRect(selection);
-      if (rect) {
-        const selectionElement = document.createElement('div');
-        selectionElement.className = 'vtt-map-level-cutout-editor__selection';
-        selectionElement.style.left = `${rect.x}px`;
-        selectionElement.style.top = `${rect.y}px`;
-        selectionElement.style.width = `${rect.width}px`;
-        selectionElement.style.height = `${rect.height}px`;
-        fragment.append(selectionElement);
-      }
-    }
-
-    handlesLayer.append(fragment);
-    applyPreviewMask();
-    updateControls();
-  }
-
-  function applyPreviewMask() {
-    if (!isActive || !activeSceneId || !activeLevelId) {
-      return;
-    }
-
-    const state = boardApi.getState?.() ?? {};
-    const boardState = state.boardState && typeof state.boardState === 'object'
-      ? state.boardState
-      : {};
-    const sceneState = boardState.sceneState && typeof boardState.sceneState === 'object'
-      ? boardState.sceneState
-      : {};
-    const sceneEntry = sceneState[activeSceneId] && typeof sceneState[activeSceneId] === 'object'
-      ? sceneState[activeSceneId]
-      : {};
-    const sceneGrid = sceneEntry.grid ?? state.grid ?? null;
-    const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
-    const level = mapLevels.levels.find((entry) => entry.id === activeLevelId);
-    if (!level) {
-      return;
-    }
-
-    level.cutouts = cloneCutouts(draftCutouts);
-    // Pass the GM's actual viewer level so the renderer's Auto-mode filter
-    // matches `syncMapLevelsForState`. Falling back to `mapLevels.activeLevelId`
-    // (the legacy field, last set when a level was created) would render every
-    // stored level — leaking upper-level images and masks down onto lower
-    // viewer levels while the editor is open.
-    const viewerLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
-    mapLevelRenderer.sync(mapLevels, {
-      sceneGrid: state.grid ?? sceneGrid,
-      view: viewState,
-      activeLevelId: viewerLevelId,
-    });
-  }
-
-  function resolveCutoutPixelRect(cutout) {
-    const normalized = normalizeCutout(cutout);
-    const metrics = resolveCutoutEditorMetrics();
-    if (!normalized || !metrics) {
-      return null;
-    }
-
-    const x1 = clamp(
-      metrics.originX + normalized.column * metrics.gridSize,
-      0,
-      metrics.innerWidth
-    );
-    const y1 = clamp(
-      metrics.originY + normalized.row * metrics.gridSize,
-      0,
-      metrics.innerHeight
-    );
-    const x2 = clamp(
-      metrics.originX + (normalized.column + normalized.width) * metrics.gridSize,
-      0,
-      metrics.innerWidth
-    );
-    const y2 = clamp(
-      metrics.originY + (normalized.row + normalized.height) * metrics.gridSize,
-      0,
-      metrics.innerHeight
-    );
-    const width = x2 - x1;
-    const height = y2 - y1;
-    if (width <= 0 || height <= 0) {
-      return null;
-    }
-
-    return {
-      x: roundToPrecision(x1, 2),
-      y: roundToPrecision(y1, 2),
-      width: roundToPrecision(width, 2),
-      height: roundToPrecision(height, 2),
-    };
-  }
-
-  function resolveCutoutEditorMetrics() {
-    const mapWidth = Number.isFinite(viewState.mapPixelSize?.width)
-      ? viewState.mapPixelSize.width
-      : 0;
-    const mapHeight = Number.isFinite(viewState.mapPixelSize?.height)
-      ? viewState.mapPixelSize.height
-      : 0;
-    if (mapWidth <= 0 || mapHeight <= 0) {
-      return null;
-    }
-
-    const insets = viewState.mapInsets ?? {};
-    const left = Number.isFinite(insets.left) ? insets.left : 0;
-    const right = Number.isFinite(insets.right) ? insets.right : 0;
-    const top = Number.isFinite(insets.top) ? insets.top : 0;
-    const bottom = Number.isFinite(insets.bottom) ? insets.bottom : 0;
-    const innerWidth = Math.max(0, mapWidth - left - right);
-    const innerHeight = Math.max(0, mapHeight - top - bottom);
-    if (innerWidth <= 0 || innerHeight <= 0) {
-      return null;
-    }
-
-    const origin = viewState.gridOrigin ?? {};
-    return {
-      innerWidth,
-      innerHeight,
-      originX: Number.isFinite(origin.x) ? origin.x : 0,
-      originY: Number.isFinite(origin.y) ? origin.y : 0,
-      gridSize: Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64),
-    };
-  }
-
-  function positionToolbar(anchorEvent = null) {
-    const rect = root.getBoundingClientRect?.();
-    if (!rect) {
-      editor.style.setProperty('--cutout-toolbar-x', '0px');
-      editor.style.setProperty('--cutout-toolbar-y', '0px');
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const rootWidth = Number.isFinite(rect.width) ? rect.width / scale : 0;
-    const rootHeight = Number.isFinite(rect.height) ? rect.height / scale : 0;
-
-    const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (toolbarRect && Number.isFinite(toolbarRect.width) && toolbarRect.width > 0) {
-      toolbarDimensions = {
-        width: toolbarRect.width / scale,
-        height: toolbarRect.height / scale,
-      };
-    }
-
-    const maxX = Math.max(0, rootWidth - toolbarDimensions.width);
-    const maxY = Math.max(0, rootHeight - toolbarDimensions.height);
-
-    let localX;
-    let localY;
-    if (anchorEvent &&
-        Number.isFinite(anchorEvent.clientX) &&
-        Number.isFinite(anchorEvent.clientY)) {
-      const offset = 12;
-      localX = (anchorEvent.clientX - rect.left + offset) / scale;
-      localY = (anchorEvent.clientY - rect.top + offset) / scale;
-    } else if (toolbarPosition) {
-      localX = toolbarPosition.x;
-      localY = toolbarPosition.y;
-    } else {
-      localX = (24 - rect.left) / scale;
-      localY = (24 - rect.top) / scale;
-    }
-
-    const safeX = clamp(Number.isFinite(localX) ? localX : 0, 0, maxX);
-    const safeY = clamp(Number.isFinite(localY) ? localY : 0, 0, maxY);
-    applyToolbarPosition(safeX, safeY);
-  }
-
-  function applyToolbarPosition(x, y) {
-    const safeX = Number.isFinite(x) ? x : 0;
-    const safeY = Number.isFinite(y) ? y : 0;
-    toolbarPosition = { x: safeX, y: safeY };
-    editor.style.setProperty('--cutout-toolbar-x', `${roundToPrecision(safeX, 2)}px`);
-    editor.style.setProperty('--cutout-toolbar-y', `${roundToPrecision(safeY, 2)}px`);
-  }
-
-  function handleToolbarPointerDown(event) {
-    if (!isActive) {
-      return;
-    }
-    if (event.button !== undefined && event.button !== 0 && event.pointerType !== 'touch') {
-      return;
-    }
-
-    if (!event.target) {
-      return;
-    }
-
-    if (
-      event.target.closest('.vtt-map-level-cutout-editor__btn') ||
-      event.target.closest('.vtt-map-level-cutout-editor__exit')
-    ) {
-      event.stopPropagation();
-      return;
-    }
-
-    if (!event.target.closest('.vtt-map-level-cutout-editor__header')) {
-      event.stopPropagation();
-      return;
-    }
-
-    const rootRect = root.getBoundingClientRect?.();
-    const toolbarRect = toolbar.getBoundingClientRect?.();
-    if (!rootRect || !toolbarRect) {
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-
-    toolbarDimensions = {
-      width: Number.isFinite(toolbarRect.width)
-        ? toolbarRect.width / scale
-        : toolbarDimensions.width,
-      height: Number.isFinite(toolbarRect.height)
-        ? toolbarRect.height / scale
-        : toolbarDimensions.height,
-    };
-
-    toolbarDragState = {
-      pointerId: event.pointerId,
-      offsetX: (event.clientX - toolbarRect.left) / scale,
-      offsetY: (event.clientY - toolbarRect.top) / scale,
-      width: toolbarDimensions.width,
-      height: toolbarDimensions.height,
-    };
-
-    try {
-      toolbar.setPointerCapture?.(event.pointerId);
-    } catch (error) {
-      // Ignore capture errors.
-    }
-
-    toolbar.classList.add('is-dragging');
-    toolbarHeader.classList.add('is-dragging');
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerMove(event) {
-    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
-      return;
-    }
-
-    const rootRect = root.getBoundingClientRect?.();
-    if (!rootRect) {
-      return;
-    }
-
-    const scale =
-      Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const rootWidth = Number.isFinite(rootRect.width) ? rootRect.width / scale : 0;
-    const rootHeight = Number.isFinite(rootRect.height) ? rootRect.height / scale : 0;
-    if (rootWidth <= 0 || rootHeight <= 0) {
-      return;
-    }
-
-    const maxX = Math.max(0, rootWidth - toolbarDragState.width);
-    const maxY = Math.max(0, rootHeight - toolbarDragState.height);
-
-    const proposedX = (event.clientX - rootRect.left) / scale - toolbarDragState.offsetX;
-    const proposedY = (event.clientY - rootRect.top) / scale - toolbarDragState.offsetY;
-
-    const nextX = clamp(Number.isFinite(proposedX) ? proposedX : 0, 0, maxX);
-    const nextY = clamp(Number.isFinite(proposedY) ? proposedY : 0, 0, maxY);
-
-    applyToolbarPosition(nextX, nextY);
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerUp(event) {
-    if (!toolbarDragState || event.pointerId !== toolbarDragState.pointerId) {
-      if (event.target && event.target.closest('.vtt-map-level-cutout-editor__toolbar')) {
-        event.stopPropagation();
-      }
-      return;
-    }
-
-    endToolbarDrag(event.pointerId);
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleToolbarPointerCancel(event) {
-    if (toolbarDragState && event.pointerId === toolbarDragState.pointerId) {
-      endToolbarDrag(event.pointerId);
-    }
-  }
-
-  function endToolbarDrag(pointerId) {
-    try {
-      toolbar.releasePointerCapture?.(pointerId);
-    } catch (error) {
-      // Ignore release errors.
-    }
-    toolbarDragState = null;
-    toolbar.classList.remove('is-dragging');
-    toolbarHeader.classList.remove('is-dragging');
-  }
-
-  function updateControls() {
-    removeButton.disabled = !isActive || !selection;
-    undoButton.disabled = !isActive || history.length === 0;
-    applyButton.disabled = !isActive || !isDirty();
-    resetButton.disabled = !isActive || (!isDirty() && !selection);
-  }
-
-  function setStatus(message) {
-    const next = typeof message === 'string' ? message.trim() : '';
-    statusLabel.textContent = next;
-    statusLabel.hidden = !next;
-  }
-
-  function isDirty() {
-    return cutoutSignature(draftCutouts) !== cutoutSignature(savedCutouts);
-  }
-
-  function cloneCutouts(cutouts = []) {
-    return (Array.isArray(cutouts) ? cutouts : [])
-      .map((cutout) => normalizeCutout(cutout))
-      .filter(Boolean);
-  }
-
-  function normalizeCutout(cutout = {}) {
-    return normalizeMapLevelCutout(cutout);
-  }
-
-  function cutoutSignature(cutouts = []) {
-    return safeStableStringify(cloneCutouts(cutouts)) ?? '[]';
-  }
-
-  function createCutoutId() {
-    cutoutSequence += 1;
-    return `map-level-cutout-${Date.now().toString(36)}-${cutoutSequence.toString(36)}`;
-  }
-
-  editor.addEventListener('pointerdown', handleEditorPointerDown, true);
-  editor.addEventListener('pointermove', handleEditorPointerMove, true);
-  editor.addEventListener('pointerup', handleEditorPointerUp, true);
-  editor.addEventListener('pointercancel', handleEditorPointerUp, true);
-  toolbar.addEventListener('pointerdown', handleToolbarPointerDown);
-  toolbar.addEventListener('pointermove', handleToolbarPointerMove);
-  toolbar.addEventListener('pointerup', handleToolbarPointerUp);
-  toolbar.addEventListener('pointercancel', handleToolbarPointerCancel);
-  toolbar.addEventListener('lostpointercapture', handleToolbarPointerCancel);
-  toolbar.addEventListener('click', (event) => {
-    event.stopPropagation();
-  });
-  exitButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    deactivate();
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && isActive) {
-      deactivate();
-      event.preventDefault();
-    }
-  });
-  removeButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    removeSelection();
-  });
-  undoButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    undoLastCutout();
-  });
-  applyButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    applyChanges();
-  });
-  resetButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    resetDraft();
-  });
-
-  updateControls();
-
-  return {
-    toggle,
-    editLevel,
-    reset: resetTool,
-    notifyGridChanged,
-    notifyMapLevelsChange,
-    isEditingLevel,
-  };
-}
-
-
 function createTemplateTool() {
   const {sanitizeColorValue, toRoundedNumber, normalizeSerializedTemplate, getGridBounds, clampPointToGridBounds, sanitizeWallSquares, clampWallSquares, getMapGridBounds, snapToStep, snapToHalf, snapPointToGrid, normalizeAngle, toRadians, rectangleCenterFromStart, rectangleStartFromCenter, resolveRectangleStart, resolveCircleCenter, clampRectanglePosition, clampRectangleCenter, clampCircleCenter, geometryForTemplate} = createTemplateGeometry(() => viewState);
-  const layer = templateLayer;
+
   const shapes = [];
   let selectedId = null;
   let selectedWallSquareKey = null;
@@ -27669,69 +26010,10 @@ function createTemplateTool() {
   const MIN_RECT_DIMENSION = 1;
   const MIN_CIRCLE_RADIUS = 0.5;
   let lastSyncedSnapshot = null;
-  const shrinkTimers = new Map();
-  const SHRINK_DELAY_MS = 5000;
   const canRestoreStatus = () => !placementState && !activeDrag && !selectedId;
   const restoreTemplateStatus = () => restoreStatus(canRestoreStatus);
 
-  if (!layer) {
-    return {
-      render() {},
-      reset() {},
-      notifyGridChanged() {},
-      notifyMapState() {},
-      cancelPlacement() {
-        return false;
-      },
-      handleKeydown() {
-        return false;
-      },
-      clearSelection() {},
-    };
-  }
-
   updateLayerVisibility();
-
-  function activateTemplate(shape) {
-    if (!shape || shape.isPreview) {
-      return;
-    }
-    // Clear any existing shrink timer for this template
-    const existingTimer = shrinkTimers.get(shape.id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-    // Remove shrunk class immediately
-    shape.elements.node.classList.remove('is-shrunk');
-    // Set a new timer to shrink after inactivity
-    const timer = setTimeout(() => {
-      shrinkTemplate(shape);
-    }, SHRINK_DELAY_MS);
-    shrinkTimers.set(shape.id, timer);
-  }
-
-  function shrinkTemplate(shape) {
-    if (!shape || shape.isPreview) {
-      return;
-    }
-    // Only shrink if not currently selected
-    if (selectedId !== shape.id) {
-      shape.elements.node.classList.add('is-shrunk');
-    }
-    shrinkTimers.delete(shape.id);
-  }
-
-  function clearShrinkTimer(shapeId) {
-    const timer = shrinkTimers.get(shapeId);
-    if (timer) {
-      clearTimeout(timer);
-      shrinkTimers.delete(shapeId);
-    }
-  }
-
-
-
-
 
   function snapshotKey(entries) {
     return JSON.stringify(entries);
@@ -27826,21 +26108,13 @@ function createTemplateTool() {
     // save, so its handles stay where they are.
     const keptId = globalThis.vtt3d?.active ? selectedId : null, keptCube = selectedWallSquareKey;
     colorIndex = 0;
-    // Clear all shrink timers for existing shapes
-    shrinkTimers.forEach((timer) => clearTimeout(timer));
-    shrinkTimers.clear();
-
-    shapes.splice(0, shapes.length).forEach((shape) => {
-      shape.elements.root.remove();
-    });
+    shapes.length = 0;
 
     entries.forEach((entry) => {
       const shape = createShape(entry.type, entry, { id: entry.id, color: entry.color });
       if (shape) {
         shapes.push(shape);
-        layer.appendChild(shape.elements.root);
         // Start templates in shrunk state since they haven't been recently interacted with
-        shape.elements.node.classList.add('is-shrunk');
       }
     });
 
@@ -27850,8 +26124,6 @@ function createTemplateTool() {
     const kept = keptId ? shapes.find((shape) => shape.id === keptId) : null;
     if (kept) {
       selectedId = kept.id;
-      kept.elements.root.classList.add('is-selected');
-      kept.elements.node.classList.remove('is-shrunk');
       selectedWallSquareKey = kept.type === 'wall' && kept.squares?.some((square) => wallSquareKey(square) === keptCube) ? keptCube : null;
       kept.selectedSquareKey = selectedWallSquareKey;
     } else if (keptId) {
@@ -27880,7 +26152,6 @@ function createTemplateTool() {
     const sceneId = commands[0].sceneId;
     pendingTemplateSave += 1;
     pendingTemplateScenes.set(sceneId, (pendingTemplateScenes.get(sceneId) || 0) + 1);
-    layer.setAttribute('aria-busy', 'true');
     if (templatesButton) templatesButton.disabled = true;
     updateStatus('Saving template changes...');
     const request = templateSaveQueue.then(() => tokenMovementRuntime.submitBoardDomainCommands(commands));
@@ -27891,7 +26162,6 @@ function createTemplateTool() {
     }).finally(() => {
       pendingTemplateSave -= 1;
       pendingTemplateScenes.set(sceneId, Math.max(0, (pendingTemplateScenes.get(sceneId) || 1) - 1));
-      layer.setAttribute('aria-busy', pendingTemplateSave ? 'true' : 'false');
       if (templatesButton) templatesButton.disabled = Boolean(pendingTemplateSave);
       lastSyncedSnapshot = null;
       notifyMapState();
@@ -27917,19 +26187,20 @@ function createTemplateTool() {
     const state = boardApi.getState?.() ?? {};
     const levelContext = resolveTemplateLevelContext(state);
     updateLayerVisibility(view);
-    shapes.forEach((shape) => {
-      updateShapeElement(shape, view);
-      applyTemplateLevelVisibility(shape, view, levelContext);
-    });
-    if (previewShape) {
-      updateShapeElement(previewShape, view);
+    const g = view.gridSize || 64;
+    const offsets = view.gridOffsets ?? {};
+    for (const shape of shapes) {
+      const squares = shape.type === 'wall' ? shape.squares : templateSquares(shape).squares;
+      shape.visible = view.mapLoaded && squares.some(({column,row}) =>
+        resolveTemplateLevelPresentation(shape, view, levelContext, {pixelBounds:{
+          left:(offsets.left || 0)+column*g, top:(offsets.top || 0)+row*g, width:g, height:g
+        }}).visible);
+      if (!shape.visible && selectedId === shape.id) clearSelection();
     }
   }
 
   function reset() {
-    shapes.splice(0, shapes.length).forEach((shape) => {
-      shape.elements.root.remove();
-    });
+    shapes.length = 0;
     clearPreview();
     placementState = null;
     activeDrag = null;
@@ -27994,7 +26265,6 @@ function createTemplateTool() {
         automationCallback: resolve,
       };
       previewShape = createShape('wall', { squares: [], wallColor }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
       updateStatus(`Select the first of ${total} wall square${total === 1 ? '' : 's'}. Each new square must touch a previous one (diagonals OK). Escape to cancel.`);
       updateLayerVisibility();
     });
@@ -28071,13 +26341,6 @@ function createTemplateTool() {
     if (!placementState || event.button !== 0) {
       return;
     }
-    if (isFogSelectActive()) {
-      // fog-select mode active — placement ignored
-    }
-
-    if (placementState.type !== 'wall' && event.target && event.target.closest('.vtt-template__node')) {
-      return;
-    }
 
     const localPoint = getLocalMapPoint(event);
     if (!localPoint) {
@@ -28145,7 +26408,6 @@ function createTemplateTool() {
         center: snappedPoint,
         radius,
       }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
       placementState.start = { ...previewShape.center };
       updateStatus('Drag to set the radius. Hold Shift to snap to half-square increments. You can release and move the cursor before clicking to confirm.');
       try {
@@ -28214,7 +26476,6 @@ function createTemplateTool() {
         anchor,
         orientation: initialRect.orientation,
       }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
       placementState.lastOrientation = initialRect.orientation ?? { x: 1, y: 1 };
       updateStatus('Drag to define the rectangle. You can release and adjust before clicking to confirm.');
       try {
@@ -28495,9 +26756,7 @@ function createTemplateTool() {
   function addShape(shape) {
     if (pendingTemplateSave) { updateStatus('Wait for the pending template change to finish.'); return; }
     shapes.push(shape);
-    layer.appendChild(shape.elements.root);
     selectShape(shape.id);
-    activateTemplate(shape);
     render(viewState);
     commitShapes();
   }
@@ -28515,7 +26774,6 @@ function createTemplateTool() {
     const levelId = placedLevelId ?? getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
     const shape = createShape('wall', { squares: clamped, wallColor, ...wallBreakFields(wallBreak), levelId, persistent: true });
     shapes.push(shape);
-    layer.appendChild(shape.elements.root);
     render(viewState);
     const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
     if (sceneId) commitTemplateCommands([{ type: 'template.upsert', sceneId, entityId: shape.id, payload: { template: serializeShape(shape) } }]);
@@ -28533,83 +26791,10 @@ function createTemplateTool() {
     const id = isPreview ? `preview_${Date.now()}` : providedId ?? createPlacementId();
     const providedColor = sanitizeColorValue(options.color ?? data.color);
     const color = isPreview ? PREVIEW_COLOR : providedColor ?? nextColor();
-    const root = document.createElement('div');
-    root.className = `vtt-template vtt-template--${type}${isPreview ? ' vtt-template--preview' : ''}`;
-    root.dataset.templateId = id;
-    root.dataset.templateLevelId =
-      typeof data.levelId === 'string' && data.levelId.trim() ? data.levelId.trim() : BASE_MAP_LEVEL_ID;
-    root.style.setProperty('--vtt-template-color', color);
-
-    // Set wall color attribute for CSS variants
-    const wallColor = data.wallColor;
-    if (type === 'wall' && typeof wallColor === 'string' && wallColor.trim()) {
-      root.dataset.wallColor = wallColor.trim();
-    }
-
-    const shapeEl = document.createElement('div');
-    shapeEl.className = 'vtt-template__shape';
-    if (type === 'wall') {
-      shapeEl.classList.add('vtt-template__shape--wall');
-    }
-    root.appendChild(shapeEl);
-
-    let wallTileContainer = null;
-    if (type === 'wall') {
-      wallTileContainer = document.createElement('div');
-      wallTileContainer.className = 'vtt-wall';
-      shapeEl.appendChild(wallTileContainer);
-    }
-
-    let node;
-    if (type === 'wall') {
-      node = document.createElement('button');
-      node.type = 'button';
-      node.className = 'vtt-wall__hitbox';
-      node.append(wallTileContainer);
-      node.dataset.templateNode = id;
-      node.setAttribute('aria-label', 'Select wall template');
-      root.appendChild(node);
-    } else {
-      node = document.createElement('button');
-      node.type = 'button';
-      node.className = 'vtt-template__node';
-      node.innerHTML = '<span class="vtt-template__node-symbol">◆</span>';
-      node.dataset.templateNode = id;
-      root.appendChild(node);
-    }
-
-    const label = document.createElement('div');
-    label.className = 'vtt-template__label';
-    if (type === 'wall') {
-      root.appendChild(label);
-    } else {
-      node.appendChild(label);
-    }
-
-    let rotateHandle = null;
-    if (!isPreview && type === 'rectangle') {
-      rotateHandle = document.createElement('button');
-      rotateHandle.type = 'button';
-      rotateHandle.className = 'vtt-template__rotate-handle';
-      rotateHandle.setAttribute('aria-label', 'Rotate rectangle template');
-      rotateHandle.innerHTML = '<span aria-hidden="true">⟳</span>';
-      node.appendChild(rotateHandle);
-    }
-
     const shape = {
       id,
       type,
       color,
-      elements: {
-        root,
-        shape: shapeEl,
-        node,
-        label,
-        rotateHandle,
-        tileContainer: wallTileContainer,
-        tiles: new Map(),
-        connectors: new Map(),
-      },
       isPreview,
       ...templateAuthority({ ...data, authorId: providedId ? data.authorId : getCurrentUserId() }),
       levelId: typeof data.levelId === 'string' && data.levelId.trim()
@@ -28618,23 +26803,6 @@ function createTemplateTool() {
     };
 
     Object.assign(shape, geometryForTemplate(type, data, viewState));
-
-    if (!isPreview) {
-      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? (type === 'wall' ? 'Drag to move. Double-click a cube to confirm deletion.' : 'Drag to move. Delete removes this template.') : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
-      node.addEventListener('keydown', (event) => handleNodeKeydown(event, shape));
-      node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
-      node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
-      node.addEventListener('pointerup', handleNodePointerUp);
-      node.addEventListener('pointercancel', handleNodePointerCancel);
-      node.addEventListener('click', (event) => handleNodeClick(event, shape));
-      if (type === 'wall') node.addEventListener('dblclick', (event) => handleWallDoubleClick(event, shape));
-      if (rotateHandle) {
-        rotateHandle.addEventListener('pointerdown', (event) => startRectangleRotation(event, shape));
-        rotateHandle.addEventListener('pointermove', (event) => updateRectangleRotation(event, shape));
-        rotateHandle.addEventListener('pointerup', (event) => endRectangleRotation(event, shape));
-        rotateHandle.addEventListener('pointercancel', (event) => endRectangleRotation(event, shape));
-      }
-    }
 
     return shape;
   }
@@ -28696,7 +26864,8 @@ function createTemplateTool() {
     showBar(panel.repairButton, broken, '');
     // Beside the wall it belongs to, clear of the turn tracker and the panels along the top.
     showBar(panel.root, true);
-    const wallRect = (globalThis.vtt3d?.active && globalThis.vtt3dLayers?.templates?.screenRect?.(shape.id)) || shape.elements.root.getBoundingClientRect();
+    const wallRect = globalThis.vtt3dLayers?.templates?.screenRect?.(shape.id);
+    if (!wallRect) { showBar(panel.root,false); return; }
     const place = placeBar({ wall: wallRect, bar: panel.root.getBoundingClientRect(), viewport: { width: window.innerWidth, height: window.innerHeight } });
     panel.root.style.left = `${place.left}px`;
     panel.root.style.top = `${place.top}px`;
@@ -28704,7 +26873,6 @@ function createTemplateTool() {
 
   function clearPreview() {
     if (previewShape) {
-      previewShape.elements.root.remove();
       previewShape = null;
     }
   }
@@ -28715,21 +26883,7 @@ function createTemplateTool() {
     }
     selectedId = id;
     selectedWallSquareKey = null;
-    shapes.forEach((shape) => {
-      const isSelected = shape.id === id;
-      shape.elements.root.classList.toggle('is-selected', isSelected);
-      if (!isSelected) {
-        shape.selectedSquareKey = null;
-        shape.elements.root.querySelectorAll('.is-selected-cube').forEach(cube => cube.classList.remove('is-selected-cube'));
-      }
-      if (isSelected) {
-        try {
-          shape.elements.node.focus({ preventScroll: true });
-        } catch (error) {
-          // Ignore focus issues in browsers that do not support preventScroll.
-        }
-      }
-    });
+    for (const shape of shapes) shape.selectedSquareKey = null;
     if (selectedId) {
       updateStatus('Template selected. Drag to move, use the rotate handle or press R to rotate, or press Delete to remove.');
     } else {
@@ -28742,9 +26896,6 @@ function createTemplateTool() {
     selectedId = null;
     selectedWallSquareKey = null;
     for (const shape of shapes) shape.selectedSquareKey = null;
-    shapes.forEach((shape) => {
-      shape.elements.root.classList.remove('is-selected');
-    });
     restoreTemplateStatus();
     refreshWallBreakPanel();
   }
@@ -28801,9 +26952,6 @@ function createTemplateTool() {
     if (!cube && !cube3d && event.type !== 'pointerdown') return;
     selectedWallSquareKey = cube3d ?? cube?.dataset.wallSquare ?? null;
     shape.selectedSquareKey = selectedWallSquareKey;
-    shape.elements.root.querySelectorAll('[data-wall-square]').forEach(tile => {
-      tile.classList.toggle('is-selected-cube', tile.dataset.wallSquare === selectedWallSquareKey);
-    });
     refreshWallBreakPanel();
   }
 
@@ -28813,9 +26961,7 @@ function createTemplateTool() {
       return;
     }
     if (!canManageShape(shapes[index])) { updateStatus('You can remove your own temporary templates; the GM manages other templates and persistent structures.'); return; }
-    clearShrinkTimer(id);
-    const [removed] = shapes.splice(index, 1);
-    removed.elements.root.remove();
+    shapes.splice(index, 1);
     if (selectedId === id) {
       selectedId = null;
     }
@@ -28880,7 +27026,6 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
-    activateTemplate(shape);
 
     const localPoint = templatePoint(event);
     const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
@@ -29002,7 +27147,6 @@ function createTemplateTool() {
       event.preventDefault();
       event.stopPropagation();
       selectShape(shape.id);
-      activateTemplate(shape);
       rotateRectangle(shape.id, event.shiftKey ? -45 : 45);
     }
   }
@@ -29012,7 +27156,6 @@ function createTemplateTool() {
     event.stopPropagation();
     selectShape(shape.id);
     selectWallCube(event, shape);
-    activateTemplate(shape);
   }
 
   function handleNodePointerDown(event, shape) {
@@ -29024,7 +27167,6 @@ function createTemplateTool() {
     event.stopPropagation();
     selectShape(shape.id);
     selectWallCube(event, shape);
-    activateTemplate(shape);
 
     const localPoint = templatePoint(event);
     if (!localPoint) {
@@ -29161,40 +27303,6 @@ function createTemplateTool() {
     commitShapes();
   }
 
-  function updateShapeElement(shape, view = viewState, levelContext = null) {
-    const { root, node, label } = shape.elements;
-    if (!view.mapLoaded) {
-      root.hidden = true;
-      root.setAttribute('aria-hidden', 'true');
-      clearTemplateVisibilityMask(root);
-      return;
-    }
-    root.hidden = false;
-    root.setAttribute('aria-hidden', 'false');
-    clearTemplateVisibilityMask(root);
-
-    const offsets = view.gridOffsets ?? {};
-    const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-
-    root.style.setProperty('--vtt-grid-size', `${gridSize}px`);
-
-    if (shape.type === 'wall') {
-      const state = boardApi.getState?.()?.boardState || {};
-      paintWallTemplate(shape, view, { config: state.sceneState?.[state.activeSceneId] || {} });
-      node.style.left = '0';
-      node.style.top = '0';
-      node.style.width = '100%';
-      node.style.height = '100%';
-      applyTemplateLevelVisibility(shape, view, levelContext);
-      return;
-    }
-
-    paintTemplateArea(shape, view);
-    applyTemplateLevelVisibility(shape, view, levelContext);
-  }
-
   function resolveTemplateLevelContext(state = boardApi.getState?.() ?? {}) {
     const boardState = state?.boardState && typeof state.boardState === 'object'
       ? state.boardState
@@ -29220,40 +27328,8 @@ function createTemplateTool() {
     return { activeSceneId, viewerLevelId, levels };
   }
 
-  function applyTemplateLevelVisibility(shape, view = viewState, levelContext = null) {
-    const root = shape?.elements?.root;
-    if (!root || shape?.isPreview || !levelContext || !Array.isArray(levelContext.levels)) {
-      return true;
-    }
-
-    const presentation = resolveTemplateLevelPresentation(shape, view, levelContext);
-    if (!presentation.visible) {
-      root.hidden = true;
-      root.setAttribute('aria-hidden', 'true');
-      clearTemplateVisibilityMask(root);
-      if (selectedId === shape.id) {
-        shape.elements.root.classList.remove('is-selected');
-        selectedId = null;
-        restoreTemplateStatus();
-      }
-      return false;
-    }
-
-    root.hidden = false;
-    root.setAttribute('aria-hidden', 'false');
-    if (presentation.maskRects && presentation.maskRects.length) {
-      applyTemplateVisibilityMask(root, presentation.maskRects);
-    } else {
-      clearTemplateVisibilityMask(root);
-    }
-    return true;
-  }
-
   function updateLayerVisibility(view = viewState) {
     publishActiveTool('template', placementState ? `Place ${placementState.type || 'template'}` : null);
-    const visible = Boolean(view.mapLoaded && (shapes.length > 0 || previewShape || placementState));
-    layer.hidden = !visible;
-    layer.setAttribute('aria-hidden', visible ? 'false' : 'true');
   }
 
   function nextColor() {
@@ -29567,7 +27643,6 @@ function createTemplateTool() {
       };
 
       previewShape = createShape('wall', { squares: [], wallColor: values?.wallColor }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
       updateStatus('Select the first square for your wall.');
       updateLayerVisibility();
       return;
@@ -29901,7 +27976,6 @@ function createTemplateTool() {
     if (!previewShape || previewShape.type !== 'wall') {
       clearPreview();
       previewShape = createShape('wall', { squares: sanitized, wallColor: placementState?.values?.wallColor }, { preview: true });
-      layer.appendChild(previewShape.elements.root);
     } else {
       previewShape.squares = sanitized;
       previewShape.hoverSquare = null;
@@ -30092,7 +28166,20 @@ function createTemplateTool() {
       commitShapes();
     },
   };
+  async function setCubeBroken(sceneId, templateId, cubeKey, broken) {
+    // A second click can arrive while another square is saving. Re-read the wall after that write.
+    while (pendingTemplateSave) await templateSaveQueue;
+    if (!isGmUser() || sceneId !== getActiveSceneId()) return;
+    const wall = shapes.find(shape => shape.id === templateId && shape.type === 'wall');
+    if (!wall || !canManageShape(wall) || wallStamina(wall) === null) return;
+    const square = wall.squares.find(s => wallSquareKey(s) === cubeKey);
+    if (!square || (square.broken === true) === broken) return;
+    wall.squares = markCubes(wall, [cubeKey], broken);
+    render(viewState);
+    return commitShapes();
+  }
   window.vtt3dTemplateTool = {
+    setCubeBroken,
     get shapes() { return shapes; },
     get preview() { return previewShape; },
     get selectedId() { return selectedId; },
@@ -30107,7 +28194,6 @@ function createTemplateTool() {
       // Carried onto another floor while it is dragged (the floor under the pointer); saved when it is let go.
       if (levelId && activeDrag?.shapeId === shape.id && shape.levelId !== levelId && canManageShape(shape)) {
         shape.levelId = levelId;
-        shape.elements.root.dataset.templateLevelId = levelId;
       }
       point3d = mapPoint;
       cube3d = cubeKey;
@@ -30368,6 +28454,12 @@ function createTemplateTool() {
 
   const coordinateBridge = {
     getContext: getCoordinateContext,
+    canEndZone: canEndPersistentZone,
+    endZone(id) {
+      const zone = getActivePersistentZones().find(zone => zone.id === id);
+      return zone && canEndPersistentZone(zone)
+        ? removePersistentZone(id, { reason: 'manually ended' }) : false;
+    },
     select: selectCoordinatePlacement,
     previewMovement: previewCoordinateMovement,
     captureMovementPreview: captureCoordinateMovementPreview,

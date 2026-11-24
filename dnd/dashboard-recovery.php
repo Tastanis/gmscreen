@@ -304,7 +304,7 @@ require_once 'version.php';
         <div class="recovery-header">
             <h1>Character Data Recovery & Backup Management</h1>
             <div class="recovery-nav">
-                <a href="dashboard.php">← Back to Dashboard</a>
+                <a href="/dnd/table/">← Back to Table</a>
                 <a href="#" onclick="createManualBackup(); return false;">Create Backup Now</a>
             </div>
         </div>
@@ -512,7 +512,7 @@ require_once 'version.php';
                     showStatus('Character data backup restored successfully!', 'success');
                     // Redirect to dashboard after 2 seconds
                     setTimeout(() => {
-                        window.location.href = 'dashboard.php';
+                        window.location.href = '/dnd/table/';
                     }, 2000);
                 } else {
                     showStatus('Failed to restore backup: ' + result.error, 'danger');

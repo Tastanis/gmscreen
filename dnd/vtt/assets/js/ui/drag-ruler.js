@@ -1,28 +1,12 @@
 // Terrain sandbox ruler integration
-const SVG_NS = 'http://www.w3.org/2000/svg';
-import { placeLegLabels, placeTotalLabel, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
+import { placeLegLabels, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { forcedLabel } from './forced-line.mjs';
 import { teleportDistance } from './teleport-choice.js';
 import { heightNote, straightWords } from './measure-straight.mjs';
-/** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
-function sizeLabel(text, size) {
-  text.style.fontSize = `${size}px`;
-  text.style.strokeWidth = `${size * 0.27}px`;
-}
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
-// Arrow visual constants
-const ARROW_STROKE_RATIO = 0.32;        // stroke-width as fraction of grid size
-const ARROW_BEND_RADIUS_RATIO = 0.55;   // smooth-bend radius as fraction of grid size
-const ARROW_GRADIENT_ID = 'vtt-measure-arrow-gradient';
-const ARROW_HEAD_ID = 'vtt-measure-arrow-head';
-// Flat ground is black from end to end. Red on the ruler means difficult terrain and nothing else.
-const ARROW_COLOR_START = '#111111';
-const ARROW_COLOR_END = '#0f0f0f';
-
 let sharedState = null;
-let cachedMapRect = null;
 let teleportSpaceHeld = false;
 // Hold M to measure: held now, and whether holding it turned the tool on (it goes off again on release).
 let mHeld = false;
@@ -38,28 +22,23 @@ export function mountDragRuler() {
   const measureButton = document.querySelector('[data-action="measure-distance"]');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
-  const grid = document.getElementById('vtt-grid-overlay');
 
-  if (!ruler || !rulerValue || !measureButton || !mapSurface || !mapTransform || !grid) {
+  if (!ruler || !rulerValue || !measureButton || !mapSurface || !mapTransform) {
     return;
   }
 
-  const overlay = createOverlay(mapTransform);
   const state = {
     active: false,
     measuring: false,
     pointerId: null,
     points: [],
     hoverPoint: null,
-    overlay,
     ruler,
     rulerValue,
     rulerDetail: ensureRulerDetail(ruler),
     measureButton,
     mapSurface,
     mapTransform,
-    grid,
-    overlaySize: { width: 0, height: 0 },
     mode: null,
     movementLabel: 'Move',
     // Click, then click: let go on the square pressed and the line follows the pointer until the next click.
@@ -92,12 +71,6 @@ export function mountDragRuler() {
 
 
   state.measureButton.setAttribute('aria-pressed', 'false');
-
-  const resizeObserver =
-    typeof ResizeObserver === 'function'
-      ? new ResizeObserver(() => syncOverlaySize(state))
-      : null;
-  resizeObserver?.observe(mapTransform);
 
   if (typeof MutationObserver === 'function') {
     const visibilityObserver = new MutationObserver(() => {
@@ -256,7 +229,6 @@ export function mountDragRuler() {
     }
   });
 
-  syncOverlaySize(state);
 }
 
 function toggleMeasureMode(state, nextActive) {
@@ -309,7 +281,7 @@ function tokenUnderPointer(state, event) {
   const id = node?.closest?.('[data-placement-id]')?.dataset.placementId;
   const token = id ? window.vtt3dBridge?.measurePoint?.(id) : null;
   if (!token) return null;
-  const metrics = getGridMetrics(state.grid, state.mapTransform);
+  const metrics = getGridMetrics();
   const grid = metrics && metrics.size > 0 ? metrics.size : 64, left = metrics?.offsets.left ?? 0, top = metrics?.offsets.top ?? 0;
   return {
     mapX: left + (token.column + 0.5) * grid,
@@ -347,7 +319,6 @@ function showHeightNote(state, at) {
 }
 
 function beginMeasurement(state, pointerId, startPoint) {
-  invalidateMapRectCache();
   state.measuring = true;
   state.pointerId = pointerId;
   state.points = [startPoint];
@@ -386,7 +357,6 @@ function commitHoverPoint(state, snapPoint) {
 }
 
 function endMeasurement(state) {
-  invalidateMapRectCache();
   state.measuring = false;
   state.following = false;
   state.pressSquare = null;
@@ -500,18 +470,16 @@ function getSnappedPoint(state, event) {
   // 3D board, Measure tool: pointing at a token measures to the token.
   const token = state.active && state.mode !== 'external' ? tokenUnderPointer(state, event) : null;
   if (token) return token;
-  const rawCoords = getMapCoordinates(state.mapTransform, event);
-  const mapCoords = rawCoords && (window.terrainPrototype?.unproject(rawCoords) ?? rawCoords);
+  const mapCoords = window.vtt3d?.clientToMap(event.clientX, event.clientY);
   if (!mapCoords) {
     return null;
   }
 
-  const gridMetrics = getGridMetrics(state.grid, state.mapTransform);
+  const gridMetrics = getGridMetrics();
   if (!gridMetrics) {
     return null;
   }
 
-  syncOverlaySize(state);
 
   const { size, offsets, columns, rows } = gridMetrics;
   if (size <= 0 || columns <= 0 || rows <= 0) {
@@ -540,75 +508,14 @@ function getSnappedPoint(state, event) {
   };
 }
 
-function invalidateMapRectCache() {
-  cachedMapRect = null;
-}
-
-function getOrComputeMapRect(mapTransform) {
-  if (cachedMapRect) {
-    return cachedMapRect;
-  }
-  const rect = mapTransform.getBoundingClientRect();
-  const baseWidth = mapTransform.offsetWidth;
-  const baseHeight = mapTransform.offsetHeight;
-  if (!baseWidth || !baseHeight) {
-    return null;
-  }
-  const scaleX = rect.width / baseWidth;
-  const scaleY = rect.height / baseHeight;
-  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || scaleX === 0 || scaleY === 0) {
-    return null;
-  }
-  cachedMapRect = { rect, scaleX, scaleY };
-  return cachedMapRect;
-}
-
-function getMapCoordinates(mapTransform, event) {
-  // 3D board: the map point under the pointer on the 3D surfaces, with its height.
-  if (window.vtt3d?.active) {
-    const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
-    return hit ? { x: hit.x, y: hit.y, height: hit.height, levelId: hit.levelId, surfaceId: hit.surfaceId, rampId: hit.rampId } : null;
-  }
-  const cached = getOrComputeMapRect(mapTransform);
-  if (!cached) {
-    return null;
-  }
-
-  return {
-    x: (event.clientX - cached.rect.left) / cached.scaleX,
-    y: (event.clientY - cached.rect.top) / cached.scaleY,
-  };
-}
-
-function getGridMetrics(grid, mapTransform) {
-  const style = getComputedStyle(grid);
-  const rawSize = parseFloat(style.getPropertyValue('--vtt-grid-size') || '0');
-  const size = Number.isFinite(rawSize) && rawSize > 0 ? rawSize : 64;
-
-  const offsets = {
-    top: parseFloat(style.getPropertyValue('--vtt-grid-offset-top') || '0'),
-    right: parseFloat(style.getPropertyValue('--vtt-grid-offset-right') || '0'),
-    bottom: parseFloat(style.getPropertyValue('--vtt-grid-offset-bottom') || '0'),
-    left: parseFloat(style.getPropertyValue('--vtt-grid-offset-left') || '0'),
-  };
-
-  const effectiveWidth = Math.max(
-    0,
-    mapTransform.offsetWidth - offsets.left - offsets.right
-  );
-  const effectiveHeight = Math.max(
-    0,
-    mapTransform.offsetHeight - offsets.top - offsets.bottom
-  );
-
-  const columns = size > 0 ? Math.floor(effectiveWidth / size) : 0;
-  const rows = size > 0 ? Math.floor(effectiveHeight / size) : 0;
-
-  return {
-    size,
-    offsets,
-    columns: Math.max(columns, 0),
-    rows: Math.max(rows, 0),
+function getGridMetrics() {
+  const view = window.terrainContext?.()?.view;
+  const size = view?.gridSize || 64;
+  const offsets = view?.gridOffsets || {left:0, right:0, top:0, bottom:0};
+  const pixels = view?.mapPixelSize || {};
+  return {size, offsets,
+    columns: Math.max(0, Math.floor(((pixels.width || 0) - offsets.left - offsets.right) / size)),
+    rows: Math.max(0, Math.floor(((pixels.height || 0) - offsets.top - offsets.bottom) / size)),
   };
 }
 
@@ -637,7 +544,7 @@ function drawOverlay(state) {
   const teleport3D = kind === 'teleport' && Number.isFinite(state.points[0]?.surfaceElevation) && Number.isFinite(lastPoint?.surfaceElevation);
   const rawPoints = teleport3D ? [state.points[0], lastPoint] : getRenderablePoints(state);
   const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
-  const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
+
   const zones = window.terrainZones?.routeCost ? window.terrainZones : null;
   let priorMeasured={distance:0,cost:0,difficult:[],climbs:[]};
   const segments = getSegments(rawPoints).map((segment,index) => {
@@ -650,8 +557,7 @@ function drawOverlay(state) {
       priorMeasured=full;
     }
     const squares = forced ? segment.squares : measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
-    const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
-    return { ...placed, squares, cost: forced ? squares : measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
+    return { ...segment, squares, cost: forced ? squares : measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
   });
   const forcedLegs = forced && segments.length ? rawPoints.map((point) => ({ column: point.column, row: point.row })) : null;
   const stops = Boolean(forcedLegs && zones?.forcedStops?.(forcedLegs));
@@ -661,10 +567,10 @@ function drawOverlay(state) {
   const shiftWarning = segments.some((segment) => segment.shiftInDifficult);
   state.lastMeasure = segments.length ? { distance: totalSquares, cost: totalCost, kind, shiftInDifficult: shiftWarning } : null;
   state.lastPresentation = null;
-  if (segments.length && window.vtt3dActive) {
+  if (segments.length) {
     const cell = (p, rawHeight) => ({ column:p.column, row:p.row, ...(Number.isFinite(rawHeight)?{rawHeight}:{}) });
     const world = p => ({ x:p.column+.5, y:p.row+.5, z:p.rawHeight??p.surfaceElevation??0 });
-    const pieces = teleport3D ? [{ points:rawPoints.map(p=>world({...p,rawHeight:p.surfaceElevation})), color:'#111111' }]
+    const pieces = teleport3D || !terrain?.movementPresentation ? [{ points:rawPoints.map(p=>world({...p,rawHeight:p.surfaceElevation})), color:'#111111' }]
       : terrain?.movementPresentation?.(rawPoints,forced,state.measurementActor) ?? [];
     const difficult = [], climbs = [];
     for (let index=0;index<segments.length;index++) {
@@ -672,7 +578,7 @@ function drawOverlay(state) {
       for (const step of segment.difficult) {
         const next=step.next||firstStepOf(segments[index+1]);
         const from=cell(step.from,step.fromHeight),at=cell(step,step.rawHeight),onward=next?cell(next,next===step.next?step.nextHeight:undefined):null;
-        const points=terrain?.squarePresentation?.(from,at,onward)??[world(from),world(at)];
+        const points=terrain?.squarePresentation?.(from,at,onward)??flatSquareSpan(world(from), world(at), onward && world(onward));
         difficult.push({points,at:world(at),multiplier:step.multiplier});
       }
       for (const step of segment.climbs) {
@@ -684,60 +590,11 @@ function drawOverlay(state) {
   }
 
   if (!segments.length) {
-    state.overlay.svg.setAttribute('hidden', 'hidden');
-    state.overlay.svg.style.display = 'none';
-    state.overlay.path.setAttribute('d', '');
-    state.overlay.nodes.innerHTML = '';
-    state.overlay.labels.innerHTML = '';
-    state.overlay.svg.querySelector('[data-difficult-route]')?.remove();
     hideShiftWarning();
     state.ruler.setAttribute('hidden', 'hidden');
     state.rulerValue.textContent = '0 squares';
-    if (state.overlay.total) {
-      state.overlay.total.setAttribute('hidden', 'hidden');
-      state.overlay.total.style.display = 'none';
-      state.overlay.total.textContent = '';
-    }
     return;
   }
-
-  const gridMetrics = getGridMetrics(state.grid, state.mapTransform);
-  const gridSize =
-    gridMetrics && gridMetrics.size > 0 ? gridMetrics.size : 64;
-
-  state.overlay.svg.removeAttribute('hidden');
-  state.overlay.svg.style.display = '';
-
-  // Build a king-move SVG path: diagonal segment from source, smooth bend,
-  // cardinal segment into destination. Pure cardinal/diagonal collapses to
-  // a straight line.
-  // A forced move is drawn as the straight lines it travels, with no diagonal-first bend.
-  const pathD = terrain ? terrain.routePath(rawPoints, forced) : forced ? points.map((p, i) => `${i ? 'L' : 'M'} ${p.mapX} ${p.mapY}`).join(' ') : buildArrowPathD(points, gridSize);
-  state.overlay.path.setAttribute('d', pathD);
-  if(terrain)terrain.paintRoute(state.overlay,rawPoints,gridSize,forced);
-  else {state.overlay.path.style.opacity='';state.overlay.svg.querySelector('[data-terrain-route]')?.remove();}
-  syncDifficultSteps(state.overlay, segments, gridSize, terrain);
-
-  // Stroke thickness scales with grid size so it looks consistent at any zoom.
-  state.overlay.path.setAttribute(
-    'stroke-width',
-    String(Math.max(2, gridSize * ARROW_STROKE_RATIO))
-  );
-
-  // Re-anchor the linear gradient to follow the actual path direction
-  // (first point -> last point in user-space coordinates).
-  if (state.overlay.gradient) {
-    const startPt = points[0];
-    const endPt = points[points.length - 1];
-    state.overlay.gradient.setAttribute('x1', String(startPt.mapX));
-    state.overlay.gradient.setAttribute('y1', String(startPt.mapY));
-    state.overlay.gradient.setAttribute('x2', String(endPt.mapX));
-    state.overlay.gradient.setAttribute('y2', String(endPt.mapY));
-  }
-
-  syncNodeMarkers(state.overlay.nodes, points);
-  const endPoint = points[points.length - 1];
-  let totalBox = null;
 
   state.ruler.removeAttribute('hidden');
   const wording = rulerWording({
@@ -764,7 +621,7 @@ function drawOverlay(state) {
       const z = Number.isFinite(known) ? known : Number.isFinite(p.surfaceElevation) ? p.surfaceElevation : (window.terrainPrototype?.heightAt?.(p.mapX, p.mapY) ?? 0);
       return { x, y, z };
     };
-    const gridForLabels = getGridMetrics(state.grid, state.mapTransform)?.size || 64;
+    const gridForLabels = getGridMetrics()?.size || 64;
     state.lastPresentation.nodes = rawPoints.map(at);
     state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (stops ? WORDING_SEPARATOR + 'Stops at a wall' : '') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
     state.lastPresentation.legs = placeLegLabels(segments, null, gridForLabels).map((label, index) => {
@@ -773,23 +630,6 @@ function drawOverlay(state) {
     });
   }
   if (shiftWarning) showShiftWarning(); else hideShiftWarning();
-  if (state.overlay.total && endPoint) {
-    // The shift warning has its own pop-up, so the label on the map carries the cost only.
-    const costPart = wording.cost ? `${WORDING_SEPARATOR}${wording.cost}` : null;
-    const placed = placeTotalLabel({
-      end: endPoint,
-      previous: points[points.length - 2] ?? null,
-      gridSize,
-      mapHeight: Number(state.overlay.svg.getAttribute('height')) || Infinity,
-      lines: [wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (costPart ?? '')],
-    });
-    sizeLabel(state.overlay.total, placed.fontSize);
-    setLabel(state.overlay.total, endPoint.mapX, placed.top, wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : ''), costPart);
-    totalBox = placed.box;
-    state.overlay.total.removeAttribute('hidden');
-    state.overlay.total.style.display = '';
-  }
-  syncSegmentLabels(state.overlay.labels, segments, totalBox, gridSize);
 }
 
 /** The Measure tool's straight line on the 3D board. False when there is nothing to measure yet. */
@@ -810,10 +650,6 @@ function drawStraight(state) {
     total: { text: words.text, at: nodes.at(-1) },
     legs: nodes.length > 2 ? words.legs.map((leg, index) => ({ text: String(leg.distance), at: middle(nodes[index], nodes[index + 1]) })) : [],
   };
-  // The flat map's drawing is not used on the 3D board.
-  state.overlay.svg.setAttribute('hidden', 'hidden');
-  state.overlay.svg.style.display = 'none';
-  state.overlay.svg.querySelector('[data-difficult-route]')?.remove();
   hideShiftWarning();
   state.ruler.removeAttribute('hidden');
   state.rulerValue.textContent = words.text;
@@ -841,7 +677,7 @@ function assumedCorners(state) {
   if (state.mode !== 'external' || !state.measuring || !state.points.length || !state.hoverPoint) return null;
   // Alt held while dragging: a straight line, no route-finding (Brandon, November 8, 2026).
   if (state.straight) { state.plannedRoute = null; return null; }
-  const start = state.points[0], metrics = getGridMetrics(state.grid, state.mapTransform), grid = metrics && metrics.size > 0 ? metrics.size : 64;
+  const start = state.points[0], metrics = getGridMetrics(), grid = metrics && metrics.size > 0 ? metrics.size : 64;
   const at = (corner) => ({ ...start, column: corner.column, row: corner.row, mapX: start.mapX + (corner.column - start.column) * grid, mapY: start.mapY + (corner.row - start.row) * grid });
   // 3D board: a square-by-square walking search supplies the corners, so the drawn line, the ruler's cost and the
   // submitted move are one route. Each leg between his own corners is searched too: a corner never turns it off.
@@ -927,142 +763,16 @@ function getSegments(points) {
  * @param {number} gridSize  Pixel size of one grid square (used for bend radius).
  * @returns {string} SVG path data, or empty string if fewer than 2 points.
  */
-function buildArrowPathD(points, gridSize) {
-  if (!Array.isArray(points) || points.length < 2) {
-    return '';
-  }
-
-  const safeGrid = Number.isFinite(gridSize) && gridSize > 0 ? gridSize : 64;
-  const bendRadius = safeGrid * ARROW_BEND_RADIUS_RATIO;
-
-  const parts = [`M ${fmt(points[0].mapX)} ${fmt(points[0].mapY)}`];
-
-  for (let i = 1; i < points.length; i += 1) {
-    const a = points[i - 1];
-    const b = points[i];
-
-    const dCol = b.column - a.column;
-    const dRow = b.row - a.row;
-    const adCol = Math.abs(dCol);
-    const adRow = Math.abs(dRow);
-    const sCol = Math.sign(dCol);
-    const sRow = Math.sign(dRow);
-
-    const diagSteps = Math.min(adCol, adRow);
-    const cardSteps = Math.max(adCol, adRow) - diagSteps;
-
-    // Pure cardinal (dCol==0 or dRow==0) or pure diagonal (|dCol|==|dRow|).
-    if (diagSteps === 0 || cardSteps === 0) {
-      parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
-      continue;
-    }
-
-    // Bend point in map-space: end of the diagonal segment from the source.
-    const bendX = a.mapX + sCol * diagSteps * safeGrid;
-    const bendY = a.mapY + sRow * diagSteps * safeGrid;
-
-    const diagLen = Math.hypot(bendX - a.mapX, bendY - a.mapY);
-    const cardLen = Math.hypot(b.mapX - bendX, b.mapY - bendY);
-    if (diagLen <= 0 || cardLen <= 0) {
-      parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
-      continue;
-    }
-
-    const uxDiag = (bendX - a.mapX) / diagLen;
-    const uyDiag = (bendY - a.mapY) / diagLen;
-    const uxCard = (b.mapX - bendX) / cardLen;
-    const uyCard = (b.mapY - bendY) / cardLen;
-
-    // Clamp the corner radius so the curve never overruns either segment.
-    const r = Math.min(bendRadius, diagLen * 0.5, cardLen * 0.5);
-
-    const beforeBendX = bendX - uxDiag * r;
-    const beforeBendY = bendY - uyDiag * r;
-    const afterBendX = bendX + uxCard * r;
-    const afterBendY = bendY + uyCard * r;
-
-    parts.push(`L ${fmt(beforeBendX)} ${fmt(beforeBendY)}`);
-    parts.push(
-      `Q ${fmt(bendX)} ${fmt(bendY)} ${fmt(afterBendX)} ${fmt(afterBendY)}`
-    );
-    parts.push(`L ${fmt(b.mapX)} ${fmt(b.mapY)}`);
-  }
-
-  return parts.join(' ');
+function flatSquareSpan(from, at, next) {
+  const midpoint = (a, b) => ({ x: (a.x+b.x)/2, y: (a.y+b.y)/2, z: (a.z+b.z)/2 });
+  const points = [midpoint(from, at), at];
+  if (next) points.push(midpoint(at, next));
+  return points;
 }
 
-function fmt(n) {
-  // Trim trailing zeros for compact path strings; SVG accepts plain decimals.
-  return Number.isFinite(n) ? Number(n.toFixed(2)).toString() : '0';
-}
-
-function syncNodeMarkers(group, points) {
-  const existing = Array.from(group.children);
-  const desired = points.length;
-
-  if (existing.length > desired) {
-    existing.slice(desired).forEach((node) => node.remove());
-  }
-
-  const nodes = Array.from(group.children);
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
-    let circle = nodes[index];
-    if (!circle) {
-      circle = document.createElementNS(SVG_NS, 'circle');
-      circle.classList.add('vtt-measure-overlay__node');
-      circle.setAttribute('r', '10');
-      circle.setAttribute('vector-effect', 'non-scaling-stroke');
-      group.appendChild(circle);
-      nodes.push(circle);
-    }
-    circle.setAttribute('cx', point.mapX);
-    circle.setAttribute('cy', point.mapY);
-  }
-}
-
-function syncSegmentLabels(group, segments, totalBox = null, gridSize = 64) {
-  const labels = placeLegLabels(segments, totalBox, gridSize);
-  Array.from(group.children).slice(labels.length).forEach((node) => node.remove());
-
-  const nodes = Array.from(group.children);
-  labels.forEach((label, index) => {
-    let text = nodes[index];
-    if (!text) {
-      text = document.createElementNS(SVG_NS, 'text');
-      text.classList.add('vtt-measure-overlay__label');
-      text.setAttribute('dominant-baseline', 'middle');
-      group.appendChild(text);
-    }
-    text.setAttribute('text-anchor', label.anchor);
-    sizeLabel(text, label.fontSize);
-    setLabel(text, label.x, label.y, label.text);
-  });
-}
-
-/** One label on one line; the cost part, when there is one, follows in its own colour. */
-function setLabel(text, x, y, main, costPart = null) {
-  text.setAttribute('x', x);
-  text.setAttribute('y', y);
-  text.setAttribute('dy', '0');
-  if (!costPart) {
-    if (text.childElementCount || text.textContent !== main) text.textContent = main;
-    return;
-  }
-  const spans = [main, costPart].map((part, index) => {
-    const span = document.createElementNS(SVG_NS, 'tspan');
-    if (index) span.classList.add('vtt-measure-overlay__cost');
-    span.textContent = part;
-    return span;
-  });
-  text.replaceChildren(...spans);
-}
-
-// ---- Shift warning ----------------------------------------------------------
-// One pop-up, reused: it appears while a shift drag crosses difficult terrain and
-// again briefly after such a move lands. It never stacks and needs no dismissing.
 let shiftWarningElement = null;
 let shiftWarningTimer = null;
+
 function ensureShiftWarning() {
   if (shiftWarningElement?.isConnected) return shiftWarningElement;
   shiftWarningElement = document.createElement('div');
@@ -1102,173 +812,6 @@ function firstStepOf(segment) {
 }
 
 /** Flashing red over each difficult square on the route, with its multiplier (x2, x4). */
-function syncDifficultSteps(overlay, segments, gridSize, terrain) {
-  let group = overlay.svg.querySelector('[data-difficult-route]');
-  // A square that ends one leg is left by the first step of the next leg.
-  const steps = segments.flatMap((segment, index) => segment.difficult.map((step) => ({ step, origin: segment.rawStart, next: step.next || firstStepOf(segments[index + 1]) })));
-  // A climb keeps the green uphill line and gets a small amber mark; red stays for difficult terrain.
-  const climbs = segments.flatMap((segment) => (segment.climbs || []).map((step) => ({ step, origin: segment.rawStart })));
-  if (!steps.length && !climbs.length) {
-    group?.remove();
-    return;
-  }
-  if (!group) {
-    group = document.createElementNS(SVG_NS, 'g');
-    group.dataset.difficultRoute = '';
-    overlay.svg.insertBefore(group, overlay.nodes);
-  }
-  const cell = (origin, point, rawHeight) => ({
-    column: point.column,
-    row: point.row,
-    mapX: origin.mapX + (point.column - origin.column) * gridSize,
-    mapY: origin.mapY + (point.row - origin.row) * gridSize,
-    ...(Number.isFinite(rawHeight) ? { rawHeight } : {}),
-  });
-  const parts = [];
-  const between = (a, b) => ({ mapX: (a.mapX + b.mapX) / 2, mapY: (a.mapY + b.mapY) / 2 });
-  for (const { step, origin, next } of steps) {
-    const from = cell(origin, step.from, step.fromHeight);
-    const to = cell(origin, step, step.rawHeight);
-    // Red covers the difficult square and nothing else: from the edge the route enters by to the edge it leaves by.
-    const onward = next && (next.column !== step.column || next.row !== step.row) ? cell(origin, next, next === step.next ? step.nextHeight : undefined) : null;
-    const at = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.classList.add('vtt-difficult-step');
-    path.setAttribute('d', terrain ? terrain.squarePath(from, to, onward) : [between(from, to), to, ...(onward ? [between(to, onward)] : [])].map((point, i) => `${i ? 'L' : 'M'} ${fmt(point.mapX)} ${fmt(point.mapY)}`).join(' '));
-    path.setAttribute('stroke-width', String(Math.max(3, gridSize * 0.34)));
-    const label = document.createElementNS(SVG_NS, 'text');
-    label.classList.add('vtt-difficult-step__label');
-    label.setAttribute('x', at.mapX);
-    label.setAttribute('y', at.mapY);
-    label.setAttribute('font-size', String(Math.max(10, gridSize * 0.36)));
-    label.dataset.multiplier = String(step.multiplier);
-    label.textContent = `×${step.multiplier}`;
-    parts.push(path, label);
-  }
-  for (const { step, origin } of climbs) {
-    const from = cell(origin, step.from);
-    const to = cell(origin, step);
-    const a = terrain ? { ...from, ...terrain.rulerPoint(from) } : from;
-    const b = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
-    const label = document.createElementNS(SVG_NS, 'text');
-    label.classList.add('vtt-climb-step__label');
-    label.setAttribute('x', (a.mapX + b.mapX) / 2);
-    label.setAttribute('y', (a.mapY + b.mapY) / 2);
-    label.setAttribute('font-size', String(Math.max(10, gridSize * 0.36)));
-    label.dataset.climb = String(step.extra);
-    label.textContent = '×2';
-    parts.push(label);
-  }
-  group.replaceChildren(...parts);
-}
-
-function createOverlay(container) {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.classList.add('vtt-measure-overlay');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('preserveAspectRatio', 'none');
-  svg.setAttribute('hidden', 'hidden');
-  svg.style.pointerEvents = 'none';
-
-  // <defs>: gradient (black along the path) + arrowhead marker.
-  const defs = document.createElementNS(SVG_NS, 'defs');
-
-  const gradient = document.createElementNS(SVG_NS, 'linearGradient');
-  gradient.setAttribute('id', ARROW_GRADIENT_ID);
-  gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-  // x1/y1/x2/y2 are set per-render in updateOverlay to follow the path.
-  gradient.setAttribute('x1', '0');
-  gradient.setAttribute('y1', '0');
-  gradient.setAttribute('x2', '1');
-  gradient.setAttribute('y2', '0');
-
-  const stopStart = document.createElementNS(SVG_NS, 'stop');
-  stopStart.setAttribute('offset', '0%');
-  stopStart.setAttribute('stop-color', ARROW_COLOR_START);
-  stopStart.setAttribute('stop-opacity', '0.95');
-
-  const stopEnd = document.createElementNS(SVG_NS, 'stop');
-  stopEnd.setAttribute('offset', '100%');
-  stopEnd.setAttribute('stop-color', ARROW_COLOR_END);
-  stopEnd.setAttribute('stop-opacity', '1');
-
-  gradient.appendChild(stopStart);
-  gradient.appendChild(stopEnd);
-  defs.appendChild(gradient);
-
-  // Arrowhead marker. orient="auto" rotates with path tangent.
-  // viewBox 0..10, refX=8 lets the tip sit at the path end with a small
-  // overlap so it visually merges with the stroke.
-  const marker = document.createElementNS(SVG_NS, 'marker');
-  marker.setAttribute('id', ARROW_HEAD_ID);
-  marker.setAttribute('viewBox', '0 0 10 10');
-  marker.setAttribute('refX', '8');
-  marker.setAttribute('refY', '5');
-  // markerUnits="strokeWidth" multiplies these by the path's stroke-width,
-  // which is `gridSize * ARROW_STROKE_RATIO`. Keep the head at ~0.6 of a
-  // grid square so it reads as an arrow without dwarfing the destination
-  // cell on long shots.
-  marker.setAttribute('markerWidth', '2');
-  marker.setAttribute('markerHeight', '2');
-  marker.setAttribute('orient', 'auto-start-reverse');
-  marker.setAttribute('markerUnits', 'strokeWidth');
-
-  const headShape = document.createElementNS(SVG_NS, 'path');
-  // Wide-base arrowhead: a chunky chevron with rounded inset to match the
-  // reference screenshots (dark interior, light outline applied via CSS).
-  headShape.setAttribute('d', 'M 0 0 L 10 5 L 0 10 L 2.5 5 Z');
-  headShape.classList.add('vtt-measure-overlay__arrowhead');
-  marker.appendChild(headShape);
-  defs.appendChild(marker);
-
-  svg.appendChild(defs);
-
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.classList.add('vtt-measure-overlay__path');
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', `url(#${ARROW_GRADIENT_ID})`);
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-  path.setAttribute('marker-end', `url(#${ARROW_HEAD_ID})`);
-  svg.appendChild(path);
-
-  const nodes = document.createElementNS(SVG_NS, 'g');
-  nodes.classList.add('vtt-measure-overlay__nodes');
-  svg.appendChild(nodes);
-
-  const labels = document.createElementNS(SVG_NS, 'g');
-  labels.classList.add('vtt-measure-overlay__labels');
-  svg.appendChild(labels);
-
-  const total = document.createElementNS(SVG_NS, 'text');
-  total.classList.add('vtt-measure-overlay__label', 'vtt-measure-overlay__total');
-  total.setAttribute('text-anchor', 'middle');
-  total.setAttribute('dominant-baseline', 'middle');
-  total.setAttribute('hidden', 'hidden');
-  total.setAttribute('dy', '0');
-  svg.appendChild(total);
-
-  container.appendChild(svg);
-
-  return { svg, path, nodes, labels, total, gradient };
-}
-
-function syncOverlaySize(state) {
-  invalidateMapRectCache();
-  const width = state.mapTransform.offsetWidth || 0;
-  const height = state.mapTransform.offsetHeight || 0;
-  if (state.overlaySize.width === width && state.overlaySize.height === height) {
-    return;
-  }
-
-  const safeWidth = Math.max(width, 1);
-  const safeHeight = Math.max(height, 1);
-  state.overlay.svg.setAttribute('viewBox', `0 0 ${safeWidth} ${safeHeight}`);
-  state.overlay.svg.setAttribute('width', String(safeWidth));
-  state.overlay.svg.setAttribute('height', String(safeHeight));
-  state.overlaySize = { width, height };
-}
-
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }

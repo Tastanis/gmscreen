@@ -104,7 +104,7 @@ test('what comes back: the Director\'s list, and whose turn the pop-up is', () =
 test('it is on every page the chat is on, and the buttons are the Director\'s', () => {
   // The module is loaded before the chat panel, which starts it and tells it when the tests have changed.
   for (const [page, pattern] of [
-    ['dashboard.php', /<script src="js\/ask-test\.js\?v=[^"]+"><\/script>\s*<script src="js\/chat-panel\.js\?v=[^"]+"><\/script>/],
+    ['table/chat.php', /src="\/dnd\/js\/ask-test\.js[\s\S]*?src="\/dnd\/js\/chat-panel\.js/],
     ['character_sheet/index.php', /<script src="\.\.\/js\/ask-test\.js\?v=[^"]+"><\/script>\s*<script src="\.\.\/js\/chat-panel\.js/],
     ['vtt/templates/layout.php', /<script src="\.\.\/js\/ask-test\.js\?v=[^"]+"><\/script>\s*<script src="\.\.\/js\/chat-panel\.js/],
   ]) {
@@ -115,7 +115,7 @@ test('it is on every page the chat is on, and the buttons are the Director\'s', 
   assert.match(chat, /window\.AskTest\.start\(\{ isGM, currentUser, endpoint: CHAT_ENDPOINT, participants \}\);/);
   assert.match(chat, /updateLatestTimestamp\(data\.latest\);\s*if \(window\.AskTest && typeof window\.AskTest\.noticed === 'function'\) \{\s*window\.AskTest\.noticed\(data\.tests\);/);
   // From the main page, from the map (where the heroes on the map start lit), and privately from a whisper window.
-  assert.match(read('dashboard.php'), /<\?php if \(\$is_gm\): \?><button type="button" class="nav-btn" id="ask-test-btn" data-ask-test-open [^>]*>Test<\/button><\?php endif; \?>/);
+  assert.match(read('table/table-apps.js'), /test\.php/);
   assert.match(read('vtt/components/SceneBoard.php'), /<\?php if \(\$isGm\): \?>\s*<button\s+class="btn"\s+type="button"\s+id="vtt-ask-test-btn"\s+data-ask-test-open\s+data-ask-test-from="map"[\s\S]{0,160}?Test\s*<\/button>\s*<\?php endif; \?>/);
   assert.match(chat, /if \(isGM && targetId !== 'GM' && window\.AskTest\) \{[\s\S]{0,420}testBtn\.dataset\.askTestOpen = '';\s*testBtn\.dataset\.askTestOnly = targetId;/);
   assert.match(source, /const opener = event\.target && event\.target\.closest \? event\.target\.closest\('\[data-ask-test-open\]'\) : null;\s*if \(opener\) openForm\(\{ from: opener\.dataset\.askTestFrom \|\| '', only: opener\.dataset\.askTestOnly \|\| '' \}\);/);

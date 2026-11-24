@@ -186,68 +186,6 @@
 
 /* On a player's page of a map with heights the climb markers are drawn at their true heights
    (roof-renderer.js); the flat lines would show a second time, in the wrong place. */
-.vtt-climb-markers-drawn .vtt-board__stairs:not(.is-edit-mode) {
-  visibility: hidden;
-}
-
-.vtt-board__stairs {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
-  overflow: visible;
-}
 
 /* Only individual elements receive events — never the empty SVG. This
    keeps map-surface clicks (placement, deselect-on-empty) working. */
-.vtt-board__stairs.is-edit-mode .vtt-stair-corner-handle {
-  pointer-events: all;
-}
-.vtt-board__stairs.is-edit-mode .vtt-stair-segment {
-  pointer-events: stroke;
-}
-.vtt-board__stairs.is-edit-mode .vtt-stair-fill {
-  pointer-events: fill;
-}
-
-.vtt-stair-segment--barrier {
-  stroke: #a0a0b0;
-  stroke-width: 2;
-  stroke-linecap: square;
-}
-
-.vtt-stair-segment--green {
-  stroke: #2ecc71;
-  stroke-width: 3;
-  stroke-linecap: square;
-}
-
-.vtt-stair-segment--red {
-  stroke: #e74c3c;
-  stroke-width: 3;
-  stroke-linecap: square;
-}
-
-.vtt-stair-segment {
-  cursor: pointer;
-}
-
-.vtt-stair-fill {
-  fill: rgba(74, 158, 255, 0.05);
-  pointer-events: none;
-}
-
-.vtt-stair-fill.is-selected {
-  fill: rgba(74, 158, 255, 0.18);
-}
-
-.vtt-stair-corner-handle {
-  fill: #fff;
-  stroke: #4a9eff;
-  stroke-width: 2;
-  cursor: move;
-}
-
-.vtt-stair-corner-handle:hover {
-  fill: #4a9eff;
-}

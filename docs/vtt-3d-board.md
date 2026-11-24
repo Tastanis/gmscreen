@@ -61,9 +61,9 @@ cracks. Close to the camera, rocks, trees and vines dissolve so tokens behind th
 The page loads `board3d/integration.mjs` from `templates/layout.php`. The `board3d` modules are
 in the import map with the build number, so a new build refreshes them like every other module.
 
-## How it fits the 2D code
+## Board input and rendering
 
-The 2D logic was not rewritten. There are two seams:
+The board shares the same scene state and command handlers across tools.
 
 1. **Input.** `#vtt-map-surface` still gets every pointer event; it is transparent over the 3D
    canvas, so every tool's handler still runs. Each screen-to-map conversion calls
@@ -77,11 +77,9 @@ The 2D logic was not rewritten. There are two seams:
    - the stairs tool;
    - token placement;
    - the token hit-test.
-2. **Drawing.** The 2D layers in `#vtt-map-transform` are hidden, not removed. Each 3D layer
-   reads the same state the 2D one did. World units are squares: x = column, z = row, y = height.
+2. **Drawing.** Three.js draws the scene and its overlays. The map image supplies dimensions and texture data. Token badges and tool controls are screen elements positioned by the 3D camera.
 
-The 3D branches in the 2D modules run only while the 3D board is mounted. Without it (for example
-in the unit tests), those modules do what they did before.
+The Table opens the board for both roles. Saved dashboard links redirect to the Table. Player preview uses an isolated read-only renderer populated from the selected player's projected snapshot.
 
 ## Movement
 
@@ -94,13 +92,12 @@ in the unit tests), those modules do what they did before.
 
 ## Slope arrows
 
-The 2D board's slope arrows are drawn on the 3D board by `layers/slope-arrows.mjs`:
+The 3D slope arrows are drawn by `layers/slope-arrows.mjs`.
 
-- **On the ground,** the arrows are the ones `terrain-prototype.js` works out (`slopeMarks()`, the same
-  list and colours as `drawCostMarkers`).
-- **On ramps and vines,** one green arrow per square, as `roof-renderer.js` draws them.
+- **On the ground,** the arrows are the ones `terrain-prototype.js` works out with `slopeMarks()`.
+- **On ramps and vines,** one green arrow per square.
 
-Each arrow lies flat on the slope at its middle and points uphill, at the 2D arrow's size. On a cliff it
+Each arrow lies flat on the slope at its middle and points uphill, at the configured size. On a cliff it
 stands up the cliff face rather than stretching down it. The slope-arrows setting still turns them all
 off, and a ramp's arrows hide with it under the Height cut.
 

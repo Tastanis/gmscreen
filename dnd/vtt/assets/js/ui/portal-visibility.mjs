@@ -5,3 +5,11 @@ export function portalVisible({a,b,base,top,viewer,ground,eye,sight}){
  const offset=Math.min(.02,distance*.5),near=distance?{x:mid.x+(viewer.x-mid.x)/distance*offset,y:mid.y+(viewer.y-mid.y)/distance*offset}:mid;
  return sight(near,Math.min(top-.001,Math.max(base+.001,eye)));
 }
+
+// Native sight samples both sides of the wall. Keep player markers hidden while sight initializes.
+export function portalAnchorVisible(isGM, sees, sightEnabled, x, y) {
+  if (isGM) return true;
+  if (typeof sees !== 'function') return false;
+  const visible = sees(x, y);
+  return visible === true || (visible == null && !sightEnabled);
+}

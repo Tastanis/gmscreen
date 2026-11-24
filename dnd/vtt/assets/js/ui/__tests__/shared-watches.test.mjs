@@ -28,7 +28,7 @@ test('a watch an ability sets is kept on the caster\'s token for every page', ()
 });
 
 test('every page takes the scene\'s watches before anything fires, and the page that makes the move answers', () => {
-  assert.match(board, /function triggerFire\(eventType, payload\) \{\s*try \{ syncSharedWatches\(\); \}/, 'read at the moment of firing, so a watch set a moment ago on another page is known');
+  assert.match(board, /function triggerFire\(eventType, payload[^)]*\) \{\s*try \{ syncSharedWatches\(\); \}/, 'read at the moment of firing, so a watch set a moment ago on another page is known');
   assert.ok(board.includes("&& entry.registrationKey === registrationKey && ['runtime', SHARED_WATCH].includes(entry.registrationSource));")
     && board.includes('if (!mine && triggerRegister(runtimeWatchEntry(placement.id, record, SHARED_WATCH)))'), 'once each: the page that set it does not take it a second time');
   assert.ok(board.includes('const taken = entry?.registrationSource === SHARED_WATCH && !held.has(`${entry.tokenId}|${entry.abilityId}|${entry.registrationKey}`);'), 'and one the scene no longer holds is dropped');

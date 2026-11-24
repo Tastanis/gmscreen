@@ -21,9 +21,9 @@
   const setTheme = (t) => { theme = t; document.documentElement.classList.toggle('diablo', t === 'diablo'); try { localStorage.setItem('sheet-theme', t); } catch (_) { /* no storage */ } };
   setTheme(theme);
 
-  const post = async (body) => { const r = await fetch('/dnd/dashboard.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) }); return r.json(); };
+  const post = async (body) => { const r = await fetch('/dnd/api/campaign.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) }); return r.json(); };
   async function load() {
-    await Promise.all(HEROES.map(async (h) => { try { const j = await post({ action: 'load', character: h }); if (j.success) data[h] = j.data || {}; } catch (_) { /* skip */ } }));
+    await Promise.all(HEROES.map(async (h) => { try { const j = await post({ action: 'character', character: h }); if (j.success) data[h] = j.heroes?.[0] || {}; } catch (_) { /* skip */ } }));
     try { const j = await post({ action: 'get_students_for_autocomplete' }); students = j.students || []; } catch (_) { students = []; }
     render();
   }

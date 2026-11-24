@@ -13,13 +13,13 @@ $is_gm = ($user === 'GM');
 
 // Check if user is GM - restrict access
 if (!$is_gm) {
-    header('Location: ../../dashboard.php');
+    header('Location: /dnd/table/');
     exit;
 }
 
 // Include required files
 require_once 'includes/monster-backup-helper.php';
-require_once '../gm/includes/file-lock-manager.php';
+require_once '../shared/includes/file-lock-manager.php';
 
 $dataDir = __DIR__ . '/data/';
 $dataFile = $dataDir . 'gm-monsters.json';

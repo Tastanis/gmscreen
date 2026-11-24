@@ -22,7 +22,7 @@ export function teleportSurfaces({from,to,context,ground}){
  const unique=legalChoices.filter((c,i)=>Number.isFinite(c.height)&&legalChoices.findIndex(v=>v.height===c.height)===i).sort((a,b)=>a.height-b.height);
  return unique;
 }
-export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false,preferredSurface=null}){
+export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,rangeOrigin=from,rangeHeight=startHeight,combatActive=false,preferredSurface=null}){
  const unique=teleportSurfaces({from,to,context,ground}),x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2;
  const picked=preferredSurface&&unique.find(c=>Math.abs(c.height-preferredSurface.surfaceElevation)<.55&&(!preferredSurface.levelId||c.levelId===preferredSurface.levelId)&&(!preferredSurface.surfaceId||c.surfaceId===preferredSurface.surfaceId));
  // A picked surface that is not a landing here is not refused (Brandon, November 8, 2026): the choices are shown instead.
@@ -30,7 +30,7 @@ export function chooseTeleportHeight({from,to,range=null,context,ground,startHei
  const display=z=>Math.round(z)+1,air=['fly','hover'].includes(from.movementMode);
  // One place to land, at the height it starts at, within range: nothing to ask (Brandon, November 6, 2026). Past its
  // range it still asks, as a warning that can be gone past (out-of-range choices stay clickable).
- if(!air&&unique.length===1&&Math.abs(unique[0].height-startHeight)<1e-6&&(range===null||teleportDistance(from,to,startHeight,unique[0].height)<=range+1e-6))return Promise.resolve({height:unique[0].height,range,...(range===null?{}:{allowOutOfRange:true})});
+ if(!air&&unique.length===1&&Math.abs(unique[0].height-startHeight)<1e-6&&(range===null||teleportDistance(rangeOrigin,to,rangeHeight,unique[0].height)<=range+1e-6))return Promise.resolve({height:unique[0].height,range,...(range===null?{}:{allowOutOfRange:true})});
  return new Promise(resolve=>{
   const dialog=document.createElement('dialog');dialog.dataset.teleportChoice='';dialog.className='vtt-teleport-choice';dialog.setAttribute('aria-label','Teleport landing');
   const header=document.createElement('div');header.className='vtt-teleport-choice__header';
@@ -40,11 +40,11 @@ export function chooseTeleportHeight({from,to,range=null,context,ground,startHei
   const start=document.createElement('span');start.textContent=`Current height ${display(startHeight)}`;info.append(start);
   if(range!==null){const limit=document.createElement('span');limit.textContent=`Teleport range ${Math.round(range)}`;info.append(limit);
    // Past the range is a warning, never a block: any landing below still goes (Brandon, November 6, 2026).
-   const across=Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row));
+   const across=Math.max(Math.abs(to.column-rangeOrigin.column),Math.abs(to.row-rangeOrigin.row));
    if(across>range+1e-6){const past=document.createElement('span');past.textContent=`${across} squares: past range, go anyway`;past.style.color='#f2c14e';info.append(past);}}
   const list=document.createElement('div');list.className='vtt-teleport-choice__locations';
   const controls=[];let armed=false,closed=false;
-  const allowed=z=>range===null||teleportDistance(from,to,startHeight,z)<=range+1e-6;
+  const allowed=z=>range===null||teleportDistance(rangeOrigin,to,rangeHeight,z)<=range+1e-6;
   const finish=value=>{if(!armed||closed)return;closed=true;clearTimeout(timer);window.removeEventListener('resize',position);dialog.close();dialog.remove();resolve(value);};
   for(const choice of unique){
    const button=document.createElement('button');button.type='button';button.className='vtt-teleport-choice__location';

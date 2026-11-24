@@ -605,8 +605,12 @@
         return effect;
       }
       case "teleport": {
-        const known = new Set(["kind", "distance", "spend"]);
-        const effect = { kind: "teleport", distance: asNonNegInt(input.distance, 0) };
+        const known = new Set(["kind", "distance", "spend", "rangeOrigin", "previewTargets"]);
+        const effect = { kind: "teleport", distance: normalizeActionNumber(input.distance, warnings, path + ".distance") };
+        if (asTrimmedString(input.rangeOrigin)) effect.rangeOrigin = asTrimmedString(input.rangeOrigin);
+        if (input.previewTargets && typeof input.previewTargets === "object") {
+          effect.previewTargets = { within: asNonNegInt(input.previewTargets.within, 1), predicate: P.normalizeTargetPredicate(input.previewTargets.predicate || "creature") };
+        }
         if (input.spend && typeof input.spend === "object") {
           effect.spend = normalizeSpendConfig(input.spend, warnings, `${path}.spend`);
         }
@@ -1216,6 +1220,7 @@
       perAmount: asPosInt(input.perAmount, 1),
       prompt: asTrimmedString(input.prompt),
     };
+    if (input.allowOverride === true) config.allowOverride = true;
     if (!config.resource) warnings.push(`${path}: spend missing resource name.`);
     return config;
   }
@@ -1245,6 +1250,22 @@
     return { value: 1, mode: "exact" };
   }
 
+  // Numeric fields can read a bounded value at use time while old recipes keep their literals.
+  function normalizeActionNumber(value, warnings, path) {
+    if (!value || typeof value !== "object") return asNonNegInt(value, 0);
+    const sources = ["attribute", "victories", "abilityRange", "rollTotal", "rollTier", "triggerAmount"];
+    if (!sources.includes(value.source) || (["attribute", "abilityRange"].includes(value.source) && !asTrimmedString(value.name))) {
+      warnings.push(path + ": expected a numeric reference with a supported source and name.");
+      return 0;
+    }
+    const ref = { source: value.source };
+    if (["attribute", "abilityRange"].includes(value.source)) ref.name = asTrimmedString(value.name);
+    for (const key of ["multiply", "add", "min", "max"]) {
+      if (Number.isSafeInteger(value[key])) ref[key] = value[key];
+    }
+    return ref;
+  }
+
   function normalizeDistance(value, warnings, path) {
     if (!value) return null;
     if (typeof value === "string") {
@@ -1257,9 +1278,9 @@
     }
     return {
       form,
-      value: asNonNegInt(value.value, 0),
+      value: normalizeActionNumber(value.value, warnings, path + ".value"),
       secondary: asNonNegInt(value.secondary, 0),
-      within: asNonNegInt(value.within, 0),
+      within: normalizeActionNumber(value.within, warnings, path + ".within"),
     };
   }
 
@@ -1270,10 +1291,12 @@
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
       "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina", "near", "oncePer",
     ]);
+    known.add("eligible");
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
     const predicate = P.normalizeTargetPredicate(predicateRaw);
     const count = normalizeCount(input.count);
+    if (input.count?.value && typeof input.count.value === "object") count.value = normalizeActionNumber(input.count.value, warnings, path + ".count.value");
     const block = {
       type: "target",
       id: input.id || createId("target"),
@@ -1283,6 +1306,21 @@
       count,
       optional: asBool(input.optional),
     };
+    if (Array.isArray(input.eligible)) {
+      block.eligible = input.eligible.flatMap(rule => {
+        if (!rule || typeof rule !== "object") return [];
+        const clause = {};
+        if (["ally", "enemy", "self"].includes(rule.relation)) clause.relation = rule.relation;
+        if (["object", "creature"].includes(rule.kind)) clause.kind = rule.kind;
+        if (rule.casterSizeOrSmaller === true) clause.casterSizeOrSmaller = true;
+        if (rule.maxSizeFrom?.attribute && P.ATTRIBUTES.includes(rule.maxSizeFrom.attribute)) {
+          clause.maxSizeFrom = { attribute: rule.maxSizeFrom.attribute, minimum: asNonNegInt(rule.maxSizeFrom.minimum, 0) };
+        }
+        for (const key of ["condition", "role"]) if (asTrimmedString(rule[key])) clause[key] = asTrimmedString(rule[key]).toLowerCase();
+        return Object.keys(clause).length ? [clause] : [];
+      });
+      if (block.eligible.length !== input.eligible.length) warnings.push(path + ".eligible contains an empty target rule.");
+    }
     const promptTitle = asTrimmedString(input.promptTitle);
     const promptText = asTrimmedString(input.promptText);
     if (promptTitle) block.promptTitle = promptTitle;
@@ -1296,8 +1334,8 @@
         warnings.push(`${path}.near: only works on a token target block.`);
       } else {
         // `teleport: true`: next to the square this ability's last teleport left or landed in (Burning Ash), not a group.
-        const near = input.near.teleport === true
-          ? { teleport: true, within: asNonNegInt(input.near.within, 1) }
+        const near = input.near.teleport === true || input.near.teleport === "landing"
+          ? { teleport: input.near.teleport, within: asNonNegInt(input.near.within, 1) }
           : { group: asTrimmedString(input.near.group) || "primary", within: asNonNegInt(input.near.within, 1) };
         if (input.near.includeSelf === true) near.includeSelf = true;
         // `max`: at most that many (none: everyone who fits). Burning Ash: 1 (November 11, 2026).
@@ -1407,6 +1445,7 @@
 
   function normalizePowerRollBlock(input, warnings, path) {
     const known = new Set(["type", "id", "attribute", "bonus", "flatBonus", "target", "tiers", "rollFormula", "note", "whenWinded"]);
+    for (const key of ["targetTiers", "rollMode", "allowCritical", "oncePerRoll"]) known.add(key);
     const tiersInput = input.tiers && typeof input.tiers === "object" ? input.tiers : {};
     const tiers = {};
     for (const key of P.TIER_KEYS) {
@@ -1426,6 +1465,15 @@
       rollFormula: asTrimmedString(input.rollFormula) || "2d10",
       tiers,
     };
+    if (input.targetTiers === true) block.targetTiers = true;
+    if (input.rollMode === "individual") block.rollMode = "individual";
+    if (input.allowCritical === false) block.allowCritical = false;
+    if (input.oncePerRoll && typeof input.oncePerRoll === "object") {
+      block.oncePerRoll = {};
+      for (const tier of P.TIER_KEYS) {
+        if (Array.isArray(input.oncePerRoll[tier])) block.oncePerRoll[tier] = normalizeEffectList(input.oncePerRoll[tier], warnings, path + ".oncePerRoll." + tier);
+      }
+    }
     // Monster-friendly: literal roll bonus. When present, runner uses this
     // INSTEAD of resolving `attribute` via context.getAttributeBonus(). PCs
     // continue using the attribute path; they don't author this field.
@@ -1586,7 +1634,7 @@
     // Distance band (Layer 1): event fires only when the caster is within /
     // beyond N squares of the other token in the event. Works for any event.
     if (filterInput.withinSquares != null && filterInput.withinSquares !== "") {
-      filter.withinSquares = asNonNegInt(filterInput.withinSquares, 0);
+      filter.withinSquares = normalizeActionNumber(filterInput.withinSquares, warnings, path + ".filter.withinSquares");
     }
     if (filterInput.minSquares != null && filterInput.minSquares !== "") {
       filter.minSquares = asNonNegInt(filterInput.minSquares, 0);
@@ -2710,7 +2758,21 @@
       usageLimit,
       warnings,
     };
+    if (input.maintenance && typeof input.maintenance === "object") {
+      const raw = input.maintenance;
+      const mode = pickKnown(raw.mode, ["extend", "repeat", "targets", "steps"], "extend");
+      const cost = asNonNegInt(raw.cost, 0);
+      const steps = [...new Set((Array.isArray(raw.steps) ? raw.steps : []).map(asTrimmedString).filter(Boolean))];
+      const upkeepCards = normalizeCardList(raw.cards || [], warnings, "maintenance.cards");
+      if (!cost || (mode === "steps" && (!steps.length && !upkeepCards.length || steps.some(id => !cards.some(card => card.id === id))))) {
+        warnings.push("maintenance needs positive upkeep and valid card IDs for steps.");
+      } else {
+        normalized.maintenance = { cost, mode, action: pickKnown(raw.action, ["free", "maneuver", "main"], "free"), ...(steps.length ? { steps } : {}), ...(upkeepCards.length ? { cards: upkeepCards } : {}) };
+        if (raw.breakOnTurnDamage != null) normalized.maintenance.breakOnTurnDamage = normalizeActionNumber(raw.breakOnTurnDamage, warnings, "maintenance.breakOnTurnDamage");
+      }
+    }
     const topLevelKnown = new Set([
+      "maintenance",
       "schema",
       "version",
       "cards",
@@ -2813,12 +2875,12 @@
                 ? `${block.length || block.size}-square ${block.shape}`
                 : `${block.size}-square ${block.shape}`;
           const within = block.distance?.within ? ` within ${block.distance.within}` : "";
-          return `Place ${sizeText}${within} affecting ${block.predicate}${block.optional ? " (optional)" : ""}.`;
+          return `Place ${sizeText}${within} affecting ${P.targetPredicateWords(block.predicate, 2)}${block.optional ? " (optional)" : ""}.`;
         }
         const count = block.count?.mode === "upTo" ? `up to ${block.count.value}` : `${block.count?.value ?? 1}`;
         const distance = block.distance?.value ? ` within ${block.distance.value}` : "";
         const origin = block.rangeOrigin && block.rangeOrigin !== "self" ? ` from ${block.rangeOrigin}` : "";
-        return `Pick ${count} ${block.predicate}${distance}${origin}${block.optional ? " (optional)" : ""}.`;
+        return `Pick ${count} ${P.targetPredicateWords(block.predicate, block.count?.mode === "all" ? 2 : block.count?.value)}${distance}${origin}${block.optional ? " (optional)" : ""}.`;
       }
       case "powerRoll":
         return `Roll ${block.rollFormula || "2d10"} + ${block.attribute || "Strongest"}${block.bonus ? ` ${block.bonus >= 0 ? "+" : ""}${block.bonus}` : ""}.`;

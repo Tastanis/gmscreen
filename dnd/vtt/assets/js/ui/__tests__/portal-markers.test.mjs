@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { readFile } from 'node:fs/promises';
-import { portalVisible } from '../portal-visibility.mjs';
-import { makeSight } from '../vision-height.mjs';
+import { portalVisible, portalAnchorVisible } from '../portal-visibility.mjs';
 
 globalThis.indexedDB = { open: () => ({}) };
 const { createWallEditor } = await import('../wall-editor.mjs');
@@ -16,67 +15,38 @@ function fixture(isGM = false) {
     nodes: [{ id: 'a', x: 2, y: 0 }, { id: 'b', x: 2, y: 3 }, { id: 'c', x: 4, y: 0 }, { id: 'd', x: 4, y: 3 }],
     segments: [{ id: 'near-door', a: 'a', b: 'b', interaction: 'door' }, { id: 'far-window', a: 'c', b: 'd', interaction: 'window' }], roofs: [],
   };
-  const viewer = { column: 0, row: 1, width: 1, height: 1 };
-  const sight = makeSight({ viewer, viewerGround: 0, groundAt: () => 0, walls: model });
-  window.visionPrototype = { portalVisible: geometry => portalVisible({ ...geometry, viewer: { x: .5, y: 1.5 }, ground: 0, eye: 1, sight }) };
+  window.vtt3d = { active: true, overlayHost: document.querySelector('#map') };
   const context = { isGM, view: { gridSize: 50, scale: 1, gridOffsets: {} } };
   const editor = createWallEditor({ panel: document.querySelector('aside'), transform: document.querySelector('#map'), selected: () => [], model: () => model,
     context: () => context, projected: p => ({ x: p.x * 50, y: p.y * 50 }), groundAt: () => 0, change() {}, render() {}, copyWalls: value => structuredClone(value) });
   return { editor, model, context };
 }
 
-test('player sees closed door near face, but not a window occluded behind it', () => {
-  const { editor } = fixture();
+test('door and window controls attach to the 3D doorways with role-specific permissions', () => {
+  const {editor, model, context} = fixture();
   editor.portals();
-  const marker = document.querySelector('[data-portal-id="near-door"]');
-  assert.ok(marker);
-  // Until October 12, 2026 a player's door symbol was dead ("grants no portal command control"). Brandon then
-  // let players open ordinary doors by clicking them: the symbol is live, and the server decides whether the
-  // door opens (player-doors.test.php). A window's symbol is still the Director's.
-  assert.equal(marker.disabled, false, 'A player may click a door he can see.');
-  assert.equal(marker.dataset.portalType, 'door');
-  assert.equal(marker.querySelector('svg').getAttribute('viewBox'), '0 0 16 16');
-  assert.equal(document.querySelector('[data-portal-id="far-window"]'), null);
-  assert.doesNotThrow(() => marker.onclick(new window.MouseEvent('click')));
-});
-
-test('open door reveals window; vision changes remove obsolete symbols and secrets stay hidden', () => {
-  const { editor, model } = fixture();
-  model.segments[0].open = true;
-  const sight = makeSight({ viewer: { column: 0, row: 1, width: 1, height: 1 }, viewerGround: 0, groundAt: () => 0, walls: model });
-  window.visionPrototype.portalVisible = geometry => portalVisible({ ...geometry, viewer: { x: .5, y: 1.5 }, ground: 0, eye: 1, sight });
-  editor.portals();
-  assert.ok(document.querySelector('[data-portal-type="window"]'));
+  const door = window.vtt3d.overlayHost.querySelector('[data-portal-id="near-door"]');
+  const pane = window.vtt3d.overlayHost.querySelector('[data-portal-id="far-window"]');
+  assert.equal(door.disabled, false);
+  assert.equal(pane.disabled, true);
+  assert.equal(door.dataset.vtt3dAnchor.split(',').length, 3);
+  assert.equal(door.style.visibility, 'hidden');
   model.segments[1].secret = true;
   editor.portals();
   assert.equal(document.querySelector('[data-portal-id="far-window"]'), null);
-  window.visionPrototype.portalVisible = () => false;
-  editor.portals();
-  assert.equal(document.querySelectorAll('.wall-portal').length, 0);
-});
-
-test('whole-map view shows projected ordinary symbols while GM retains existing controls', () => {
-  const { editor, model, context } = fixture();
-  document.documentElement.classList.remove('height-vision-active');
-  window.visionPrototype.portalVisible = () => true;
-  editor.portals();
-  assert.equal(document.querySelectorAll('.wall-portal').length, 2);
   context.isGM = true;
-  model.segments[1].secret = true;
   editor.portals();
-  assert.equal(document.querySelector('[data-portal-id="near-door"]').disabled, false);
-  assert.match(document.querySelector('[data-portal-id="far-window"]').dataset.portalKind, /^secret-/, 'a secret door has its own dashed mark (November 8, 2026), not a question mark');
+  assert.match(document.querySelector('[data-portal-id="far-window"]').dataset.portalKind, /^secret-/);
 });
 
-test('player never gets all-scene markers before the vision renderer has a valid viewpoint', () => {
-  const { editor } = fixture();
-  document.documentElement.classList.remove('height-vision-active');
-  delete window.visionPrototype;
-  editor.portals();
-  assert.equal(document.querySelectorAll('.wall-portal').length, 0);
-  window.visionPrototype = { portalVisible: () => false };
-  editor.portals();
-  assert.equal(document.querySelectorAll('.wall-portal').length, 0);
+test('camera-projected door markers follow native player sight, including startup and whole-map view', () => {
+  const visible = (sight, active = true) => portalAnchorVisible(false, sight, active, 2, 1.5);
+  assert.equal(visible(undefined), false);
+  assert.equal(visible(() => null), false);
+  assert.equal(visible(() => null, false), true);
+  assert.equal(visible(() => false), false);
+  assert.equal(visible((x, y) => x === 2 && y === 1.5), true);
+  assert.equal(portalAnchorVisible(true, () => false, true, 2, 1.5), true);
 });
 
 test('portal markers require matching vertical range even when their face is unobstructed', () => {
@@ -97,7 +67,7 @@ test('manual healing/damage token selection bypasses portals and cancel restores
   // Exercise the production picker lifecycle without mounting the whole board.
   const begin = source.slice(source.indexOf('  function beginDamageHealTargeting('), source.indexOf('  function updateDamageHealTargetingStatus('));
   const cancel = source.slice(source.indexOf('  function cancelDamageHealTargeting('), source.indexOf('  function clearDamageHealStatusTimeout('));
-  const lifecycle = new Function('mapSurface', `
+  const lifecycle = new Function('board', `
     let pendingDamageHeal = null;
     const status = {textContent:'Ready'}, defaultStatusText = 'Ready';
     const normalizeAutomationDamageType = value => value;

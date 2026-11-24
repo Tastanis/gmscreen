@@ -112,7 +112,6 @@ try {
         ['a picture in a student\'s notes', 'strixhaven/students/image-upload.php', [], 'image', 'strixhaven/students/uploads/images', null],
         ['a picture in a staff member\'s notes', 'strixhaven/staff/image-upload.php', [], 'image', 'strixhaven/staff/uploads/images', null],
         ['a picture in a location\'s notes', 'strixhaven/locations/image-upload.php', [], 'image', 'strixhaven/locations/uploads/images', null],
-        ['a picture in the Director\'s notes', 'strixhaven/gm/image-upload.php', [], 'image', 'strixhaven/gm/uploads/images', null],
         // Build 513: this handler did not exist, so the Other NPCs notes editor's picture button always failed.
         ['a picture in another NPC\'s notes', 'strixhaven/othernpcs/image-upload.php', [], 'image', 'strixhaven/othernpcs/uploads/images', null],
         ['a template\'s picture', 'strixhaven/templates/upload-image.php', ['template_id' => '../../t'], 'image', 'strixhaven/templates/images', null],

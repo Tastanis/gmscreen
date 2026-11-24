@@ -185,10 +185,10 @@ echo "monster import planner: shapes of request, new vs update (id, name+level),
 // Part 2: the real endpoint, in a scratch copy of the site.
 $root = sys_get_temp_dir() . '/monster-import-site-' . bin2hex(random_bytes(6));
 $site = $root . '/strixhaven/monster-creator';
-foreach ([$site . '/includes', $site . '/data', $site . '/images', $root . '/includes', $root . '/strixhaven/gm/includes'] as $dir) mkdir($dir, 0777, true);
+foreach ([$site . '/includes', $site . '/data', $site . '/images', $root . '/includes', $root . '/strixhaven/shared/includes'] as $dir) mkdir($dir, 0777, true);
 copy($creator . '/../../includes/players.php', $root . '/includes/players.php');
 foreach (['import-monsters.php', 'upload-image.php', 'includes/monster-import.php', 'includes/monster-store.php', 'includes/monster-backup-helper.php'] as $file) copy($creator . '/' . $file, $site . '/' . $file);
-copy($creator . '/../gm/includes/file-lock-manager.php', $root . '/strixhaven/gm/includes/file-lock-manager.php');
+copy($creator . '/../shared/includes/file-lock-manager.php', $root . '/strixhaven/shared/includes/file-lock-manager.php');
 $dataFile = $site . '/data/gm-monsters.json';
 file_put_contents($dataFile, json_encode(data(), JSON_PRETTY_PRINT));
 file_put_contents($site . '/router.php', '<?php session_save_path(' . var_export($site, true) . '); $as = $_SERVER["HTTP_X_TEST_USER"] ?? ""; if ($as !== "") { session_start(); $_SESSION["logged_in"] = true; $_SESSION["user"] = $as; session_write_close(); } return false;');

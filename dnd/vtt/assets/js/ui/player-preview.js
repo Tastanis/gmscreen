@@ -47,8 +47,10 @@ export function mountPlayerPreview(root, store) {
     const x=(surface.scrollLeft+surface.clientWidth/2)/camera.scale;
     const y=(surface.scrollTop+surface.clientHeight/2)/camera.scale;
     camera.scale=Math.max(0.01,Math.min(4,scale));
+    camera.frame.style.width = camera.width * camera.scale + 'px';
+    camera.frame.style.height = camera.height * camera.scale + 'px';
     camera.stage.style.transform=`scale(${camera.scale})`;
-    camera.frame.style.width=camera.width*camera.scale+'px';camera.frame.style.height=camera.height*camera.scale+'px';
+    camera.stage.style.transformOrigin='top left';
     if(center){surface.scrollLeft=x*camera.scale-surface.clientWidth/2;surface.scrollTop=y*camera.scale-surface.clientHeight/2;}
     else{surface.scrollLeft=0;surface.scrollTop=0;}
     updateZoomButtons();
@@ -66,9 +68,8 @@ export function mountPlayerPreview(root, store) {
     heading.textContent=`${preview.userId}: ${view.floorName} · revision ${view.revision}`;
     camera=null;updateZoomButtons();surface.textContent='Loading map…';dialog.showModal();
     try {
-      const {stage,width,height}=await createPlayerPreviewMap(preview,{levelId:view.levelId,tokens:store.getState?.().tokens});
+      const {stage,frame,width,height}=await createPlayerPreviewMap(preview,{levelId:view.levelId,tokens:store.getState?.().tokens,host:surface});
       if(current!==mapSequence || !dialog.open)return;
-      const frame=document.createElement('div');frame.style.overflow='hidden';frame.append(stage);surface.replaceChildren(frame);
       camera={stage,frame,width,height,scale:1};setScale(fitScale(),false);
     } catch(error){if(current===mapSequence)surface.textContent=error.message;}
   });

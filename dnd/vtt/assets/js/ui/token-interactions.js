@@ -18,7 +18,6 @@ export function createTokenInteractions({
   // DOM references
   mapSurface,
   tokenLayer,
-  selectionBox,
   getStatusElement = () => null,
   // Shared state (mutable references)
   viewState,
@@ -91,50 +90,21 @@ export function createTokenInteractions({
   }
 
   function startSelectionBox(event) {
-    if (!selectionBox || !viewState.mapLoaded) {
-      return false;
-    }
-    if (screenBox()) {
+    if (!viewState.mapLoaded || !screenBox()) return false;
       viewState.selectionBoxState = {
         pointerId: event.pointerId,
-        startLocal: { x: 0, y: 0 },
-        currentLocal: { x: 0, y: 0 },
         startScreen: { x: event.clientX, y: event.clientY },
         currentScreen: { x: event.clientX, y: event.clientY },
         active: false,
       };
       try { mapSurface.setPointerCapture(event.pointerId); } catch (error) { /* the box still follows window events */ }
-      return true;
-    }
-
-    const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      return false;
-    }
-
-    viewState.selectionBoxState = {
-      pointerId: event.pointerId,
-      startLocal: { x: localPoint.x, y: localPoint.y },
-      currentLocal: { x: localPoint.x, y: localPoint.y },
-      active: false,
-    };
-
-    try {
-      mapSurface.setPointerCapture(event.pointerId);
-    } catch (error) {
-      console.warn('[VTT] Unable to set pointer capture for selection box', error);
-    }
-
     return true;
   }
 
   function updateSelectionBox(event) {
     const state = viewState.selectionBoxState;
-    if (!state || !selectionBox) {
-      return;
-    }
-    const box = state.startScreen ? screenBox() : null;
-    if (box) {
+    const box = state && screenBox();
+    if (!box) return;
       state.currentScreen = { x: event.clientX, y: event.clientY };
       const dx = state.currentScreen.x - state.startScreen.x, dy = state.currentScreen.y - state.startScreen.y;
       if (!state.active && Math.hypot(dx, dy) >= 6) { state.active = true; box.hidden = false; }
@@ -144,38 +114,6 @@ export function createTokenInteractions({
       box.style.top = `${Math.min(state.startScreen.y, state.currentScreen.y) - host.top}px`;
       box.style.width = `${Math.abs(dx)}px`;
       box.style.height = `${Math.abs(dy)}px`;
-      return;
-    }
-
-    const localPoint = getLocalMapPoint(event);
-    if (!localPoint) {
-      return;
-    }
-
-    state.currentLocal = { x: localPoint.x, y: localPoint.y };
-
-    const deltaX = Math.abs(state.currentLocal.x - state.startLocal.x);
-    const deltaY = Math.abs(state.currentLocal.y - state.startLocal.y);
-    const distance = Math.hypot(deltaX, deltaY);
-
-    if (!state.active && distance >= dragActivationDistance) {
-      state.active = true;
-      selectionBox.hidden = false;
-    }
-
-    if (!state.active) {
-      return;
-    }
-
-    const minX = Math.min(state.startLocal.x, state.currentLocal.x);
-    const minY = Math.min(state.startLocal.y, state.currentLocal.y);
-    const width = Math.abs(state.currentLocal.x - state.startLocal.x);
-    const height = Math.abs(state.currentLocal.y - state.startLocal.y);
-
-    selectionBox.style.left = `${minX}px`;
-    selectionBox.style.top = `${minY}px`;
-    selectionBox.style.width = `${width}px`;
-    selectionBox.style.height = `${height}px`;
   }
 
   function getTokensInSelectionBox() {
@@ -183,80 +121,15 @@ export function createTokenInteractions({
     if (!state || !state.active) {
       return [];
     }
-    if (state.startScreen) {
-      const left = Math.min(state.startScreen.x, state.currentScreen.x), right = Math.max(state.startScreen.x, state.currentScreen.x);
-      const top = Math.min(state.startScreen.y, state.currentScreen.y), bottom = Math.max(state.startScreen.y, state.currentScreen.y);
-      const wanted = new Set();
-      for (const node of tokenLayer?.querySelectorAll('[data-placement-id]') || []) {
-        if (getComputedStyle(node).visibility === 'hidden') continue;
-        const rect = node.getBoundingClientRect();
-        if (rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom) wanted.add(node.dataset.placementId);
-      }
-      return (getRenderedPlacements() ?? []).filter((placement) => placement?.id && wanted.has(placement.id));
+    const left = Math.min(state.startScreen.x, state.currentScreen.x), right = Math.max(state.startScreen.x, state.currentScreen.x);
+    const top = Math.min(state.startScreen.y, state.currentScreen.y), bottom = Math.max(state.startScreen.y, state.currentScreen.y);
+    const wanted = new Set();
+    for (const node of tokenLayer?.querySelectorAll('[data-placement-id]') || []) {
+      if (getComputedStyle(node).visibility === 'hidden') continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom) wanted.add(node.dataset.placementId);
     }
-
-    const minX = Math.min(state.startLocal.x, state.currentLocal.x);
-    const minY = Math.min(state.startLocal.y, state.currentLocal.y);
-    const maxX = Math.max(state.startLocal.x, state.currentLocal.x);
-    const maxY = Math.max(state.startLocal.y, state.currentLocal.y);
-
-    const matching = [];
-    const gridSize = viewState.gridSize || 64;
-    const offsets = viewState.gridOffsets || { top: 0, right: 0, bottom: 0, left: 0 };
-
-    const placements = getRenderedPlacements() ?? [];
-    placements.forEach((placement) => {
-      if (!placement || !placement.id) {
-        return;
-      }
-
-      if (Array.isArray(placement.visibleCells) && placement.visibleCells.length > 0) {
-        const overlapsVisibleCell = placement.visibleCells.some((cell) => {
-          const cellColumn = Number.isFinite(cell?.column) ? cell.column : null;
-          const cellRow = Number.isFinite(cell?.row) ? cell.row : null;
-          if (cellColumn === null || cellRow === null) {
-            return false;
-          }
-
-          const cellLeft = cellColumn * gridSize + offsets.left;
-          const cellTop = cellRow * gridSize + offsets.top;
-          const cellRight = cellLeft + gridSize;
-          const cellBottom = cellTop + gridSize;
-          return cellRight > minX && cellLeft < maxX && cellBottom > minY && cellTop < maxY;
-        });
-
-        if (overlapsVisibleCell) {
-          matching.push(placement);
-        }
-        return;
-      }
-
-      // Levels v2 §5.5.5: marquee hit box scales around the cell center to
-      // match the rendered token's footprint, so a shrunk below-level token
-      // can only be lassoed when the box overlaps its visible area.
-      const cellWidth = (placement.width ?? 1) * gridSize;
-      const cellHeight = (placement.height ?? 1) * gridSize;
-      const cellLeft = (placement.column ?? 0) * gridSize + offsets.left;
-      const cellTop = (placement.row ?? 0) * gridSize + offsets.top;
-      const scale = Number.isFinite(placement.scale) && placement.scale > 0 ? placement.scale : 1;
-      const halfW = (cellWidth / 2) * scale;
-      const halfH = (cellHeight / 2) * scale;
-      const centerX = cellLeft + cellWidth / 2;
-      const centerY = cellTop + cellHeight / 2;
-      const tokenLeft = centerX - halfW;
-      const tokenTop = centerY - halfH;
-      const tokenRight = centerX + halfW;
-      const tokenBottom = centerY + halfH;
-
-      const overlapsX = tokenRight > minX && tokenLeft < maxX;
-      const overlapsY = tokenBottom > minY && tokenTop < maxY;
-
-      if (overlapsX && overlapsY) {
-        matching.push(placement);
-      }
-    });
-
-    return matching;
+    return (getRenderedPlacements() ?? []).filter((placement) => placement?.id && wanted.has(placement.id));
   }
 
   function finishSelectionBox(event, { additive = false } = {}) {
@@ -274,10 +147,8 @@ export function createTokenInteractions({
       // Ignore release errors
     }
 
-    if (selectionBox) {
-      selectionBox.hidden = true;
-      const box3d = screenBox(); if (box3d) box3d.hidden = true;
-    }
+    const box = screenBox();
+    if (box) box.hidden = true;
     viewState.selectionBoxState = null;
 
     if (!wasActive || !tokensInBox.length) {
@@ -308,10 +179,8 @@ export function createTokenInteractions({
       // Ignore release errors
     }
 
-    if (selectionBox) {
-      selectionBox.hidden = true;
-      const box3d = screenBox(); if (box3d) box3d.hidden = true;
-    }
+    const box = screenBox();
+    if (box) box.hidden = true;
     viewState.selectionBoxState = null;
   }
 

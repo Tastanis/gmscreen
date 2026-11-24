@@ -52,11 +52,10 @@ describe('scene manager map level controls', () => {
 
     assert.match(markup, /scene-item__levels/);
     assert.match(markup, /data-action="add-map-level"/);
-    assert.match(markup, /data-action="upload-map-level"/);
-    assert.match(markup, /data-action="set-map-level-opacity"/);
-    assert.match(markup, /data-action="edit-map-level-cutouts"/);
-    assert.match(markup, /Cutouts\(1\)|Cutouts \(1\)/);
-    assert.match(markup, /value="65"/);
+    assert.doesNotMatch(markup, /data-action="upload-map-level"/);
+    assert.doesNotMatch(markup, /data-action="set-map-level-opacity"/);
+    assert.doesNotMatch(markup, /data-action="edit-map-level-cutouts"/);
+    assert.doesNotMatch(markup, /Cutouts\(1\)|Cutouts \(1\)/);
     // Old overlay controls (add-overlay-layer, clear-overlay) are removed.
     assert.doesNotMatch(markup, /data-action="add-overlay-layer"/);
     assert.doesNotMatch(markup, /data-action="clear-overlay"/);
@@ -121,7 +120,7 @@ describe('scene manager map level controls', () => {
       upper.name = 'Upper Gallery';
       upper.mapUrl = '/uploads/upper.png';
       upper.hidden = true;
-      ground.opacity = sceneManager.normalizeMapLevelOpacityInput('35');
+      ground.opacity = 0.35; // Existing scenes may still carry image settings.
 
       const orderedLevels = sceneManager.getOrderedMapLevels(mapLevels.levels);
       [orderedLevels[0], orderedLevels[1]] = [orderedLevels[1], orderedLevels[0]];

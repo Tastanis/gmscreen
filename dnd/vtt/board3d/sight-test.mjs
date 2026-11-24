@@ -155,8 +155,8 @@ function compositeMaterial() {
   });
 }
 
-async function start() {
-  await waitFor(() => window.vtt3dRenderer?.ready && window.vtt3dBridge && document.querySelector('[data-action="first-person"]'));
+export async function startSight({ readOnly = false } = {}) {
+  await waitFor(() => window.vtt3dRenderer?.ready && window.vtt3dBridge && (readOnly || document.querySelector('[data-action="first-person"]')));
   const api = window.vtt3dRenderer, bridge = window.vtt3dBridge;
   const style = document.createElement('style');
   style.textContent = '.vtt3d-sight-button[aria-pressed="true"]{background:#5b7fa8;color:#0d1621;border-color:#a9c7e8}';
@@ -164,12 +164,12 @@ async function start() {
   const anchor = document.querySelector('[data-action="first-person"]');
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = anchor.className.replace('vtt3d-first-person-button', '').trim() + ' vtt3d-sight-button';
+  button.className = (anchor?.className || '').replace('vtt3d-first-person-button', '').trim() + ' vtt3d-sight-button';
   button.textContent = 'Vision';
   button.setAttribute('aria-pressed', 'false');
   button.dataset.action = 'sight-test';
   button.title = 'Vision for everyone: what the heroes cannot see is dimmed on every player\'s map (you see as the selected tokens see).';
-  anchor.after(button);
+  anchor?.after(button);
   // Players have no say over vision (Brandon, October 27, 2026): the Director's switch and look are everyone's.
   const director = !!bridge.getContext().isGM;
   if (!director) button.style.display = 'none';
@@ -204,7 +204,7 @@ async function start() {
       for (let dr = 0; dr < ROOM_STEPS && !open; dr += 1) for (let dc = 0; dc < ROOM_STEPS && !open; dc += 1) { const k = ((r + dr) * size + c + dc) * 4; open = data[k] > .5 || data[k + 1] > .5; }
       if (!open) continue;
       const col = left + c / ROOM_STEPS, row = top + r / ROOM_STEPS;
-      if (markCell(col, row)) { fresh = true; if (!director) unsent.add(col + ',' + row); }
+      if (markCell(col, row)) { fresh = true; if (!director && !readOnly) unsent.add(col + ',' + row); }
     }
     if (fresh) memoryTexture.needsUpdate = true;
   }
@@ -224,8 +224,8 @@ async function start() {
       memoryTexture.needsUpdate = true;
     }).catch(() => { /* next time */ });
   }
-  setInterval(() => { if (LOOKS[look].memory && on && memoryScene) loadMemory(memoryScene); }, 10000);   // what the rest of the party saw
-  setInterval(() => {
+  if (!readOnly) setInterval(() => { if (LOOKS[look].memory && on && memoryScene) loadMemory(memoryScene); }, 10000);   // what the rest of the party saw
+  if (!readOnly) setInterval(() => {
     if (!LOOKS[look].memory || !on) return;
     const scene = String(bridge.getContext().sceneId || '');
     if (scene !== memoryScene) { loadMemory(scene); return; }
@@ -266,9 +266,11 @@ async function start() {
       heard = j.vision.updatedAt; apply(j.vision);
     }).catch(() => { /* next time */ });
   }
-  listen();
-  setInterval(listen, 3000);
-  document.addEventListener('visibilitychange', listen);
+  if (!readOnly) {
+    listen();
+    setInterval(listen, 3000);
+    document.addEventListener('visibilitychange', listen);
+  }
 
   let bound = null;   // everything made for one board view
   let key = '';
@@ -523,6 +525,13 @@ async function start() {
       console.error('[VTT 3D] vision', error);
     }
   }
+  if (readOnly) {
+    const response = await fetch(VISION_URL, {credentials:'same-origin',cache:'no-store'});
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error('Could not load player vision settings.');
+    apply(result.vision);
+    if (on && LOOKS[look].memory) loadMemory(bridge.getContext().sceneId);
+  }
   setInterval(tick, 150);
 
   button.addEventListener('click', () => {
@@ -536,4 +545,4 @@ async function start() {
   });
 }
 
-start().catch((error) => console.error('[VTT 3D] vision failed to start', error));
+if (!window.vtt3dBridge?.readOnly) startSight().catch((error) => console.error('[VTT 3D] vision failed to start', error));

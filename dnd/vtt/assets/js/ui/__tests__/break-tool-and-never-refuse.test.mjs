@@ -41,6 +41,21 @@ test('a click breaks a standing thing whole and mends a broken one', () => {
   assert.ok(model.segments.every((e) => e.broken === true));
 });
 
+test('the Break picker includes standing and broken wall cubes, preserving their template and elevation', () => {
+  const wall = { id: 'practice-stone', type: 'wall', wallColor: 'gray', squares: [
+    {column: 13, row: 7}, {column: 13, row: 7, elevation: 2, broken: true}, {column: 13, row: 8}
+  ] };
+  const fire = { ...wall, id: 'fire', wallColor: 'red' };
+  const things = breakableThings({}, [wall, fire], {}, () => 4);
+  assert.equal(things.length, 3);
+  assert.equal(thingAt(things, {x: 13.5, y: 7.5, z: 5}).cubeKey, '13,7,0');
+  const damaged = thingAt(things, {x: 13.5, y: 7.5, z: 6});
+  assert.equal(damaged.templateId, wall.id);
+  assert.equal(damaged.cubeKey, '13,7,2');
+  assert.equal(damaged.broken, true);
+  assert.equal(thingAt(things, {x: 13.5, y: 8, z: 5}).cubeKey, '13,8,0');
+});
+
 test('the Break button is in the Edits panel, for the Director, and draws in 2D and 3D', () => {
   const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
   assert.match(walls, /breakButton\.dataset\.action='map-break'/);

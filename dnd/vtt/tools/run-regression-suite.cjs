@@ -11,7 +11,9 @@ const files = ['dnd/vtt/assets/js','dnd/character_sheet/ability-automation','dnd
 let passed = 0, failed = 0;
 const failedFiles = [];
 for (const file of files) {
-  const result = cp.spawnSync(process.execPath, ['--test',file], {cwd:root,encoding:'utf8',timeout:60000,maxBuffer:8*1024*1024});
+  // Five minutes a file: pages-start opens every page in a real browser and takes about a minute by itself (its own
+  // limit is four); at one minute it was cut off and counted as failed.
+  const result = cp.spawnSync(process.execPath, ['--test',file], {cwd:root,encoding:'utf8',timeout:300000,maxBuffer:8*1024*1024});
   passed += Number(result.stdout?.match(/# pass (\d+)/)?.[1] || 0);
   failed += Number(result.stdout?.match(/# fail (\d+)/)?.[1] || 0);
   if (result.status !== 0) {

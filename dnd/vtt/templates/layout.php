@@ -7,25 +7,19 @@ $assetVersion = (int) ($config['assetsVersion'] ?? 1);
 $pusherEnabled = !empty($config['pusher']) || !empty($config['chatPusher']);
 $jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_PRETTY_PRINT;
 require_once __DIR__ . '/../lib/ModuleAssets.php';
-require_once __DIR__ . '/../lib/RubbleImages.php';
 $moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
 // The 3D board's modules are versioned like the rest; 'three' is its rendering library.
 $moduleMap['imports'] += ModuleAssets::importMap(__DIR__ . '/../board3d', $assetVersion, '/dnd/vtt/board3d/')['imports'];
 // The character sheet's shared parts (the side panel draws the same sheet parts as the full sheet).
 $moduleMap['imports'] += ModuleAssets::importMap(__DIR__ . '/../../character_sheet/parts', $assetVersion, '/dnd/character_sheet/parts/')['imports'];
 $moduleMap['imports']['three'] = '/dnd/vtt/board3d/lib/three.module.js?v=' . $assetVersion;
-// Pictures laid over broken walls: whatever is in the rubble folder, found by file name.
-$rubbleImages = RubbleImages::urls(__DIR__ . '/../assets/images/rubble', 'assets/images/rubble');
 
-// Include navigation bar
-require_once __DIR__ . '/../../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
-<html lang="en"<?= empty($config['isGM']) ? ' class="vtt-player-visibility-pending"' : '' ?>>
+<html lang="en" class="vtt3d-on">
 <head>
     <meta charset="utf-8" />
-    <script>window.vtt3dBoard = true;</script>
-    <style>.vtt-player-visibility-pending #vtt-map-transform{opacity:0!important;pointer-events:none!important}</style>
+    <link rel="stylesheet" href="board3d/integration.css?v=<?= $assetVersion ?>">
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VTT Workspace</title>
@@ -74,7 +68,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
 <?php endif; ?>
 </head>
 <body class="vtt-body">
-    <?php renderStrixNav('vtt'); ?>
     <?php if (!empty($config['isGM']) && function_exists('vttStorageNotice') && vttStorageNotice() !== ''): ?>
     <p class="vtt-storage-notice" role="status" style="margin:0;padding:6px 12px;background:#5a3a00;color:#fff;font:14px/1.4 system-ui,sans-serif"><?= htmlspecialchars(vttStorageNotice(), ENT_QUOTES) ?></p>
     <?php endif; ?>
@@ -89,7 +82,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     </div>
     <script>
         window.vttConfig = <?= json_encode($config, $jsonScriptFlags) ?>;
-        window.vttRubbleImages = <?= json_encode($rubbleImages, $jsonScriptFlags) ?>;
         window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), $jsonScriptFlags) ?>;
         window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], $jsonScriptFlags) ?>;
         // Pusher configuration is sourced from the server's enabled config.
@@ -114,7 +106,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script type="module" src="assets/js/ui/terrain-prototype.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/terrain-zones-overlay.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/wall-rubble-overlay.js?v=<?= $assetVersion ?>"></script>
-    <script type="module" src="assets/js/ui/floating-shadows.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="/dnd/vtt/board3d/integration.mjs?v=<?= $assetVersion ?>"></script>
     <script type="module" src="/dnd/vtt/board3d/first-person.mjs?v=<?= $assetVersion ?>"></script>
     <script type="module" src="/dnd/vtt/board3d/sight-test.mjs?v=<?= $assetVersion ?>"></script>

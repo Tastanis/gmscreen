@@ -127,7 +127,9 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       const otherDistanceId = payload.sourceId || payloadTokenId;
       const squares = env.getSquareDistance(casterId, otherDistanceId);
       if (Number.isFinite(squares)) {
-        if (filter.withinSquares != null && squares > Number(filter.withinSquares)) return false;
+        const ref = filter.withinSquares;
+        const range = ref && typeof ref === 'object' ? env.getTriggerRange?.(casterId, ref, payload) : ref;
+        if (range != null && squares > Number(range)) return false;
         if (filter.minSquares != null && squares < Number(filter.minSquares)) return false;
       }
     }
@@ -204,10 +206,22 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
       if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
       if (filter.attribute && String(payload.attribute || '').toLowerCase() !== String(filter.attribute).toLowerCase()) return false;
-      if (filter.tier && String(payload.tier || '').toLowerCase() !== String(filter.tier).toLowerCase()) return false;
-      const total = Number.parseInt(payload.rollTotal, 10) || 0;
-      if (filter.minTotal && total < filter.minTotal) return false;
-      if (filter.maxTotal && total > filter.maxTotal) return false;
+      // One roll against several targets carries each target's own result (targetResults[]: { id, total, tier }).
+      // The result judged is the watcher's own when it is one of the targets, else that of the targets the filter
+      // names (targetWhose); a roll with no such row is judged on its shared tier and total, as before.
+      const outcomeFits = (tier, rollTotal) => {
+        if (filter.tier && String(tier || '').toLowerCase() !== String(filter.tier).toLowerCase()) return false;
+        const total = Number.parseInt(rollTotal, 10) || 0;
+        if (filter.minTotal && total < filter.minTotal) return false;
+        if (filter.maxTotal && total > filter.maxTotal) return false;
+        return true;
+      };
+      if (filter.tier || filter.minTotal || filter.maxTotal) {
+        const rows = (Array.isArray(payload.targetResults) ? payload.targetResults : []).filter((row) => row && row.id);
+        let judged = rows.filter((row) => row.id === casterId);
+        if (!judged.length && filter.targetWhose) judged = rows.filter((row) => matchWhose(filter.targetWhose, row.id));
+        if (judged.length ? !judged.some((row) => outcomeFits(row.tier, row.total)) : !outcomeFits(payload.tier, payload.rollTotal)) return false;
+      }
       if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
         const have = normalizeKeywords(payload.keywords);
         if (!filter.keywordsAny.some((keyword) => have.includes(String(keyword).toLowerCase()))) return false;

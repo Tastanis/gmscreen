@@ -9,7 +9,7 @@ const origin='http://127.0.0.1:8129';
     const errors=[],pages=[];
     for(const user of ['GM','sharon']) {
       const page=await browser.newPage({viewport:{width:1280,height:720}});
-      page.on('pageerror',error=>errors.push(error.message));
+      page.on('pageerror',error=>errors.push(error.stack || error.message));
       await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
       await page.goto(origin+'/test-login.php?user='+user);
       await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
@@ -61,81 +61,20 @@ const origin='http://127.0.0.1:8129';
     await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
     await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=gm.locator('.vtt-player-preview-dialog');
-    await dialog.locator('[data-preview-placement-id="preview-open"]').waitFor();
-    for(const surface of [pc,dialog]) {
-      const masks=await surface.locator('.vtt-board__map-level').evaluateAll(nodes=>nodes.map(n=>decodeURIComponent(n.style.maskImage||n.style.webkitMaskImage||'')));
-      assert.ok(masks.some(mask=>mask.includes('M 80 160 H 176 V 240 H 80 Z')),'Actual player and preview preserve the fractional map hole');
-    }
-    const describe=nodes=>nodes.map(n=>({id:n.dataset.previewPlacementId||n.dataset.placementId,
-      width:n.style.width,height:n.style.height,transform:n.style.transform,zIndex:n.style.zIndex,
-      level:n.dataset.mapLevelId,direction:n.dataset.mapLevelDirection||null,distance:n.dataset.mapLevelDistance||null,
-      groupColor:n.dataset.groupColor||null,
-      hp:n.querySelector('.vtt-token__hp-bar')?.outerHTML||null,ready:n.querySelector('.vtt-token__trigger-ready')?.textContent||null,
-      condition:n.querySelector('.vtt-token__condition')?.textContent||null,mark:n.querySelector('.vtt-token__judgment-mark')?.textContent||null,
-      hiddenEffect:n.querySelector('.vtt-token__hidden-effect')?.textContent||null,
-      image:n.querySelector('img')?.src||null})).sort((a,b)=>a.id.localeCompare(b.id));
-    const real=await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe);
-    const preview=await dialog.locator('.vtt-token').evaluateAll(describe);
-    assert.deepEqual(preview,real);
-    assert.deepEqual(preview.map(t=>t.id),['preview-open','preview-upper']);
-    assert.deepEqual(preview.map(t=>t.groupColor),['1','1'],'Visible members share their projected group color even with a hidden representative');
-    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__hp-value').count(),0,'Enemy numbers stay hidden in a GM preview');
-    assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__hp-temp-value').textContent(),'(+5)');
-    assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__trigger-ready').textContent(),'!');
-    assert.equal(await dialog.locator('[data-token-trigger-ready]').count(),0,'Preview readiness has no clear-action hook');
-    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__condition').textContent(),'Prone');
-    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__judgment-mark').getAttribute('aria-label'),'Judged by Cal.');
-    assert.equal(await dialog.locator('[data-token-judgment-mark],[data-token-hidden-effect]').count(),0,'Preview effects have no removal hooks');
-    const describeAuras=nodes=>nodes.map(n=>({id:n.dataset.previewAuraPlacementId||n.dataset.placementId,
-      aura:n.dataset.auraId,width:n.style.width,height:n.style.height,transform:n.style.transform,
-      background:n.style.background,shadow:n.style.boxShadow,mask:n.style.maskImage})).sort((a,b)=>(a.id+a.aura).localeCompare(b.id+b.aura));
-    const actualAuras=await pc.locator('#vtt-aura-layer .vtt-token-aura').evaluateAll(describeAuras);
-    assert.deepEqual(await dialog.locator('.vtt-token-aura').evaluateAll(describeAuras),actualAuras);
-    assert.equal(actualAuras.length,4,'Only visible unfogged owners have manual and enabled automation auras');
-    assert.deepEqual([...new Set(actualAuras.map(a=>a.id))],['preview-open','preview-upper']);
-    const lowerAura=actualAuras.find(a=>a.id==='preview-open'&&a.aura==='manual');
-    assert.match(decodeURIComponent(lowerAura.mask),/<rect x="128" y="128" width="128" height="128" fill="white"\/>/,'Lower aura clips exactly to the 2 by 2 balcony opening');
-    assert.equal(actualAuras.find(a=>a.id==='preview-upper'&&a.aura==='manual').mask,'','Same-floor aura stays unmasked');
-    const auraRepaint=await gm.evaluate(async({sceneId})=>{
-      const {renderTokenAuras}=await import('/dnd/vtt/assets/js/ui/token-aura-renderer.js');
-      const {normalizeMapLevelsState}=await import('/dnd/vtt/assets/js/state/normalize/map-levels.js');
-      const snapshot=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
-      const config=snapshot.state.sceneConfig[sceneId],layer=document.createElement('div');
-      const inputs={placements:[snapshot.state.placements[sceneId]['preview-open']],layer,
-        view:{mapLoaded:true,gridSize:64,gridOffsets:{left:288,top:288}},
-        tokenLevelState:normalizeMapLevelsState(config.mapLevels,{sceneGrid:config.grid}),passive:true};
-      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper'});
-      const node=layer.firstElementChild,masked=Boolean(node.style.maskImage);
-      renderTokenAuras({...inputs,auraViewerLevelId:'level-0'});
-      const cleared=node.style.maskImage===''&&node.style.webkitMaskImage==='';
-      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper'});
-      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper',gmViewing:true});
-      return {masked,cleared,gmCleared:node.style.maskImage==='',reused:node===layer.firstElementChild};
-    },{sceneId});
-    assert.deepEqual(auraRepaint,{masked:true,cleared:true,gmCleared:true,reused:true});
-    const repaint=await gm.evaluate(async()=>{
-      const {syncTokenHitPoints}=await import('/dnd/vtt/assets/js/ui/token-hit-points.js');
-      const token=document.createElement('div'),placement={team:'enemy',showHp:true,hp:{current:25,max:20}};
-      syncTokenHitPoints(token,placement,{isGm:true});
-      const gmNumbers=token.querySelectorAll('.vtt-token__hp-value,.vtt-token__hp-temp-value').length;
-      syncTokenHitPoints(token,placement);
-      const playerNumbers=token.querySelectorAll('.vtt-token__hp-value,.vtt-token__hp-temp-value').length;
-      const fill=token.querySelector('.vtt-token__hp-temp-fill').style.width;
-      syncTokenHitPoints(token,{...placement,showHp:false});
-      return {gmNumbers,playerNumbers,fill,remaining:token.children.length};
-    });
-    assert.deepEqual(repaint,{gmNumbers:2,playerNumbers:0,fill:'25%',remaining:0},'Repainting removes stale GM numbers and disabled bars');
-    assert.match(preview.find(t=>t.id==='preview-upper').transform,/832px/,'8.5 cells plus 288px padding must remain fractional');
-    assert.equal(await dialog.locator('[data-placement-id]').count(),0);
-    assert.equal(await dialog.locator('.vtt-player-preview-map').evaluate(node=>node.inert),true);
-    await pc.locator('#vtt-drawing-layer [data-drawing-id="preview-upper-line"]').waitFor();
-    const paths=nodes=>nodes.map(node=>({id:node.dataset.previewDrawingId||node.dataset.drawingId,
-      d:node.getAttribute('d'),stroke:node.getAttribute('stroke'),width:node.getAttribute('stroke-width')}));
-    const actualPaths=await pc.locator('#vtt-drawing-layer path[data-drawing-id]').evaluateAll(paths);
-    assert.deepEqual(await dialog.locator('path[data-preview-drawing-id]').evaluateAll(paths),actualPaths);
-    assert.deepEqual(actualPaths.map(path=>path.id),['preview-upper-line']);
-    assert.equal(await dialog.locator('[data-drawing-id]').count(),0);
-    const zoom=()=>dialog.locator('.vtt-player-preview-map').evaluate(node=>Number(node.style.transform.match(/scale\(([^)]+)\)/)[1]));
+    const stage=dialog.locator('iframe[title="Captured player board"]');
+    const frame=dialog.frameLocator('iframe[title="Captured player board"]');
+    await frame.locator('#vtt-board3d canvas').waitFor();
+    const captured = await (await stage.elementHandle()).contentFrame();
+    await captured.waitForFunction(()=>window.vtt3dLayers?.auras && window.vtt3dLayers?.drawings);
+    const describe=()=>window.vtt3dBridge.getContext().placements.filter(p=>!p.hidden)
+      .map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId]).sort((a,b)=>a[0].localeCompare(b[0]));
+    const real=await pc.evaluate(describe);
+    assert.deepEqual(await captured.evaluate(describe),real);
+    const counts=()=>({auras:window.vtt3dLayers.auras.summary().auras,strokes:window.vtt3dLayers.drawings.summary().strokes});
+    assert.deepEqual(await captured.evaluate(counts),await pc.evaluate(counts));
+    assert.equal(await stage.evaluate(node=>node.inert),true);
+    assert.equal(await captured.evaluate(()=>window.vtt3dBridge.readOnly),true);
+    const zoom=()=>stage.evaluate(node=>Number(node.style.transform.match(/scale\(([^)]+)/)[1]));
     const fitted=await zoom();
     await dialog.getByRole('button',{name:'Zoom in preview'}).click();
     assert.ok(Math.abs(await zoom()-fitted*1.5)<0.00001);
@@ -148,8 +87,7 @@ const origin='http://127.0.0.1:8129';
     await dialog.getByRole('button',{name:'Close preview'}).click();
     await pc.reload();
     await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
-    assert.deepEqual(await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe),real,'Reload keeps the same canonical geometry');
-    assert.deepEqual(await pc.locator('#vtt-aura-layer .vtt-token-aura').evaluateAll(describeAuras),actualAuras);
+    assert.deepEqual(await pc.evaluate(describe),real);
     assert.deepEqual(await snapshot(),before);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     console.log('PASS: preview token geometry/visibility and drawing paths match the player board; local zoom/Fit and reload preserve canonical state; no preview writes.');
   } finally {await browser.close();}

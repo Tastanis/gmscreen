@@ -5,6 +5,8 @@ This project has two related JSON surfaces:
 - Ability automation JSON: stored on `action.automation` or monster ability `automation`.
 - Full monster import JSON: imported by the Strixhaven Monster Creator.
 
+Ten Elementalist examples show how to read action values, combine target rules, apply a shared roll by target, and maintain a cast. Each named entry contains one complete v3 automation. [Elementalist recipes](elementalist-shared-hooks.json)
+
 ## Canonical Files
 
 | Surface | Canonical docs/code |
