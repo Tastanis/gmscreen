@@ -9,16 +9,21 @@ import { JSDOM } from 'jsdom';
 const root = new URL('../../../../../table/', import.meta.url);
 const read = (name) => readFileSync(new URL(name, root), 'utf8');
 
-function openTable() {
+function openTable(roster, setup) {
   // The page is PHP since October 27, 2026 (versions on its files, settings from the server): its PHP and scripts are left out.
   const html = read('index.php').replace(/^<\?php[\s\S]*?\?>/, '').replace(/<script[^>]*>[\s\S]*?<\/script>/g, '');
-  const dom = new JSDOM(html, { url: 'http://localhost/dnd/table/?mock', runScripts: 'outside-only', pretendToBeVisual: true });
+  const dom = new JSDOM(html, { url: 'http://localhost/dnd/table/' + (roster ? '' : '?mock'), runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
+  if (roster) w.fetch = async (url) => ({
+    status: 200,
+    json: async () => url.includes('action=heroes') ? { success: true, heroes: roster, user: 'alice', is_gm: false } : {},
+  });
   w.Element.prototype.setPointerCapture = () => {};
   w.Element.prototype.releasePointerCapture = () => {};
   // The table is 1546 × 900 (a 1600 × 900 screen less the rail).
   const table = w.document.getElementById('table');
   table.getBoundingClientRect = () => ({ left: 54, top: 0, right: 1600, bottom: 900, width: 1546, height: 900, x: 54, y: 0 });
+  setup?.(w);
   w.eval(read('table.js'));
   w.eval(read('table-apps.js'));
   return dom;
@@ -26,6 +31,35 @@ function openTable() {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 const pointer = (w, type, x, y) => { const e = new w.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }); e.pointerId = 1; return e; };
 const savedLayout = (w) => JSON.parse(w.localStorage.getItem('table-proto-layout-v1'));
+
+test('slow party and test reads coalesce, back off after failure, and resume from the last successful stamp', async () => {
+  const ticks = new Map(), reads = [], finish = [];
+  let now = 100000;
+  const dom = openTable([{ id: 'alice', name: 'Alice', own: true }], w => {
+    const original = w.fetch;
+    w.Date.now = () => now;
+    w.setInterval = (fn, ms) => ticks.set(ms, fn);
+    w.fetch = (url, options) => {
+      if (!url.includes('party-vitals') && !options?.body?.includes('chat_test_state')) return original(url);
+      reads.push(url.includes('party-vitals') ? url : options.body);
+      return new Promise(resolve => finish.push(resolve));
+    };
+  });
+  try {
+    await settle();
+    const tick = () => { ticks.get(4000)(); ticks.get(3000)(); };
+    tick(); tick(); tick();
+    assert.equal(reads.length, 2);
+    for (const resolve of finish.splice(0)) resolve({ json: async () => ({ success: true, stamp: 'saved', party: {}, tests: [] }) });
+    await settle(); now += 4000; tick(); await settle();
+    assert.match(reads[2], /since=saved/); assert.match(reads[3], /stamp=saved/);
+    for (const resolve of finish.splice(0)) resolve({ json: async () => { throw Error('522'); } });
+    await settle(); now += 4000; tick(); await settle();
+    assert.equal(reads.length, 4);
+    now += 4000; tick(); await settle();
+    assert.deepEqual(reads.slice(4), reads.slice(2, 4));
+  } finally { dom.window.close(); }
+});
 
 test('a layout from the S menu (Prep) is saved at once, so a reload brings it back', async () => {
   const dom = openTable(); const w = dom.window;

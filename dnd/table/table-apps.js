@@ -138,14 +138,28 @@
   // The heroes' Stamina comes from their character sheets, the truth (Brandon, October 27, 2026: the cards showed the
   // tokens on the players' map, which can be behind the sheets). Read every few seconds; one word while no sheet changed.
   let sheetVitals = {}, vitalsStamp = '';
-  async function readSheetVitals() {
-    if (!SERVED || document.hidden) return;
-    try {
-      const j = await (await fetch('/dnd/character_sheet/handler.php?action=party-vitals' + (vitalsStamp ? '&since=' + encodeURIComponent(vitalsStamp) : ''), { credentials: 'same-origin', cache: 'no-store' })).json();
-      if (!j?.success || j.unchanged) return;
-      vitalsStamp = String(j.stamp || ''); sheetVitals = j.party || {}; paintLive();
-    } catch (_) { /* next time */ }
+  // Only used for repeatable reads. Callers share a slow request and keep their last
+  // successful stamp through failures, so the next reply can catch them up.
+  function pollRead(interval, read) {
+    let pending, retryAt = 0, delay = interval;
+    return function () {
+      if (pending || Date.now() < retryAt) return pending;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      pending = read(controller.signal).then(() => { delay = interval; retryAt = 0; }, () => {
+        delay = Math.min(30000, delay * 2);
+        retryAt = Date.now() + delay;
+      }).finally(() => { clearTimeout(timeout); pending = null; });
+      return pending;
+    };
   }
+  const readSheetVitals = pollRead(4000, async (signal) => {
+    if (!SERVED || document.hidden) return;
+    const j = await (await fetch('/dnd/character_sheet/handler.php?action=party-vitals' + (vitalsStamp ? '&since=' + encodeURIComponent(vitalsStamp) : ''), { credentials: 'same-origin', cache: 'no-store', signal })).json();
+    if (!j?.success) throw Error('Party vitals unavailable');
+    if (j.unchanged) return;
+    vitalsStamp = String(j.stamp || ''); sheetVitals = j.party || {}; paintLive();
+  });
   if (SERVED) { setTimeout(readSheetVitals, 0); setInterval(readSheetVitals, 4000); }
   // [stamina, max, on a map, temp, the other map it is on]: the sheet's numbers; where the token is, from the board.
   const heroHp = (h) => {
@@ -568,31 +582,30 @@
   // once per test; a test the Director cancels closes it again. Looked for every few seconds (one word while nothing changed).
   let testStamp = '', testWatched = '';
   const testsPopped = new Set((() => { try { return JSON.parse(sessionStorage.getItem('table-tests-popped') || '[]'); } catch (_) { return []; } })());
-  async function watchTests() {
+  const watchTests = pollRead(3000, async (signal) => {
     if (!SERVED || me.gm || !me.user || document.hidden) return;
-    try {
-      const body = 'action=chat_test_state' + (testStamp ? '&stamp=' + encodeURIComponent(testStamp) : '');
-      const j = await (await fetch('/dnd/chat_handler.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })).json();
-      if (!j?.success || j.unchanged) return;
-      testStamp = String(j.stamp || '');
-      const mine = String(me.user).toLowerCase(), tests = j.tests || [];
-      const fresh = tests.find((t) => t.rows?.[mine]?.status === 'waiting' && (t.age || 0) <= 1800 && !testsPopped.has(t.id));
-      if (fresh) {
-        testsPopped.add(fresh.id); testWatched = fresh.id;
-        try { sessionStorage.setItem('table-tests-popped', JSON.stringify([...testsPopped].slice(-40))); } catch (_) { /* no storage */ }
-        const w = apps.test();
-        const focusIt = (n = 0) => { const f = w.node.querySelector('iframe'); try { if (f?.contentDocument?.readyState === 'complete') { f.focus(); f.contentWindow.focus(); return; } } catch (_) { /* not yet */ } if (n < 50) setTimeout(() => focusIt(n + 1), 200); };
-        focusIt();
-        return;
-      }
-      const watched = testWatched && tests.find((t) => t.id === testWatched);
-      if (watched && watched.rows?.[mine]?.status === 'cancelled') {
-        testWatched = '';
-        const w = T.windows.get('test'); if (w) T.closeWindow(w);
-        T.toast('The Director cancelled the test');
-      }
-    } catch (_) { /* next time */ }
-  }
+    const body = 'action=chat_test_state' + (testStamp ? '&stamp=' + encodeURIComponent(testStamp) : '');
+    const j = await (await fetch('/dnd/chat_handler.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal })).json();
+    if (!j?.success) throw Error('Requested tests unavailable');
+    if (j.unchanged) return;
+    testStamp = String(j.stamp || '');
+    const mine = String(me.user).toLowerCase(), tests = j.tests || [];
+    const fresh = tests.find((t) => t.rows?.[mine]?.status === 'waiting' && (t.age || 0) <= 1800 && !testsPopped.has(t.id));
+    if (fresh) {
+      testsPopped.add(fresh.id); testWatched = fresh.id;
+      try { sessionStorage.setItem('table-tests-popped', JSON.stringify([...testsPopped].slice(-40))); } catch (_) { /* no storage */ }
+      const w = apps.test();
+      const focusIt = (n = 0) => { const f = w.node.querySelector('iframe'); try { if (f?.contentDocument?.readyState === 'complete') { f.focus(); f.contentWindow.focus(); return; } } catch (_) { /* not yet */ } if (n < 50) setTimeout(() => focusIt(n + 1), 200); };
+      focusIt();
+      return;
+    }
+    const watched = testWatched && tests.find((t) => t.id === testWatched);
+    if (watched && watched.rows?.[mine]?.status === 'cancelled') {
+      testWatched = '';
+      const w = T.windows.get('test'); if (w) T.closeWindow(w);
+      T.toast('The Director cancelled the test');
+    }
+  });
   if (SERVED) setInterval(watchTests, 3000);
 
   // Dice is a window of its own (Brandon, October 27, 2026: it opened the map): the sheet's roller, rolls to chat (dice.php).
