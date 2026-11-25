@@ -238,6 +238,11 @@ try {
     $held('GM', 'POST', 'vtt/api/v2/vision.php', ['on' => true, 'look' => 'Dark'], 'released', 'The Director setting vision', static fn ($s, $a) => $s === 200 && ($a['vision']['look'] ?? '') === 'Dark');
     $held('GM', 'POST', 'vtt/api/v2/commands.php', ['operationId' => 'load-observe-1', 'type' => 'shadow.observe', 'baseRevision' => 0, 'payload' => ['note' => 'x']], 'released', 'A board command', static fn ($s, $a) => $s !== 0 && $s !== 401 && $s !== 500);
     loadCheck(is_file("$base/turn-" . sha1('cal') . '.lock') && is_file("$base/turn-" . sha1('gm') . '.lock'), 'Each of them took their turn: a small file beside the database, named for the person');
+    // Where an answered command's time went is written down: its kind and milliseconds, nothing else.
+    [$status] = $ask('GM', 'POST', 'vtt/api/v2/commands.php', ['operationId' => 'load-ping-0001', 'type' => 'ping.add', 'sceneId' => 'scene-1', 'baseRevision' => 0, 'payload' => ['ping' => ['id' => 'load-ping-1', 'x' => 0.5, 'y' => 0.5, 'type' => 'ping']]]);
+    $times = file("$base/command-times.log", FILE_IGNORE_NEW_LINES) ?: [];
+    loadCheck($status !== 200 || (count($times) >= 1 && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [A-Za-z.]+ total=\d+ store=\d+ publish=\d+ parts=\d+\/\d+$/', end($times)) === 1), 'An answered command leaves one line of timings: ' . json_encode([$status, $times]));
+    loadCheck(count($times) >= 1, 'At least one command here was answered and timed: ' . json_encode($status));
     loadCheck($ask('', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['7,7']])[0] === 401 && count(glob("$base/turn-*.lock")) === 2, 'Nobody signed in is refused, and takes no turn');
     // Everything else that changes something keeps the session to the end, as it always has.
     $held('cal', 'POST', 'chat_handler.php', $form(['action' => 'chat_send', 'message' => 'hello', 'target' => 'all']), 'held', 'Sending a chat message', static fn ($s, $a) => $s === 200 && is_array($a));

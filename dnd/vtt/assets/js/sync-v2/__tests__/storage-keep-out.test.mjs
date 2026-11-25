@@ -20,9 +20,10 @@ const refused = (patterns, name) => patterns.some((pattern) => matches(pattern, 
 
 // folder: [patterns, names that must be refused, names that must still be served]
 const RULES = {
-  'dnd/vtt/storage': [['*.sqlite*', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock'],
+  // command-times.log: where each board command's time went (Build 653); kinds and milliseconds only, kept out all the same.
+  'dnd/vtt/storage': [['*.sqlite*', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock', 'command-times.log'],
     ['sync-v2.sqlite', 'sync-v2.sqlite-wal', 'sync-v2.sqlite-shm', 'sync-v2.sqlite-journal', 'sync-v2.before-split-20261011-101500.sqlite',
-      'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock'],
+      'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock', 'command-times.log'],
     ['map.png', 'bundled-image-0.jpg', 'token.webp', '.gitkeep']],
   'dnd/vtt/config': [['*.json', '*.lock'], ['player-roster.json', 'player-roster.json.lock'], ['sync-v2.php']],
   'dnd/character_sheet/data': [['*.json', '*.lock'], ['character_sheets.json', 'character_sheets.lock', 'hero_tokens.json', 'character_sheets_latest.json', 'character_sheets_20260706_000945.json',

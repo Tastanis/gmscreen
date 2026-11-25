@@ -46,6 +46,15 @@ final class SyncV2CompiledParts
     private bool $registered = false;
     /** One file written or compiled per request, whatever the number of stores. */
     private static bool $workedThisRequest = false;
+    /** Large parts in this request: how many came ready-unpacked, how many were unpacked from their text. */
+    private static int $ready = 0;
+    private static int $fromText = 0;
+
+    /** [came ready-unpacked, unpacked from text] for the large parts read in this request. */
+    public static function tally(): array
+    {
+        return [self::$ready, self::$fromText];
+    }
 
     public function __construct(string $databasePath, string $worldId)
     {
@@ -99,9 +108,11 @@ final class SyncV2CompiledParts
                 $value = null;
             }
             if (is_array($value)) {
+                self::$ready++;
                 return $value;
             }
         }
+        self::$fromText++;
         $value = $decode($json);
         $this->pending[$file] = [$prefix, $value];
         if (!$this->registered) {
@@ -216,8 +227,8 @@ final class SyncV2CompiledParts
                 $this->on = false;
                 return;
             }
-            // Nobody outside may ask for these files. Written as the <Files> blocks beside the database are.
-            @file_put_contents($this->folder . DIRECTORY_SEPARATOR . '.htaccess', "<Files *>\n    Order deny,allow\n    Deny from all\n</Files>\n");
+            // Nobody outside may ask for these files: the two lines storage/backups/.htaccess uses, which the host accepts.
+            @file_put_contents($this->folder . DIRECTORY_SEPARATOR . '.htaccess', "Order deny,allow\nDeny from all\n");
         }
         $temporary = $file . '.' . bin2hex(random_bytes(6)) . '.tmp';
         if (@file_put_contents($temporary, '<?php return ' . self::export($value) . ';') === false) {

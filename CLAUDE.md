@@ -71,9 +71,15 @@ command reads the whole world, 5.8 MB of JSON then, and writes the 1.8 MB light 
   off, or does not keep files between requests, it switches itself off and the text is unpacked as before. One file
   is written or compiled per request, at its end. The folder may be deleted at any time.
   Before a release that touches it, run `php dnd/vtt/tools/check-compiled-parts.php <copy of sync-v2.sqlite>`.
-- **Still to do if commands must be faster**: the light row (`vtt_state_main`) holds every scene's tokens and is
-  unpacked, packed, written and unpacked again by every command. Keeping each scene's tokens in a row of their own
-  is the next step; it changes the layout, so it needs a carry-over like the split had.
+- **Every answered command writes down where its time went**: `storage/command-times.log` (kind and milliseconds
+  for `store`, `publish` and `total`, and how many large parts came ready-unpacked; the newest quarter megabyte,
+  `includes/capped-log.php`) and a `Server-Timing` header. Read it after a session before choosing the next step.
+  Checked on a copy of the live database (November 25): all 19 parts identical; unpacking them took 58 ms on a
+  desktop against 15 ms for the light row, so on the host the parts are perhaps a quarter of a command's 490 ms.
+- **Still to do if commands must be faster**, in the order the log should decide: the call to Pusher that a command
+  waits for before it answers (answer first, publish after); and the light row (`vtt_state_main`), which holds
+  every scene's tokens and is unpacked, packed, written and unpacked again by every command (keeping each scene's
+  tokens in a row of their own changes the layout, so it needs a carry-over like the split had).
 - **The command ledger is trimmed** (`SyncV2Store::pruneOperations`): the newest `operation_retention` rows (5,000)
   are kept, older ones go 300 at a time when a snapshot is taken. Never fewer than `event_retention`. The numbering
   of the rows is used and no row is opened: do not replace it with a count or a scan, which would read the table.
@@ -84,7 +90,8 @@ command reads the whole world, 5.8 MB of JSON then, and writes the 1.8 MB light 
   `vtt_snapshots` (20, never read by the site, about 6 MB each), and the two small tables that record collision
   damage and zone entries (a few rows a session; deleting them would let an old claim be made twice).
 
-Tests: `api/v2/tests/compiled-parts.test.php`, `operation-ledger.test.php`, `growing-files.test.php`.
+Tests: `api/v2/tests/compiled-parts.test.php`, `operation-ledger.test.php`, `growing-files.test.php`, and the
+timings line in `hosting-load.test.php`.
 
 ## Table fixes after the November 24, 2026 session (Build 651)
 

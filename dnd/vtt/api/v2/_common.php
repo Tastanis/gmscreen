@@ -14,6 +14,37 @@ function vttSyncV2Respond(int $status, array $payload): void
     exit;
 }
 
+/**
+ * Where a command's time went, for whoever looks next: a Server-Timing header on the answer (the browser's network
+ * panel shows it) and one line in `storage/command-times.log`, which keeps its newest quarter megabyte.
+ * The line holds the time, the command's kind and milliseconds; nothing about who or what.
+ *   store    reading the world, deciding, saving
+ *   publish  telling the live-update service (the command waits for that call before it answers)
+ *   parts    large design parts that came ready-unpacked / that had to be unpacked from their text
+ * November 24, 2026 could not be explained from the host's log alone: it shows 490 ms for a command and not where.
+ */
+function vttSyncV2NoteCommandTime(string $type, float $startedAt, float $storeDoneAt, float $publishDoneAt): void
+{
+    try {
+        $now = hrtime(true);
+        $store = max(0, ($storeDoneAt - $startedAt) / 1e6);
+        $publish = max(0, ($publishDoneAt - $storeDoneAt) / 1e6);
+        $total = max(0, ($now - $startedAt) / 1e6);
+        [$ready, $fromText] = class_exists('SyncV2CompiledParts', false) ? SyncV2CompiledParts::tally() : [0, 0];
+        if (!headers_sent()) {
+            header(sprintf('Server-Timing: store;dur=%.1f, publish;dur=%.1f, total;dur=%.1f', $store, $publish, $total));
+        }
+        $kind = preg_replace('/[^A-Za-z0-9._-]/', '', $type);
+        require_once __DIR__ . '/../../../includes/capped-log.php';
+        cappedLogLine(
+            vttSyncV2StorageFolder() . '/command-times.log',
+            sprintf("%s %s total=%d store=%d publish=%d parts=%d/%d\n", gmdate('Y-m-d\\TH:i:s\\Z'), $kind === '' ? '-' : substr($kind, 0, 48), round($total), round($store), round($publish), $ready, $fromText)
+        );
+    } catch (Throwable $error) {
+        // Measuring must never be what stops a command from being answered.
+    }
+}
+
 function vttSyncV2ReadJson(): array
 {
     $raw = file_get_contents('php://input');
