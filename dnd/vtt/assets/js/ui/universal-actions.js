@@ -15,6 +15,8 @@
 // The functions below are plain (data in, cards out), for the node tests. The page's copy of the list is fetched
 // once; until it has arrived the trays show the creature's own abilities only, and are drawn again when it does.
 
+import { objectRules } from './object-tokens.mjs';
+
 const HERO_TABS = { Main: 'mains', Maneuver: 'maneuvers' };
 const MONSTER_TABS = { Main: 'action', Maneuver: 'maneuver' };
 const HERO_LABELS = { Main: 'Main Action', Maneuver: 'Maneuver', Move: 'Move Action' };
@@ -76,12 +78,26 @@ export function heroUniversalActions(data, categoryKey, sheet = null) {
     });
 }
 
+// A stat block's passives of one kind, from its traits and its abilities (as board-interactions monsterPassivesOfKind).
+function passivesOfKind(monster, kind) {
+  const found = [];
+  const take = (automation) => (Array.isArray(automation?.passives) ? automation.passives : []).forEach((passive) => {
+    if (String(passive?.kind || '').replace(/[^a-z]/gi, '').toLowerCase() === kind) found.push(passive);
+  });
+  (Array.isArray(monster?.traits) ? monster.traits : []).forEach((trait) => take(trait?.automation));
+  const abilities = monster?.abilities && typeof monster.abilities === 'object' ? monster.abilities : {};
+  Object.keys(abilities).forEach((key) => (Array.isArray(abilities[key]) ? abilities[key] : []).forEach((ability) => take(ability?.automation)));
+  return found;
+}
+
 /**
  * The universal actions of one tab of a monster's tray ('action' or 'maneuver'), as a stat block's own abilities
  * are shaped (name, keywords, range, targets, roll_bonus, test, effect, automation). The power roll's bonus is the
  * monster's own characteristic (the highest of those the roll may use).
  */
 export function monsterUniversalAbilities(data, categoryKey, monster = null) {
+  // A trap, a hazard, a siege engine (an object token: object-tokens.mjs) is no creature and has none of them.
+  if (objectRules(monster, passivesOfKind)) return [];
   const stats = monster?.attributes && typeof monster.attributes === 'object' ? monster.attributes : {};
   return universalActionsFor(data, 'monsters')
     .filter((action) => MONSTER_TABS[action.type] === categoryKey)

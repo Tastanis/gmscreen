@@ -913,6 +913,11 @@ export function nudgeMeasureHeight(steps) {
   return true;
 }
 
+/** Whether the Measure tool is drawing a line just now (then Z and the wheel are its own). */
+export function isMeasureToolMeasuring() {
+  return Boolean(sharedState?.measuring && sharedState.mode === 'pointer');
+}
+
 /** Z let go: the next turn of the wheel with Z held starts from a new corner. */
 export function endMeasureHeightNudge() {
   if (sharedState) sharedState.heightNodeDropped = false;

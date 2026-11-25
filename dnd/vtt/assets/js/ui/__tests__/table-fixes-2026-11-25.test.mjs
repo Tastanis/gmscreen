@@ -42,8 +42,8 @@ test('5. Z and the wheel: one step a notch, up is up, a touchpad adds up to a st
   assert.equal(wheelNotches({ deltaY: 0, deltaMode: 0 }), 0);
   assert.deepEqual([-20, -20, -20, -20].map((deltaY) => wheelNotches({ deltaY, deltaMode: 0 })), [0, 0, 1, 0], 'small moves add up');
   // The Measure tool and a held token both take it; with neither, the camera zooms as before.
-  assert.match(integration, /onWheel:\(e,notches\)=>wheelHeight\(notches\)/);
-  assert.match(section(integration, ' function wheelHeight(notches){', '\n }'), /if\(!zHeld\|\|!notches\)return false;/);
+  assert.match(integration, /onWheel:e=>wheelHeight\(e\)/);
+  assert.match(section(integration, ' function wheelHeight(e){', '\n }'), /if\(!zHeld\|\|!\(lift\|\|isMeasureToolMeasuring\(\)\)\)return false;/, 'without Z, or with nothing to raise, the wheel is the camera\'s');
   assert.match(integration, /if\(!drag\?\.moved&&!clickMoveTokenId\)return addMeasureToolNode\(\);/, 'a right click with the Measure tool is a corner');
   const ruler = read('../drag-ruler.js');
   assert.match(ruler, /export function addMeasureToolNode\(\)/);

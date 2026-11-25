@@ -77,6 +77,10 @@ test("a monster's tray: actions and maneuvers, shaped as a stat block's own, rol
   assert.deepEqual(knockback.test, { tier1: { damage_amount: '', damage_type: '', tier_effect: 'Push 1' }, tier2: { damage_amount: '', damage_type: '', tier_effect: 'Push 2' }, tier3: { damage_amount: '', damage_type: '', tier_effect: 'Push 3' } });
   assert.equal(knockback.automation.cards[1].attribute, 'Might', "the roll names Might; the runner takes the monster's own");
   assert.equal(monsterUniversalAbilities(data, 'action', ogre).find((ability) => ability.name === 'Charge').has_test, false);
+  // A trap or a hazard is no creature: none of them.
+  assert.deepEqual(monsterUniversalAbilities(data, 'maneuver', { name: 'Spike Trap', role: 'Trap Ambusher', attributes: {}, abilities: {} }), []);
+  assert.deepEqual(monsterUniversalAbilities(data, 'action', { name: 'Ballista', attributes: {}, abilities: {}, traits: [{ name: 'Engine', automation: { passives: [{ kind: 'object' }] } }] }), []);
+  assert.equal(monsterUniversalAbilities(data, 'action', { name: 'Golem', attributes: {}, abilities: {}, traits: [{ automation: { passives: [{ kind: 'object', object: false }] } }] }).length, 2, 'unless its passive says it is a creature after all');
 });
 
 test('every automation in the file is what the runner understands, with nothing left over', async () => {

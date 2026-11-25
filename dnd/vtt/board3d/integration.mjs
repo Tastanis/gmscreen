@@ -1,7 +1,8 @@
 import {portalAnchorVisible} from '../assets/js/ui/portal-visibility.mjs';
 import {createSceneView} from './scene-view.mjs';
 import {bindCameraInput} from './camera-controls.mjs';
-import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode,addMeasureToolNode,nudgeMeasureHeight,endMeasureHeightNudge} from '../assets/js/ui/drag-ruler.js';
+import {wheelNotches} from './wheel-notches.mjs';
+import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode,addMeasureToolNode,nudgeMeasureHeight,endMeasureHeightNudge,isMeasureToolMeasuring} from '../assets/js/ui/drag-ruler.js';
 import {createEffectOverlays} from './effect-overlays.mjs';
 import {createMinis} from './minis.mjs';
 import {sceneArtFor,loadSceneArt} from './scene-art.mjs';
@@ -411,8 +412,10 @@ async function mount(){
  // A held token goes up or down a square a notch, and that height is its waypoint: letting go of Z carries on sideways
  // from it (a height set by moving the hand still wants a right click to be kept). With the Measure tool (hold M) the
  // first notch drops a corner where the pointer is and each notch raises the line's end a square.
- function wheelHeight(notches){
-  if(!zHeld||!notches)return false;
+ function wheelHeight(e){
+  if(!zHeld||!(lift||isMeasureToolMeasuring()))return false;
+  // Then the wheel is not a zoom: a turn too small to be a step yet (a touchpad) is taken and waited on.
+  const notches=wheelNotches(e);if(!notches)return true;
   if(lift){lift.wheel=(lift.wheel||0)+notches;moveLift(null);if(lift.from)lift.locked=lift.z;showLift();return true;}
   return nudgeMeasureHeight(notches);
  }
@@ -468,7 +471,7 @@ async function mount(){
   // A right click: a waypoint. For a held token going up and down, at that height; for one carried sideways, a corner
   // of its route; for the Measure tool (hold M) while its line follows the pointer, a corner of the line.
   onRightClick:()=>{if(lift?.from){lockLift();return true;}if(!drag?.moved&&!clickMoveTokenId)return addMeasureToolNode();if(addExternalMeasurementNode()){hoverSignature='';refreshHeld();}return true;},
-  onWheel:(e,notches)=>wheelHeight(notches)});
+  onWheel:e=>wheelHeight(e)});
 
  let guideSignature='',areaPreview=null;
  // An ability's area while it is being placed: the same see-through volume as templates
