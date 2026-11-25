@@ -1,5 +1,5 @@
 // Terrain sandbox ruler integration
-import { placeLegLabels, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
+import { placeLegLabels, rulerWording, forcedOutcomeWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { forcedLabel } from './forced-line.mjs';
 import { teleportDistance } from './teleport-choice.js';
@@ -323,9 +323,24 @@ function beginMeasurement(state, pointerId, startPoint) {
   state.pointerId = pointerId;
   state.points = [startPoint];
   state.hoverPoint = startPoint;
+  state.rawHover = startPoint;
+  state.heightOffset = 0;
+  state.heightNodeDropped = false;
   state.mode = 'pointer';
   updateOverlay(state);
 }
+
+// The Measure tool's end raised above what the pointer is over (Z held, the wheel turned: nudgeMeasureHeight). The
+// raise is in whole squares and stays as the pointer moves on, so a line can go up and then across at that height.
+function raised(state, point) {
+  const offset = Number(state.heightOffset) || 0;
+  if (!point || !offset) return point;
+  const base = Number.isFinite(point.surfaceElevation) ? point.surfaceElevation : (window.terrainPrototype?.heightAt?.(point.mapX, point.mapY) ?? 0);
+  // No longer the surface or the token that was under the pointer: a point in the air over it.
+  return { ...point, surfaceElevation: base + offset, tokenId: undefined, tokenName: undefined, width: undefined, height: undefined, raisedBy: offset };
+}
+// The same square raised by a different amount is another spot (straight up, then across); otherwise a square is one spot.
+const sameMeasuredSpot = (a, b) => a.column === b.column && a.row === b.row && (Number(a.raisedBy) || 0) === (Number(b.raisedBy) || 0);
 
 function resumeMeasurement(state, pointerId, snapPoint) {
   state.measuring = true;
@@ -336,19 +351,18 @@ function resumeMeasurement(state, pointerId, snapPoint) {
 }
 
 function updateHoverPoint(state, hoverPoint) {
-  state.hoverPoint = hoverPoint;
+  state.rawHover = hoverPoint;
+  state.hoverPoint = state.mode === 'pointer' ? raised(state, hoverPoint) : hoverPoint;
   updateOverlay(state);
 }
 
 function commitHoverPoint(state, snapPoint) {
+  if (state.mode === 'pointer') snapPoint = raised(state, snapPoint);
   if (!state.points.length) {
     state.points = [snapPoint];
   } else {
     const lastPoint = state.points[state.points.length - 1];
-    if (
-      (lastPoint.column !== snapPoint.column || lastPoint.row !== snapPoint.row) &&
-      state.points.length < MAX_MEASUREMENT_POINTS
-    ) {
+    if (!sameMeasuredSpot(lastPoint, snapPoint) && state.points.length < MAX_MEASUREMENT_POINTS) {
       state.points.push(snapPoint);
     }
   }
@@ -398,9 +412,8 @@ function addMeasurementNode(state) {
     return;
   }
 
-  const duplicate = state.points.find(
-    (point) => point.column === snapshot.column && point.row === snapshot.row
-  );
+  // The same square at another height is another corner (straight up, then across).
+  const duplicate = state.points.find((point) => sameMeasuredSpot(point, snapshot));
   if (!duplicate && state.points.length < MAX_MEASUREMENT_POINTS) {
     state.points.push({ ...snapshot });
     updateOverlay(state);
@@ -607,6 +620,9 @@ function drawOverlay(state) {
   const readout = [wording.distance];
   if (wording.fall) readout.push(wording.fall);
   if (stops) readout.push('Stops at a wall');
+  // Stopped short by a wall or a creature: the squares it really moves, and what it takes for it.
+  const slam = forcedOutcomeWording(forcedLegs && zones?.forcedOutcome ? zones.forcedOutcome(forcedLegs, state.measurementActor ? { actor: state.measurementActor } : {}) : null);
+  readout.push(...slam);
   if (shiftWarning) readout.push('No shift in difficult terrain');
   if (wording.cost) readout.push(wording.cost);
   state.rulerValue.textContent = readout.join(WORDING_SEPARATOR);
@@ -623,7 +639,7 @@ function drawOverlay(state) {
     };
     const gridForLabels = getGridMetrics()?.size || 64;
     state.lastPresentation.nodes = rawPoints.map(at);
-    state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (stops ? WORDING_SEPARATOR + 'Stops at a wall' : '') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
+    state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (stops ? WORDING_SEPARATOR + 'Stops at a wall' : '') + slam.map((words) => WORDING_SEPARATOR + words).join('') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
     state.lastPresentation.legs = placeLegLabels(segments, null, gridForLabels).map((label, index) => {
       const a = at(rawPoints[index]), b = at(rawPoints[index + 1] ?? rawPoints[index]);
       return { text: label.text, at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 } };
@@ -722,11 +738,7 @@ function getRenderablePoints(state) {
 
   if (state.measuring && state.hoverPoint) {
     const lastPoint = points[points.length - 1];
-    if (
-      !lastPoint ||
-      lastPoint.column !== state.hoverPoint.column ||
-      lastPoint.row !== state.hoverPoint.row
-    ) {
+    if (!lastPoint || !sameMeasuredSpot(lastPoint, state.hoverPoint)) {
       return [...points, state.hoverPoint];
     }
   }
@@ -874,6 +886,38 @@ export function beginExternalMeasurement(point, options = {}) {
  * Drops a path node where a held token is being held (a quick right click, right-press.mjs).
  * True when one was added: not when no token is held, when a node is there already, or at the most.
  */
+/**
+ * The Measure tool (hold M, or the Measure button), while its line follows the pointer: a corner where the pointer is.
+ * A right click does it, as Shift does (Brandon, November 25, 2026: "I want to be able to right click to create a
+ * waypoint"). True when the tool took it, so the click is not also a camera click.
+ */
+export function addMeasureToolNode() {
+  if (!sharedState?.measuring || sharedState.mode !== 'pointer') return false;
+  addMeasurementNode(sharedState);
+  return true;
+}
+
+/**
+ * The Measure tool, Z held and the wheel turned ("press z and scroll to make a waypoint and adjust height"): the
+ * first notch drops a corner where the pointer is, and each notch then raises (or lowers, never under what the
+ * pointer is over) the line's end by one square. The height stays as the pointer moves on; another corner (right
+ * click) keeps it. True when the tool took the wheel, so the camera does not zoom.
+ */
+export function nudgeMeasureHeight(steps) {
+  const state = sharedState;
+  if (!state?.measuring || state.mode !== 'pointer' || !Number.isFinite(steps) || !steps) return false;
+  if (!state.heightNodeDropped) { state.heightNodeDropped = true; addMeasurementNode(state); }
+  state.heightOffset = Math.max(0, Math.min(200, (Number(state.heightOffset) || 0) + Math.trunc(steps)));
+  state.hoverPoint = raised(state, state.rawHover ?? state.hoverPoint);
+  updateOverlay(state);
+  return true;
+}
+
+/** Z let go: the next turn of the wheel with Z held starts from a new corner. */
+export function endMeasureHeightNudge() {
+  if (sharedState) sharedState.heightNodeDropped = false;
+}
+
 export function addExternalMeasurementNode() {
   return Boolean(sharedState && sharedState.mode === 'external' && addMeasurementNode(sharedState));
 }

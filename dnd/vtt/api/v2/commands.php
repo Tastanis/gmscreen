@@ -88,7 +88,7 @@ try {
         if ($placement === null) {
             vttSyncV2Respond(404, ['success' => false, 'error' => 'Placement not found.']);
         }
-        if (!vttSyncV2CanMovePlacement($auth, $sceneId, $placementId, $placement)) {
+        if (!vttSyncV2CanMovePlacement($auth, $sceneId, $placementId, $placement, is_array($command['payload'] ?? null) ? $command['payload'] : [])) {
             vttSyncV2Respond(403, ['success' => false, 'error' => 'You cannot move this token.']);
         }
         $result = vttSyncV2Store()->acceptTokenMove($command, (string) ($auth['user'] ?? ''), (bool) ($auth['isGM'] ?? false));

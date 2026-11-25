@@ -92,6 +92,7 @@ export function normalizePlacementForRender(placement) {
     condition,
     team,
     hidden,
+    dead: placement.dead === true,
     marks,
     activeMarks,
   };

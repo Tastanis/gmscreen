@@ -35,6 +35,7 @@ html.vtt-embed.te-docked #te-top { left: 0; }
 #te-top .te-show-scene:hover { border-color: #c8a95e; }
 #te-top .te-show-scene.on { cursor: default; color: #9fc79a; border-color: #3d5a36; background: #18201a; }
 #te-top .te-fight { flex: none; padding: 3px 8px; border-radius: 6px; background: #3a1d18; color: #f0c0b0; font-weight: 600; white-space: nowrap; }
+#te-top .te-fight.heroes { background: #17301d; color: #b9ecc2; }   /* the heroes' turns: green; the Director's stay red */
 #te-top .te-fight[hidden] { display: none; }
 #te-top .te-tokens { flex: 1; min-width: 0; height: 100%; }
 #te-top .te-combat { display: flex; align-items: center; gap: 4px; flex: none; }

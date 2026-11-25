@@ -1439,7 +1439,9 @@
             wrapper.className = 'chat-message';
             // When and who, for pages that group lines or add day dividers (the Table's chat window).
             if (message.timestamp) wrapper.dataset.ts = String(message.timestamp);
-            wrapper.dataset.user = String(message.user || '');
+            // A line the board wrote itself is its own "person" (lines in a row from it group together).
+            const boardSpeaker = typeof message.speaker === 'string' ? message.speaker.trim() : '';
+            wrapper.dataset.user = boardSpeaker ? `board:${boardSpeaker}` : String(message.user || '');
 
             const messageText = getDisplayText(typeof message.message === 'string' ? message.message : '');
 
@@ -1472,6 +1474,13 @@
             // The player's name from the players page, not their login id (Brandon, November 17, 2026: Pippa showed as
             // "player 6"), as whispers already do.
             userSpan.textContent = getParticipantLabel(message.user) || 'Unknown';
+            // Written by the board (a zone ticking, a trigger made ready, a push's result), not said by a person: it is
+            // shown under the board's name. Whose page worked it out is in the tooltip.
+            if (boardSpeaker) {
+                userSpan.title = `Written by the board, from ${userSpan.textContent}'s page`;
+                userSpan.textContent = boardSpeaker;
+                wrapper.classList.add('chat-message--board');
+            }
             meta.appendChild(userSpan);
 
             const timeSpan = document.createElement('span');
@@ -2166,7 +2175,7 @@
             }
         }
 
-        async function sendChatMessage({ message = '', imageUrl = '', thumbnailUrl = '', type = 'text', payload = null, target = '', onOptimistic = null, onSuccess = null, onError = null }) {
+        async function sendChatMessage({ message = '', imageUrl = '', thumbnailUrl = '', type = 'text', payload = null, target = '', speaker = '', onOptimistic = null, onSuccess = null, onError = null }) {
             const text = typeof message === 'string' ? message.trim() : '';
             const displayText = getDisplayText(text);
             const image = typeof imageUrl === 'string' ? imageUrl.trim() : '';
@@ -2191,6 +2200,10 @@
                 pending: true,
                 error: false
             };
+            const boardSpeaker = typeof speaker === 'string' && normalizedType === 'text' ? speaker.trim().slice(0, 40) : '';
+            if (boardSpeaker) {
+                optimisticMessage.speaker = boardSpeaker;
+            }
 
             if (image) {
                 optimisticMessage.imageUrl = normalizedImage || image;
@@ -2238,6 +2251,9 @@
                 }
                 if (normalizedType !== 'text' || payloadObject) {
                     params.append('type', normalizedType);
+                }
+                if (boardSpeaker) {
+                    params.append('speaker', boardSpeaker);
                 }
                 if (payloadObject) {
                     try {

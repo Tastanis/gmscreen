@@ -43,6 +43,40 @@ again and again and the host answered 522. Anything a page asks for on a timer m
 
 Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php` and `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs`.
 
+## Table fixes after the November 24, 2026 session (Build 651)
+
+Brandon's list of sixteen. Where each one lives, for whoever touches it next:
+
+- **Pings show in the dark.** A ping's beam is drawn in the board's signal pass (`scene-view.mjs` `signalScene`),
+  after vision has blacked out what the heroes cannot see. Anything else that must show through vision goes there.
+  Alt + click on a token pings the token's own square (`bridge.pingToken`; 3D tokens are not inside the map surface).
+- **A body.** `placement.dead` (Director only, token settings "Dead or unconscious"): a skull on the token
+  (`paintDeadMark`) and a red ring at its base (`layers/token-footprints.mjs`, `TOKEN_LOOKS.body`).
+- **Universal actions.** One file, `dnd/character_sheet/ability-automation/universal-actions.json`, added to every
+  hero's tray and (those marked for monsters) every monster's by `assets/js/ui/universal-actions.js`. Nothing is
+  written into sheets or stat blocks. Anything that spends a Recovery is `"for": ["heroes"]`.
+- **Chat.** Every line the board writes goes through `sendBoardChat` and is shown under "Table"
+  (`speaker` in `chat_handler.php`); `user` still records whose page sent it. Do not call
+  `window.dashboardChat.sendMessage` from `board-interactions.js`.
+- **Measure tool (hold M).** Right click drops a corner; Z + wheel drops a corner and raises the end a square a
+  notch (`drag-ruler.js` `addMeasureToolNode`, `nudgeMeasureHeight`). Z + wheel also lifts a held token.
+- **Turn buttons** follow `--vtt-free-right` (`board-free-area.js` fires `vtt:free-area`). **Turn indicator**:
+  `data-turn-side` on `[data-turn-indicator]`, green for the heroes.
+- **A creature in plain view stayed hidden.** Three causes closed: a dropped token takes the floor it was dropped on;
+  the players' Height cut goes by where a creature on foot stands (`standingLevel`); the sight check's kept answers
+  name the wall model, and with vision on it is looked at again every 3 seconds.
+- **An area's time is up.** Asked of whoever runs the turn's hero: `endDue.askUserId` (`zoneEndAsker`), the
+  Director after 25 seconds unanswered.
+- **Pushing.** A player may force-move (Ctrl) a creature that is not theirs and nothing else
+  (`mayMoveAs`, `SyncV2Store::playerMayPushPlacement`). The ruler says the squares really moved and the damage.
+- **Move counter**: a page label beside the held token (`placeRouteLabel`), not a sprite under it.
+- **Ability tray**: a failed re-read of the hero already shown leaves the tray up.
+- **Weakness**: the larger of the same type counts and both stay listed. That was already so; `"stacks": true`
+  on an effect is the only thing that adds.
+
+Tests: `assets/js/ui/__tests__/table-fixes-2026-11-25.test.mjs`, `api/v2/tests/table-fixes-2026-11-25.test.php`,
+`character_sheet/ability-automation/__tests__/universal-actions.test.mjs`.
+
 ## Version System
 
 ### Overview

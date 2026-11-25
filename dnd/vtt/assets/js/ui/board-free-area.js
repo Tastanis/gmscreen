@@ -17,6 +17,7 @@ export function mountBoardFreeArea(doc = document) {
   const win = doc.defaultView || window;
   let outside = { left: 0, right: 0 };
   let frame = 0;
+  let last = '';
   const watched = new WeakSet();
 
   const classObserver = new win.MutationObserver(() => schedule());
@@ -48,6 +49,12 @@ export function mountBoardFreeArea(doc = document) {
     root.style.setProperty('--vtt-free-left', `${Math.round(left)}px`);
     root.style.setProperty('--vtt-free-right', `${Math.round(right)}px`);
     root.classList.add('vtt-free-area');
+    // Told to whatever floats over the board by its own arithmetic (the End Turn and Start Turn buttons), when it changes.
+    const now = `${Math.round(left)}|${Math.round(right)}`;
+    if (now !== last) {
+      last = now;
+      doc.dispatchEvent(new win.CustomEvent('vtt:free-area', { detail: { left: Math.round(left), right: Math.round(right) } }));
+    }
   }
 
   function schedule() {

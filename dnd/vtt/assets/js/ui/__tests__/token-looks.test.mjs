@@ -61,7 +61,7 @@ test('the board uses them: footprint layer registered, stacked outline toned dow
   const layers = read('../../../../board3d/layers/index.mjs');
   assert.match(layers, /vtt3d\.addLayer\('token-footprints',createTokenFootprintsLayer\);/);
   const footprints = read('../../../../board3d/layers/token-footprints.mjs');
-  assert.match(footprints, /tokenLookSettings\(\)\.footprint/, 'settings from TOKEN_LOOKS');
+  assert.match(footprints, /const looks=tokenLookSettings\(\),settings=looks\.footprint,body=looks\.body/, 'settings from TOKEN_LOOKS (the square, and the ring round a body)');
   assert.match(footprints, /if\(!gm&&p\.hidden\)continue;/, 'hidden tokens stay hidden from players');
   const board3d = read('../../../../board3d/integration.mjs');
   assert.match(board3d, /tokenScreenMetrics\(Math\.hypot\(across\.x-foot\.x,across\.y-foot\.y\)\*2,Math\.max\(p\.width,p\.height\),tokenLookSettings\(\)\.tokenScreen\)/);

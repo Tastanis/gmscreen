@@ -2156,7 +2156,10 @@ final class SyncV2Store
             $current = $state['placements'][$normalized['sceneId']][$normalized['entityId']] ?? null;
             if (!is_array($current)) return $this->rollbackConflict('placement_missing', $snapshot);
             if (!$isGm) {
-                if (!$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot move this token.');
+                if (!$this->playerMayMovePlacement($current)
+                    && !$this->playerMayPushPlacement($current, $normalized['movementKind'], $normalized['forcedDestination'], $normalized['undoRevision'])) {
+                    throw new InvalidArgumentException('You cannot move this token.');
+                }
                 foreach (($state['sceneConfig'][$normalized['sceneId']]['mapLevels']['levels'] ?? []) as $level) {
                     if (($level['id'] ?? null) === $this->placementLevelId($current) && ($level['hidden'] ?? false) === true) {
                         throw new InvalidArgumentException('You cannot move a token on a hidden floor.');
@@ -2643,6 +2646,21 @@ final class SyncV2Store
     {
         return !$this->placementIsHidden($placement)
             && $this->combatantTeam($placement) === 'ally';
+    }
+
+    /**
+     * A push by hand. A player cannot move a creature that is not theirs, but may force-move one (Brandon,
+     * November 25, 2026: "non GM users cannot push enemy tokens. Their abilities can do it but not the normal
+     * pushes. Let's say they can't move a token, but if they hold for a push, it allows that type of movement").
+     * Only a forced move with its destination stated, as every hand push sends; never the undo of a move, and
+     * never a token hidden from players.
+     */
+    public function playerMayPushPlacement(array $placement, $movementKind, $forcedDestination, $undoRevision = null): bool
+    {
+        return !$this->placementIsHidden($placement)
+            && $movementKind === 'forced'
+            && is_array($forcedDestination)
+            && $undoRevision === null;
     }
 
     /**
@@ -4043,6 +4061,7 @@ final class SyncV2Store
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
             'metadata', 'authorId', 'authorRole', 'authorIsGm',
+            'dead',   // the Director's mark on a body
         ];
         foreach (array_keys($patch) as $field) {
             if (in_array((string) $field, $gmOnly, true)) {

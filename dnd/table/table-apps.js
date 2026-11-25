@@ -218,7 +218,7 @@
     const top = cards.length ? Math.max(...cards.map((c) => c.offsetTop + c.offsetHeight)) + 12 : 24;
     const width = cards.length ? Math.max(220, Math.max(...cards.map((c) => c.offsetLeft + c.offsetWidth)) - left) : 232;
     Object.assign(p.style, { left: left + 'px', top: top + 'px', width: width + 'px' });
-    const enemies = /enemy|foe|monster/i.test(L.turn || '');
+    const enemies = L.turnSide ? L.turnSide === 'enemy' : /enemy|foe|monster/i.test(L.turn || '');   // the board says whose side it is ("GM's turn" too)
     const foes = {}; (L.foeList || []).forEach((f) => { const k = f.name; (foes[k] ||= { name: k, n: 0, hp: 0, max: 0 }); foes[k].n += 1; foes[k].hp += Number.isFinite(f.hp) ? f.hp : 0; foes[k].max += Number.isFinite(f.max) ? f.max : 0; });
     p.hidden = false;
     p.className = enemies ? 'foes-turn' : 'heroes-turn';

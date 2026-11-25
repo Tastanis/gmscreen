@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {wheelNotches} from './wheel-notches.mjs';
 
 // Board camera. Every mouse button is its own gesture, so they combine: hold a
 // token with the left button while the middle button turns the view, the right
@@ -34,7 +35,9 @@ export function createCameraControls(camera){
 // as a pointermove, not a pointerdown) still starts its own gesture.
 //  middle: orbit · right: take hold of the ground · wheel: zoom toward the pointer.
 // `inBoard(event)` says whether a gesture may start at this event's target.
-export function bindCameraInput({controls,zoomAt,grabStart,grabMove,inBoard,onChange=()=>{},onRightClick=null}){
+// onWheel(event, notches): something on the board takes the wheel for itself (Z held: a held token or the Measure
+// tool's end goes up and down); true means it did, and the camera does not zoom.
+export function bindCameraInput({controls,zoomAt,grabStart,grabMove,inBoard,onChange=()=>{},onRightClick=null,onWheel=null}){
  let buttons=0,orbiting=false,panning=false,panTravel=0,last=null,suppressMenu=false;
  const MIDDLE=4,RIGHT=2;
  function sync(e){
@@ -62,7 +65,7 @@ export function bindCameraInput({controls,zoomAt,grabStart,grabMove,inBoard,onCh
  }
  function up(e){sync(e);last={x:e.clientX,y:e.clientY};}
  // A view that takes the wheel for itself (1st person: the field of view, globalThis.vtt3dWheelHook) gets it instead of the zoom.
- function wheel(e){if(!inBoard(e))return;e.preventDefault();e.stopImmediatePropagation();if(globalThis.vtt3dWheelHook?.(e))return;zoomAt(e.clientX,e.clientY,e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));onChange(e);}
+ function wheel(e){if(!inBoard(e))return;e.preventDefault();e.stopImmediatePropagation();if(globalThis.vtt3dWheelHook?.(e))return;if(onWheel?.(e,wheelNotches(e))){onChange(e);return;}zoomAt(e.clientX,e.clientY,e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));onChange(e);}
  function menu(e){if(suppressMenu){suppressMenu=false;e.preventDefault();e.stopImmediatePropagation();}}
  function mouseDown(e){if(e.button===1&&inBoard(e))e.preventDefault();}
  function blur(){buttons=0;orbiting=false;panning=false;}

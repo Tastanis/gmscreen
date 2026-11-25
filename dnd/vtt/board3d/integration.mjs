@@ -1,7 +1,7 @@
 import {portalAnchorVisible} from '../assets/js/ui/portal-visibility.mjs';
 import {createSceneView} from './scene-view.mjs';
 import {bindCameraInput} from './camera-controls.mjs';
-import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode} from '../assets/js/ui/drag-ruler.js';
+import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode,addMeasureToolNode,nudgeMeasureHeight,endMeasureHeightNudge} from '../assets/js/ui/drag-ruler.js';
 import {createEffectOverlays} from './effect-overlays.mjs';
 import {createMinis} from './minis.mjs';
 import {sceneArtFor,loadSceneArt} from './scene-art.mjs';
@@ -94,6 +94,28 @@ async function mount(){
  function syncTurnStart(){const t=context.turn,key=t&&context.sceneId?`${context.sceneId}:${t.round}:${t.combatantId}`:'';
   if(!key){turnStart=null;return;}if(turnStart?.key===key)return;const p=find(t.combatantId);if(!p)return;const w=world(p);
   turnStart={key,id:p.id,x:w.x,y:w.y,z:w.z,width:Math.max(w.width,w.height),level:w.level,image:typeof p.imageUrl==='string'?p.imageUrl:'',hidden:!!p.hidden};}
+ // The ruler's total ("Move 4 · Cost 5", "Forced movement 3 · Stops at a wall") as words on the page, beside the token
+ // it is for. Drawn in the 3D picture it stood straight over the square the token was being put on, and the held
+ // token's own picture covered it (Brandon, November 25, 2026: "the move counter appears mostly under the token so I
+ // can't read the numbers"). Beside the token, on its right, or on its left at the right edge of the board; with no
+ // token there (the Measure tool on bare ground) just above and beside the end of the line.
+ let routeLabel=null;
+ function placeRouteLabel(total,recordById,canvasRect,hostRect){
+  const q=total?.text&&canvasRect&&hostRect&&total.at?view.project(total.at):null;
+  if(!q?.visible){routeLabel?.remove();routeLabel=null;return;}
+  if(!routeLabel){routeLabel=document.createElement('div');routeLabel.className='vtt3d-route-total';routeLabel.setAttribute('role','status');overlayHost.append(routeLabel);}
+  if(routeLabel.textContent!==total.text)routeLabel.textContent=total.text;
+  // The token standing where the line ends (the held one is there already in recordById).
+  let near=null,nearest=Infinity;for(const p of recordById.values()){const d=Math.hypot(p.x-total.at.x,p.y-total.at.y);if(d<=Math.max(p.width||1,p.height||1)/2+.3&&d<nearest){near=p;nearest=d;}}
+  const node=near?bridge.getTokenElement?.(near.id):null,px=name=>Number.parseFloat(node?.style.getPropertyValue(name));
+  const ox=canvasRect.left-hostRect.left,oy=canvasRect.top-hostRect.top,wide=total.text.length*8.4+26,room=hostRect.width;
+  let left,top,side='right';
+  if(node&&Number.isFinite(px('--vtt3d-x'))&&Number.isFinite(px('--vtt3d-size'))){
+   const x=px('--vtt3d-x'),y=px('--vtt3d-y'),size=px('--vtt3d-size'),tall=Number.isFinite(px('--vtt3d-height'))?px('--vtt3d-height'):size;
+   left=x+size+10;top=y+tall/2;if(left+wide>room-6){left=x-10;side='left';}
+  }else{left=ox+q.x+16;top=oy+q.y-30;if(left+wide>room-6){left=ox+q.x-16;side='left';}}
+  routeLabel.dataset.side=side;routeLabel.style.left=`${Math.round(left)}px`;routeLabel.style.top=`${Math.round(top)}px`;
+ }
  function placeTurnGhost(recordById,canvasRect,hostRect){
   const p=turnStart&&recordById.get(turnStart.id),moved=p&&(Math.abs(p.x-turnStart.x)>.01||Math.abs(p.y-turnStart.y)>.01||Math.abs(p.z-turnStart.z)>.3);
   const shown=moved&&canvasRect&&hostRect&&(!turnStart.hidden||context.isGM)&&(tokenLevel===null||tokenLevel<0||turnStart.level<=tokenLevel);
@@ -171,7 +193,7 @@ async function mount(){
   return {x:(o.left||0)+hit.x*g,y:(o.top||0)+hit.y*g,height:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,column:Math.floor(hit.x),row:Math.floor(hit.y),squares:{x:hit.x,y:hit.y},tokenId:hit.tokenId??null};
  }
  // Board layers: each 3D layer (drawings, templates, zones, ...) is a factory
- // `({view,scene,guideScene,overlayHost,bridge,helpers}) => ({update(context,dt), dispose()})`.
+ // `({view,scene,guideScene,signalScene,overlayHost,bridge,helpers}) => ({update(context,dt), dispose()})`.
  // Layers are rebuilt with the scene. Map pixels <-> squares and heights come
  // from `helpers`, so every layer measures the same way.
  const layerFactories=new Map(),layers=new Map();
@@ -189,9 +211,9 @@ async function mount(){
   get ramps(){return data?.ramps||null;},
   get context(){return context;},
  };
- function startLayers(){for(const [name,factory] of layerFactories){try{layers.set(name,factory({view,scene:view.scene,guideScene:view.guideScene,overlayHost,bridge,helpers}));}catch(error){console.error('[VTT 3D] layer',name,error);}}}
+ function startLayers(){for(const [name,factory] of layerFactories){try{layers.set(name,factory({view,scene:view.scene,guideScene:view.guideScene,signalScene:view.signalScene,overlayHost,bridge,helpers}));}catch(error){console.error('[VTT 3D] layer',name,error);}}}
  function stopLayers(){for(const [name,layer] of layers){try{layer?.dispose?.();}catch(error){console.error('[VTT 3D] layer',name,error);}}layers.clear();}
- function addLayer(name,factory){layerFactories.set(name,factory);if(layers.has(name)){layers.get(name)?.dispose?.();layers.delete(name);}if(view){try{layers.set(name,factory({view,scene:view.scene,guideScene:view.guideScene,overlayHost,bridge,helpers}));}catch(error){console.error('[VTT 3D] layer',name,error);}}}
+ function addLayer(name,factory){layerFactories.set(name,factory);if(layers.has(name)){layers.get(name)?.dispose?.();layers.delete(name);}if(view){try{layers.set(name,factory({view,scene:view.scene,guideScene:view.guideScene,signalScene:view.signalScene,overlayHost,bridge,helpers}));}catch(error){console.error('[VTT 3D] layer',name,error);}}}
  // Grid directions for the arrow keys: up is away from the viewer, right is to
  // the viewer's right, each snapped to the nearest row or column direction.
  function gridDirections(){if(!view)return null;const f=view.controls.target.clone().sub(view.camera.position);f.y=0;if(f.lengthSq()<1e-8)return null;
@@ -227,7 +249,14 @@ async function mount(){
  function stackOrderOf(id){const value=Number(find(id)?.stackOrder);return Number.isFinite(value)?value:0;}
  function selected(){return find(context.selectedIds?.[0]);}
  function levelIndex(levelId){return Math.max(0,data?.levels?.findIndex(l=>l.id===levelId)??0);}
- function world(p){const z=bridge.heightFor(p.id);return {id:p.id,x:p.column+(p.width||1)/2,y:p.row+(p.height||1)/2,z:Number.isFinite(z)?z:0,width:p.width||1,height:p.height||1,color:p.color||p.borderColor||(p.team==='enemy'?'#d39184':'#a9d6c7'),level:levelIndex(p.levelId)};}
+ // The floor a token counts as on for the Height cut (players are cut at the floor their own hero stands on). A
+ // creature on foot that stands well below the floor it is filed under counts as on the floor its feet are at: one
+ // dropped on the ground while the Director's Height was on an upper floor stood on the ground in plain view, and
+ // every player below that floor had it cut away until it was moved (Brandon, November 25, 2026).
+ function standingLevel(p,z){let i=levelIndex(p.levelId);const heights=data?.levelHeights;
+  if(i<=0||!Number.isFinite(z)||!Array.isArray(heights)||['fly','hover'].includes(p.movementMode)||p._floorTraversal)return i;
+  while(i>0&&Number.isFinite(heights[i])&&z<heights[i]-.6)i--;return i;}
+ function world(p){const z=bridge.heightFor(p.id);return {id:p.id,x:p.column+(p.width||1)/2,y:p.row+(p.height||1)/2,z:Number.isFinite(z)?z:0,width:p.width||1,height:p.height||1,color:p.color||p.borderColor||(p.team==='enemy'?'#d39184':'#a9d6c7'),level:standingLevel(p,z)};}
  function destination(hit,p){return {column:Math.max(0,Math.round(hit.x-(p.width||1)/2)),row:Math.max(0,Math.round(hit.y-(p.height||1)/2))};}
  const REFUSED={'movement-pending':'Still moving the last token.','not-permitted':'You cannot move that token.','ability-selection-pending':'Finish the ability first.'};
  function movementKind(e){return dragMovementKind(e||{});}
@@ -266,11 +295,13 @@ async function mount(){
  function markHeld(id){for(const node of tokenLayer.querySelectorAll('.vtt3d-held'))if(node.dataset.placementId!==id)node.classList.remove('vtt3d-held');
   if(id)bridge.getTokenElement?.(id)?.classList.add('vtt3d-held');}
  function cancelDrag(){sayHeld(null);markHeld(null);clickMoveTokenId=null;hoverPointer=null;held=null;const previous=drag;drag=null;if(previous&&tokenLayer.hasPointerCapture(previous.pointerId))tokenLayer.releasePointerCapture(previous.pointerId);bridge.endMovementPreview?.();clearGuides();hoverSignature='';}
- async function commit(hit,p,e,intent=null){if(!p||p.canMove===false||context.busy){cancelDrag();return;}const to=destination(hit,p);intent=intent||bridge.captureMovementPreview?.();
+ // A creature that is not the player's own is not moved, but it may be pushed (Ctrl held: a forced move).
+ const mayMove=(p,e)=>p.canMove!==false||(movementKind(e)==='forced'&&p.canPush!==false);
+ async function commit(hit,p,e,intent=null){if(!p||!mayMove(p,e)||context.busy){cancelDrag();return;}const to=destination(hit,p);intent=intent||bridge.captureMovementPreview?.();
   const matches=intent&&intent.placementId===p.id&&intent.column===to.column&&intent.row===to.row
    &&(intent.rampId??null)===(hit.rampId??null)&&(intent.levelId??null)===(hit.levelId??null)&&(intent.surfaceId??null)===(hit.surfaceId??null)
    &&(hit.rampId||Number.isFinite(intent.surfaceElevation)&&Math.abs(intent.surfaceElevation-hit.z)<.55);
-  if(!matches){bridge.previewMovement?.({placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});intent=bridge.captureMovementPreview?.();}
+  if(!matches){bridge.previewMovement?.({placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});intent=bridge.captureMovementPreview?.();}
   // Where it was being drawn as it was put down: it stays there until the move is answered (frame, `landing`).
   // Its movement line shrinks away toward where it went instead of vanishing (route-collapse.mjs).
   const trail=getCurrentMeasurementPresentation();
@@ -297,8 +328,8 @@ async function mount(){
   if(!p||(!drag?.moved&&clickMoveTokenId!==p.id)||context.busy||context.targetMode){if(hoverSignature){(reachSignature='',view.setReachable([]));view.setPath([]);hoverSignature='';}return;}
   const hit=dragHit(e,p);if(!hit){bridge.endMovementPreview?.();clearGuides();hoverSignature='';held=null;sayHeld('No ground here: let go to put it back.',e);return;}
   const dest=destination(hit,p),key=[p.id,dest.column,dest.row,hit.rampId?'ramp':hit.z.toFixed(2),hit.levelId,hit.surfaceId,hit.rampId,movementKind(e),Boolean(drag?.moved)].join(':');if(key===hoverSignature)return;hoverSignature=key;
-  const preview=bridge.previewMovement?.({placementId:p.id,...dest,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});
-  sayHeld(preview?.blocked||null,e);
+  const preview=bridge.previewMovement?.({placementId:p.id,...dest,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});
+  sayHeld(preview?.blocked||(!mayMove(p,e)&&p.canPush!==false?'Not yours to move. Hold Ctrl to push it.':null),e);
   const displayHeight=Number.isFinite(preview?.surfaceElevation)?preview.surfaceElevation:hit.z;
   const cells=[];for(let x=0;x<(p.width||1);x++)for(let y=0;y<(p.height||1);y++)cells.push({x:dest.column+x+.5,y:dest.row+y+.5,z:displayHeight,level:hit.level});reachSignature='';view.setReachable(cells);
   const source=world(p),airZ=Number.isFinite(hit.air)?hit.air:null;view.setMovementRoute(preview?.route??null);view.setPath(preview?.route?[]:[source,{x:dest.column+(p.width||1)/2,y:dest.row+(p.height||1)/2,z:airZ??displayHeight}]);
@@ -327,6 +358,9 @@ async function mount(){
 
  // Tokens: select, drag or click-to-move, through the VTT bridge.
  tokenLayer.addEventListener('pointerdown',e=>{const node=e.target.closest('[data-placement-id]');if(!node||e.target.closest('[data-token-trigger-ready],[data-token-judgment-mark],[data-token-hidden-effect],button'))return;
+  // Alt + click is a ping, on a token as on the ground (Brandon, November 25, 2026: "allow pings on top of tokens"):
+  // the token's own square is pinged, and the token is not picked up. Alt + right click is the Director's "look here".
+  if(e.altKey&&(e.button===0||e.button===2)){if(bridge.pingToken?.(node.dataset.placementId,e)){e.preventDefault();e.stopImmediatePropagation();}return;}
   if(e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();if(lift)return;const id=node.dataset.placementId;
   // A move or an area is aimed at the ground under the pointer, also through a mini standing in front of it; only a
   // click on the creature's own squares picks the creature (a push aimed into it).
@@ -357,7 +391,7 @@ async function mount(){
  // Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves;
  // Z let go turns it back to sideways, from its new height (Brandon, October 2026).
  document.addEventListener('keydown',e=>{if((e.key==='z'||e.key==='Z')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!typing(e.target)){zHeld=true;if(!lift&&(drag||clickMoveTokenId))liftHeld();}},true);
- document.addEventListener('keyup',e=>{if(e.key==='z'||e.key==='Z'){zHeld=false;if(lift?.from)endLift(true,true);}},true);
+ document.addEventListener('keyup',e=>{if(e.key==='z'||e.key==='Z'){zHeld=false;endMeasureHeightNudge();if(lift?.from)endLift(true,true);}},true);
  window.addEventListener('blur',()=>{zHeld=false;const from=lift?.from;endLift(false);if(from)cancelDrag();});
  // What a token would stand on below the height it is at: a floor, a ramp or the ground (the tether's own rule).
  function supportUnder(w){const below=tethers([{...w,level:-1}])[0];return Number.isFinite(below?.bottom)?below.bottom:w.z;}
@@ -370,8 +404,18 @@ async function mount(){
   bridge.endMovementPreview?.();clearGuides();hoverSignature='';const w=world(p);
   lift={id,pointerId:drag?drag.pointerId:null,from:drag?'drag':'hold',y:pointer.clientY,start:w.z,z:w.z,floor:supportUnder(w),x:w.x,yy:w.y};held={id,x:w.x,y:w.y,z:w.z};showLift();}
  function moveLift(e){if(!lift||!view)return;const at={x:lift.x,y:lift.yy},a=view.project({...at,z:lift.start}),b=view.project({...at,z:lift.start+1});
-  const perSquare=Math.max(8,Math.abs(a.y-b.y)),steps=Math.round((lift.y-e.clientY)/perSquare);
+  if(e&&Number.isFinite(e.clientY))lift.lastY=e.clientY;
+  const perSquare=Math.max(8,Math.abs(a.y-b.y)),steps=Math.round((lift.y-(lift.lastY??lift.y))/perSquare)+(lift.wheel||0);
   lift.z=steps?Math.max(Math.ceil(lift.floor-.01),Math.round(lift.start)+steps):lift.start;held={id:lift.id,x:lift.x,y:lift.yy,z:lift.z};showLift();}
+ // Z held and the wheel turned (Brandon, November 25, 2026: "press z and scroll to make a waypoint and adjust height").
+ // A held token goes up or down a square a notch, and that height is its waypoint: letting go of Z carries on sideways
+ // from it (a height set by moving the hand still wants a right click to be kept). With the Measure tool (hold M) the
+ // first notch drops a corner where the pointer is and each notch raises the line's end a square.
+ function wheelHeight(notches){
+  if(!zHeld||!notches)return false;
+  if(lift){lift.wheel=(lift.wheel||0)+notches;moveLift(null);if(lift.from)lift.locked=lift.z;showLift();return true;}
+  return nudgeMeasureHeight(notches);
+ }
  function showLift(){if(!lift||!view)return;if(!liftLabel){liftLabel=document.createElement('div');liftLabel.className='vtt3d-lift-label';liftLabel.setAttribute('role','status');overlayHost.append(liftLabel);}
   const up=Math.max(0,Math.round(lift.z-lift.floor)),q=view.project({x:lift.x,y:lift.yy,z:lift.z}),canvasRect=canvas.getBoundingClientRect(),hostRect=overlayHost.getBoundingClientRect();
   liftLabel.textContent=(up?`${up} ${up===1?'square':'squares'} up`:'On the ground')+(lift.locked===lift.z?' (waypoint)':'');liftLabel.style.left=`${canvasRect.left-hostRect.left+q.x}px`;liftLabel.style.top=`${canvasRect.top-hostRect.top+q.y}px`;}
@@ -421,7 +465,10 @@ async function mount(){
  const inBoard=e=>!!(e.target?.closest?.('#vtt-map-surface,#vtt-board3d-token-host,#vtt-board3d')||(drag&&e.target===tokenLayer));
  bindCameraInput({controls:{orbit:(dx,dy)=>view?.orbit(dx,dy)},zoomAt:(x,y,d)=>view?.zoomAt(x,y,d),grabStart:(x,y)=>view?.grabStart(x,y),grabMove:(x,y)=>view?.grabMove(x,y),inBoard,onChange:()=>refreshHeld(),
   // A quick right click while a token is held drops a corner of its path there, as on the 2D board.
-  onRightClick:()=>{if(lift?.from){lockLift();return true;}if(!drag?.moved&&!clickMoveTokenId)return false;if(addExternalMeasurementNode()){hoverSignature='';refreshHeld();}return true;}});
+  // A right click: a waypoint. For a held token going up and down, at that height; for one carried sideways, a corner
+  // of its route; for the Measure tool (hold M) while its line follows the pointer, a corner of the line.
+  onRightClick:()=>{if(lift?.from){lockLift();return true;}if(!drag?.moved&&!clickMoveTokenId)return addMeasureToolNode();if(addExternalMeasurementNode()){hoverSignature='';refreshHeld();}return true;},
+  onWheel:(e,notches)=>wheelHeight(notches)});
 
  let guideSignature='',areaPreview=null;
  // An ability's area while it is being placed: the same see-through volume as templates
@@ -458,7 +505,9 @@ async function mount(){
     const verb=String(guide.verb||(guide.movementKind==='teleport'?'teleport':'move'));
     const hit=land.wall?'a wall':land.collidedIds?.length?'a creature':'';
     const text=`${verb[0].toUpperCase()}${verb.slice(1)} ${land.moved}${hit?` · hits ${hit}${land.damage>0?` for ${land.damage}`:''}`:''}`;
-    guideRoute=land.moved?{pieces:[{points:[{x:from.x,y:from.y,z:from.z},{x,y,z}],color:'#f59e0b'}],total:{text,at:{x,y,z:z+1.6}}}:null;}
+    // A push that moves nothing still says what it does: a creature against a wall pushed 1 is "Push 0 · hits a wall
+    // for 3" (it was shown nothing at all; Brandon, November 25, 2026).
+    guideRoute=land.moved||hit?{pieces:land.moved?[{points:[{x:from.x,y:from.y,z:from.z},{x,y,z}],color:'#f59e0b'}]:[],total:{text,at:{x,y,z:z+1.6}}}:null;}
   }
   else if(guide.kind==='area'){(reachSignature='',view.setReachable([]));view.setPath([]);paintAreaPreview(guide,height);return;}
   else{(reachSignature='',view.setReachable([]));view.setPath([]);}
@@ -545,7 +594,9 @@ async function mount(){
    if(!recordsCache||recordKey.some((v,i)=>v!==recordsCache.key[i]))recordsCache={key:recordKey,records:(context.placements||[]).filter(p=>context.isGM||!p.hidden).map(world)};
    const records=recordsCache.records,signature=JSON.stringify([records,context.selectedIds]);if(signature!==lastTokenSignature){lastTokenSignature=signature;view.setTokens(records,context.selectedIds?.[0]);}
    // The ruler on the board, whether it measures a held token or the Measure tool.
-   view.setMovementRoute(getCurrentMeasurementPresentation()||guideRoute);
+   // The line, dots and leg lengths are drawn in the 3D picture; the total is put on the page (placeRouteLabel).
+   const route=getCurrentMeasurementPresentation()||guideRoute,routeTotal=route?.total?.text?route.total:null;
+   view.setMovementRoute(routeTotal?{...route,total:null}:route);
    effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}view.render(dt);
    const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});else if(guideHeld&&context.abilityGuide?.kind==='move'&&recordById.has(guideHeld.id))recordById.set(guideHeld.id,{...recordById.get(guideHeld.id),...guideHeld});
    // A token just put down stays where it is landing until the move is answered and the board has it on that square:
@@ -600,6 +651,7 @@ async function mount(){
     node.style.setProperty('--vtt3d-visible',(tokenLevel===null||tokenLevel<0||p.level<=tokenLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
    }
    }
+   placeRouteLabel(routeTotal,recordById,canvasRect,hostRect);
   }
   if(view&&!document.hidden){
    // Page controls pinned to the board (door and window buttons, zone buttons):
@@ -611,7 +663,7 @@ async function mount(){
    if(anchorKey!==lastAnchorKey||freshAnchor){lastAnchorKey=anchorKey;
    const rect=canvasRect;
    for(const el of anchored){placedElements.add(el);const [x,y,z]=el.dataset.vtt3dAnchor.split(',').map(Number);if(![x,y,z].every(Number.isFinite)){el.style.visibility='hidden';continue;}
-    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(tokenLevel===null||tokenLevel<0||level<=tokenLevel)&&(el.hasAttribute('data-portal-id') ? portalAnchorVisible(context.isGM, window.vttSightSees, window.vttSightTest?.on, x, y) : !(sightHides&&window.vttSightSees(x,y)===false));
+    const q=view.project({x,y,z}),level=el.dataset.vtt3dLevel?levelIndex(el.dataset.vtt3dLevel):0,shown=q.visible&&(tokenLevel===null||tokenLevel<0||level<=tokenLevel)&&(el.hasAttribute('data-portal-id') ? portalAnchorVisible(context.isGM, window.vttSightSees, window.vttSightTest?.on, x, y) : el.classList.contains('vtt-board__ping')||!(sightHides&&window.vttSightSees(x,y)===false));   // a ping's ring shows in the dark too, with its beam
     el.style.left=`${rect.left-hostRect.left+q.x}px`;el.style.top=`${rect.top-hostRect.top+q.y}px`;el.style.visibility=shown?'':'hidden';}
    }
    // A broken object or wall shows its rubble in place of its piece of the map's art, on every screen at once.

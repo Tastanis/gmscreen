@@ -23,6 +23,20 @@ export function rulerWording({ movementLabel = null, squares = 0, cost = squares
 }
 
 /**
+ * What a push that is stopped short will do, as ruler words: the squares really moved and the damage taken.
+ * `outcome` is {moved, damage, wall, collided} (terrain-zones-overlay.js forcedOutcome). A push that runs free
+ * (no wall, no creature) says nothing more. A wall: "Moves 0 · 3 damage" after the ruler's own "Stops at a wall".
+ * A creature: "Hits a creature · Moves 2 · 1 damage".
+ */
+export function forcedOutcomeWording(outcome) {
+  if (!outcome || (!outcome.wall && !outcome.collided)) return [];
+  const words = outcome.wall ? [] : ['Hits a creature'];
+  words.push(`Moves ${outcome.moved}`);
+  if (outcome.damage > 0) words.push(`${outcome.damage} damage`);
+  return words;
+}
+
+/**
  * A forced move reads as the squares moved and, apart from them, how far the creature then
  * falls: "Forced movement 2 · Fall 6". The drop is never part of the count. This is the whole
  * squares between the height it travels at and where it lands; under one square is not a fall.

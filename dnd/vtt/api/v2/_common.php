@@ -267,11 +267,13 @@ function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
     return $sceneConfig;
 }
 
+/** `$move` is the move's payload: a player's push by hand of a creature not theirs is allowed (playerMayPushPlacement). */
 function vttSyncV2CanMovePlacement(
     array $auth,
     string $sceneId,
     string $placementId,
-    array $placement
+    array $placement,
+    array $move = []
 ): bool {
     if (($auth['isGM'] ?? false) === true) {
         return true;
@@ -279,7 +281,8 @@ function vttSyncV2CanMovePlacement(
     if (vttSyncV2PlacementHidden($placement)) {
         return false;
     }
-    return vttSyncV2Store()->playerMayMovePlacement($placement);
+    return vttSyncV2Store()->playerMayMovePlacement($placement)
+        || vttSyncV2Store()->playerMayPushPlacement($placement, $move['movementKind'] ?? null, $move['forcedDestination'] ?? null, $move['undoRevision'] ?? null);
 }
 
 /** Shared player projection. Null means unavailable; never disclose a hidden ID. */

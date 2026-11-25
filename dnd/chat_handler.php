@@ -128,6 +128,13 @@ function sanitizeMessage($message) {
     return htmlspecialchars($clean, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** The name a board-written chat line is shown under: plain text, one line, 40 characters at most. */
+function sanitizeChatSpeaker($value)
+{
+    $name = preg_replace('/\s+/u', ' ', sanitizePlainText($value)) ?? '';
+    return function_exists('mb_substr') ? mb_substr($name, 0, 40) : substr($name, 0, 40);
+}
+
 function sanitizePlainText($value)
 {
     if (!is_string($value)) {
@@ -586,6 +593,16 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
 
     if ($target !== '') {
         $entry['target'] = $target;
+    }
+
+    // A line the board writes itself (what a zone, a trigger or the start of a turn did) is shown under the name it
+    // gives ("Table"), not under the name of whoever's page happened to work it out: the page of whoever started the
+    // turn or dealt the damage runs it, so such lines read as if that player had said them (Brandon, November 25,
+    // 2026: "an ability will happen and it will say cal said it, with his name at the top"). 'user' still records
+    // whose page sent it. Plain lines only; a whisper or a roll is always its sender's.
+    $speaker = sanitizeChatSpeaker($_POST['speaker'] ?? '');
+    if ($speaker !== '' && $messageType === 'text') {
+        $entry['speaker'] = $speaker;
     }
 
     $messages[] = $entry;
