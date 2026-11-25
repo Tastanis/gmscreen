@@ -157,6 +157,7 @@ require_once '../../version.php';
 <script type="module">
 import {installCampusTable,tableMargin} from './campus-scrolls.js?v=4';
 import * as THREE from 'three';
+import { cutChannel, sluiceMaterial, dressSluice, sluiceArch, sluiceSpray } from './sluice.js?v=1';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -690,7 +691,7 @@ function sample(x, z) {
       h -= 95 * sinkK - 16 * sinkK * (1 - sinkK) * ridged(x / 13, z / 13, 2); } }   // the sinkhole
   { const d = Math.hypot(x - BITTER[0], z - BITTER[1]); if (d < 52) h = lerp(h, 4, sstep(52, 40, d)) + 15 * sstep(44, 4, d); }                                              // Bitterroot Knowl is a knoll
   const sluD = SLUICE.dist(x, z), sluE = sluD < 36 ? Math.max(17, 25 + 9 * fbm(x / 24 + 7, z / 24, 2)) : 0;                                                                // (how far the paving reaches from the channels here: its edge wanders, so the swamp comes in and out along it)
-  if (sluD < 36) { h = lerp(h, 2.6 + .45 * fbm(x / 7, z / 7 + 3, 2) * sstep(12, 17, sluD), sstep(sluE, sluE - 9, sluD)); h -= 4.2 * sstep(8.5, 6, sluD); }               // the sluice is laid into the swamp: paving only just clear of the water, settled and uneven away from the cuts, the channels cut down through it
+  if (sluD < 36) { h = lerp(h, 2.6 + .45 * fbm(x / 7, z / 7 + 3, 2) * sstep(12, 17, sluD), sstep(sluE, sluE - 9, sluD)); h -= 10 * sstep(11.7, 8.2, sluD); }               // the sluice is laid into the swamp: paving only just clear of the water, settled and uneven away from the cuts, the channels cut down through it
   site(HATCH, 70, 16); site(ARBIT, 70, 16); site(SEALW, 62, 16); site(METER, 40, 14); site(ASHG, 76, 15); site(CLAR, 26, 15); site(EWF, 78, 15); site(STAR2, 30, 15);
   { const dx = x - WKG[0], dz = z - WKG[1], a = -(dx * WKO[0] + dz * WKO[1]), b = dz * WKO[0] - dx * WKO[1];                                       // the players' hall, behind the workshop gate: a: into the hill, b: along its face
     if (a > -90 && a < 175 && b > -180 && b < 115) { const ca = clamp(a, WKI[0], WKI[1]), cb = clamp(b, WKI[2], WKI[3]), d = Math.hypot(a - ca, b - cb), h0 = h;
@@ -1077,7 +1078,7 @@ function buildWater() {
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const x = (i + .5) / N * MAP_W - MAP_W / 2, z = MAP_D / 2 - (j + .5) / N * MAP_D; weightsW(x, z);
     let r = 0, g = 0, b = 0; for (let k = 0; k < 9; k++) { r += WT[k] * WC[k].r; g += WT[k] * WC[k].g; b += WT[k] * WC[k].b; }
-    const o = (j * N + i) * 4; data[o] = r * 255; data[o + 1] = g * 255; data[o + 2] = b * 255; data[o + 3] = (WT[LORE] > .5 || Math.hypot(x - TORUS[0] * S, z - TORUS[1] * S) < (TB_R + 30) * S || Math.hypot(x - GORCH[0] * S, z - GORCH[1] * S) < 80 * S || Math.hypot(x - P492[0] * S, z - P492[1] * S) < 60 * S || sinkD(x / S, z / S) < 1.04 || Math.hypot(x - MYC[0] * S, z - (MYC[1] + MYC_P[1]) * S) < 52) ? 0 : 255;
+    const o = (j * N + i) * 4; data[o] = r * 255; data[o + 1] = g * 255; data[o + 2] = b * 255; data[o + 3] = (SLUICE.dist(x / S, z / S) < 13 || WT[LORE] > .5 || Math.hypot(x - TORUS[0] * S, z - TORUS[1] * S) < (TB_R + 30) * S || Math.hypot(x - GORCH[0] * S, z - GORCH[1] * S) < 80 * S || Math.hypot(x - P492[0] * S, z - P492[1] * S) < 60 * S || sinkD(x / S, z / S) < 1.04 || Math.hypot(x - MYC[0] * S, z - (MYC[1] + MYC_P[1]) * S) < 52) ? 0 : 255;
   }
   const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
   // moving ripples: two drifting layers of the noise texture bend the surface normal and break up the colour
@@ -4283,39 +4284,95 @@ function buildProps() {
 
     // Sanguine Sluice (twelve hexes down the south-east edge): a whole works of channels cut down into a stone-paved flat and running with blood that moves like the rivers do - long cuts and the cross-cuts between them, basins where they meet with stone heads
     // spouting into them, slab bridges, sluice-gates, iron grates, raised settling tanks, valve towers with their wheels, steps down to the flow, red lamps along the main cut, and at the bottom end a drain the whole of it turns round
-    { const HX = [[33, 34], [32, 35], [33, 35], [32, 36], [31, 37], [30, 38], [29, 39], [28, 40], [27, 41], [26, 41], [26, 42], [25, 42]], c = Wp(SLUICE.A[4]), y0 = 2.6 * S, yb = -2.6, blood = new THREE.MeshStandardMaterial({ color: 0x9a0a10, roughness: .24, envMapIntensity: .6, emissive: 0x2a0203, side: THREE.DoubleSide }), bloodP = blood.clone(); blood.name = 'blood'; bloodP.name = 'bloodP';
-      const BL_RUN = 'float ax = vBl.x * 2.0 - 1.0, mid = 1.0 - ax * ax; vec2 q = vec2(ax * 10.0, vBl.y * 70.0);'   /* across the cut and along it, in world units; mid: 1 down the middle, 0 at the banks */
-        + ' float f1 = texture2D(uNoise, vec2(q.x / 24.0, (q.y - uTime * 9.0) / 170.0)).r, f2 = texture2D(uNoise, vec2(q.x / 13.0 + 0.37, (q.y - uTime * 4.0) / 80.0)).r, f3 = texture2D(uNoise, vec2(q.x / 9.0 + 0.11, (q.y - uTime * 13.0) / 46.0)).g;'   /* long streaks drawn out down the flow: the quick ones show mid-channel, the slow ones along the banks */
-        + ' float c = mix(f2, f1, mid) * 0.72 + f3 * 0.28; diffuseColor.rgb *= 0.3 + 1.7 * c * c * 2.0; diffuseColor.rgb *= 1.0 - 0.62 * pow(abs(ax), 3.0);'   /* dark and clotted along the banks */
-        + ' float scum = smoothstep(0.6, 0.7, f3 * 0.55 + f1 * 0.45) * (0.25 + 0.75 * mid); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.2, 0.19), scum * 0.55); blS = scum;'   /* pale froth carried down on it */
-        + ' blG = ((texture2D(uNoise, vec2(q.x / 15.0, (q.y - uTime * 9.0) / 55.0)).gb - 0.5) * (0.4 + 0.6 * mid) + (texture2D(uNoise, vec2(q.x / 6.0, (q.y - uTime * 4.0) / 19.0)).gb - 0.5) * 0.55) * 1.6;';
-      const BL_POOL = 'vec2 p = vSxW.xz / 46.0; float f1 = texture2D(uNoise, p * 1.3 + uTime * vec2(0.021, 0.013)).r, f2 = texture2D(uNoise, p * 0.8 - uTime * vec2(0.012, 0.019)).r, f3 = texture2D(uNoise, p * 3.1 + uTime * vec2(-0.03, 0.022)).g;'
-        + ' float c = f1 * f2 * 1.6 + f3 * 0.25; diffuseColor.rgb *= 0.35 + 1.5 * c; float scum = smoothstep(0.62, 0.72, f3 * 0.6 + f1 * 0.4); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.2, 0.19), scum * 0.4); blS = scum;'
-        + ' blG = (texture2D(uNoise, p + uTime * vec2(0.017, 0.011)).gb - 0.5) + (texture2D(uNoise, p * 2.7 - uTime * vec2(0.02, 0.029)).gb - 0.5) * 0.6;';
-      const bloodSh = run => sh => { sh.uniforms.uNoise = U.uNoise; sh.uniforms.uTime = U.uTime; sh.uniforms.uNG = U.uNG;
-        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vBl;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBl = uv;');
-        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uNoise; uniform float uTime, uNG; varying vec2 vBl; vec2 blG = vec2(0.0); float blS = 0.0;')
-        .replace('#include <color_fragment>', '#include <color_fragment>\n{ ' + (run ? BL_RUN : BL_POOL) + ' }')
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.7, blS);')   /* the froth is dull, the blood between it wet */
-        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n{ vec2 gr = blG * uNG * 0.0055; normal = normalize(mat3(viewMatrix) * normalize(vec3(-gr.x, 1.0, -gr.y))); }'); };   // blood that runs: down the cuts, and turning slowly where it stands
-      const bfall = flowMat('#4a0306', '#d21c26', 0x5a0508, .96, -.55), ironM = solid(0x26242a, .5, { metalness: .7 }), stoneL = solid(0x8a877c, .95, { flatShading: true }), stoneD = solid(0x55534c, .95, { flatShading: true }), redL = glowM(0xff2a1a, 2.2), kerbs = [], flags = [], sr2 = mulberry32(606), lamps = [];
-      const swirl = canvasTex(256, 256, (cx, w, hgt) => { cx.fillStyle = '#3a0306'; cx.fillRect(0, 0, w, hgt); cx.strokeStyle = '#b8141c'; for (let arm = 0; arm < 5; arm++) { cx.lineWidth = 5; cx.beginPath(); for (let i = 0; i < 60; i++) { const a = arm * 1.2566 + i * .11, rr = 6 + i * 2; cx.lineTo(128 + Math.cos(a) * rr, 128 + Math.sin(a) * rr); } cx.stroke(); } cx.fillStyle = '#080002'; cx.beginPath(); cx.arc(128, 128, 14, 0, 6.283); cx.fill(); });
+    { const HX = [[33, 34], [32, 35], [33, 35], [32, 36], [31, 37], [30, 38], [29, 39], [28, 40], [27, 41], [26, 41], [26, 42], [25, 42]], c = Wp(SLUICE.A[4]), y0 = 2.6 * S, yb = -6.6;
+      const blood = sluiceMaterial('liquid', 0x85151b, U), stoneM = sluiceMaterial('stone', 0xada28b, U);
+      const stoneL = sluiceMaterial('stone', 0xbeb59d, U), stoneD = sluiceMaterial('stone', 0x817964, U);
+      const bfall = sluiceSpray(U, true), spray = sluiceSpray(U, false);
+      const ironM = solid(0x383129, .62, { metalness: .55 }), redL = glowM(0xffa557, 1.35), kerbs = [], flags = [], sr2 = mulberry32(606), lamps = [];
       const st = addThing('Sanguine Sluice', '🩸', c, 1, 30, g => { const k = kit(g), B2 = (w, hh, d, m, x, y, z, ry) => M(g, new THREE.BoxGeometry(w, hh, d), m, x, y, z, { ry });
-        SLUICE.lines.forEach((L0, li) => { const L = L0.map(Wp), hw = li < 2 ? 10.5 : 8, pos = [], uv = [], idx = []; let d = 0; L.forEach((p, i) => { const a = L[Math.max(i - 1, 0)], b = L[Math.min(i + 1, L.length - 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz), nx = -dz / l, nz = dx / l; if (i) d += Math.hypot(p[0] - L[i - 1][0], p[1] - L[i - 1][1]);
-            const bw = Math.max(hw, 10.9); pos.push(p[0] + nx * bw - c[0], yb, p[1] + nz * bw - c[1], p[0] - nx * bw - c[0], yb, p[1] - nz * bw - c[1]);   /* (the blood reaches under the kerbs on both sides: the cut's floor lies below the swamp's water now, and none of that may show) */ uv.push(0, d / 70, 1, d / 70); if (i) { const q = i * 2; idx.push(q - 2, q - 1, q, q, q - 1, q + 1); }
-            if (i) { const A = L[i - 1], sl = Math.hypot(p[0] - A[0], p[1] - A[1]), ux = (p[0] - A[0]) / sl, uz = (p[1] - A[1]) / sl, ry = -Math.atan2(uz, ux); for (let e = 14; e < sl - 14;) { const bl = 5 + 4.5 * sr2(); for (const sd of [-1, 1]) { const q = sr2(); if (q < .1) continue;      // kerbstones: no two the same length, a few gone, a few standing proud as bollards, the damp ones green
+        const cut = cutChannel((x,z) => SLUICE.dist((x+c[0])/S,(z+c[1])/S)*S - 11.2, yb, .15);
+        const paved = cutChannel((x,z) => {
+          const d=SLUICE.dist((x+c[0])/S,(z+c[1])/S)*S;
+          return Math.max(11.15-d, d-23-5*fbm(x/25,z/25,2));
+        }, .1, .1);
+        const points = SLUICE.lines.flat().map(Wp), cell = 3.5;
+        const xs = points.map(p=>p[0]-c[0]), zs = points.map(p=>p[1]-c[1]);
+        const left = Math.min(...xs)-32, right = Math.max(...xs)+32, back = Math.min(...zs)-32, front = Math.max(...zs)+32;
+        for (let x=left;x<right;x+=cell) for (let z=back;z<front;z+=cell) {
+          const a=cut.sample(x,z), b=cut.sample(x+cell,z), d=cut.sample(x,z+cell), e=cut.sample(x+cell,z+cell);
+          cut.triangle(a,d,b); cut.triangle(b,d,e);
+          if (Math.min(a[2],b[2],d[2],e[2])>22) continue;
+          const pa=paved.sample(x,z), pb=paved.sample(x+cell,z), pd=paved.sample(x,z+cell), pe=paved.sample(x+cell,z+cell);
+          paved.triangle(pa,pd,pb); paved.triangle(pb,pd,pe);
+        }
+        const apron=paved.finish().water, av=apron.attributes.position;
+        for(let i=0;i<av.count;i++){
+          const x=av.getX(i)+c[0], z=av.getZ(i)+c[1], distance=SLUICE.dist(x/S,z/S)*S;
+          const edge=sstep(12,21,distance), land=heightAt(x,z)-y0;
+          av.setY(i,lerp(.20,Math.max(.12,land+.24),edge)+.09*fbm(x*.18,z*.18,2));
+        }
+        apron.computeVertexNormals(); M(g,apron,stoneM,0,0,0);
+        const bed=cut.finish();
+        NS(M(g, bed.water, blood, 0, 0, 0)); M(g, bed.walls, stoneD, 0, 0, 0);
+        const vineMat=solid(0x657139,.96), recessMat=solid(0x17170f,1);
+        const blocks = (geo,mat) => M(g,geo,mat,0,0,0);
+        SLUICE.lines.forEach((L0, li) => { const L = L0.map(Wp), hw = 10.5; L.forEach((p, i) => {
+            if (i) { const A = L[i - 1], sl = Math.hypot(p[0] - A[0], p[1] - A[1]), ux = (p[0] - A[0]) / sl, uz = (p[1] - A[1]) / sl, ry = -Math.atan2(uz, ux); for (let e = 14; e < sl - 14;) { const bl = 5 + 4.5 * sr2(); for (const sd of [-1, 1]) { const q = sr2(); if (q < .07 || SLUICE.dist((A[0]+ux*(e+bl/2)-uz*sd*(hw+3))/S,(A[1]+uz*(e+bl/2)+ux*sd*(hw+3))/S)*S < 11.7) continue;      // kerbstones: no two the same length, a few gone, a few standing proud as bollards, the damp ones green
                   kerbs.push({ x: A[0] + ux * (e + bl / 2) - uz * sd * (hw + 3), y: y0 + .4 + (q > .92 ? 1.3 : 0), z: A[1] + uz * (e + bl / 2) + ux * sd * (hw + 3), sx: bl - .5, sy: 2.4 + sr2() * 1.2 + (q > .92 ? 2.6 : 0), sz: 3 + sr2(), ry: ry + (sr2() - .5) * .1, rx: (sr2() - .5) * .09, rz: (sr2() - .5) * .09, tint: q < .3 ? [.5 + .2 * sr2(), .72 + .14 * sr2(), .45 + .14 * sr2()] : q < .42 ? [.62, .52, .5] : [.72 + .38 * sr2(), .72 + .33 * sr2(), .7 + .28 * sr2()] });
                   if (sr2() < .7) { const of = hw + 8 + sr2() * 15, fx = A[0] + ux * (e + sr2() * bl) - uz * sd * of, fz = A[1] + uz * (e + sr2() * bl) + ux * sd * of, gy = heightAt(fx, fz), out = gy < y0 - 1.3, mo = sr2() < .35;     // (out: past the paving's edge, where a flag has slid into the mud)
+                    if (SLUICE.dist(fx/S,fz/S)*S < 17) continue;
                     flags.push({ x: fx, y: Math.max(gy, -.5) + (out ? -.1 : .12), z: fz, sx: 5 + 4 * sr2(), sy: .55, sz: 4 + 3 * sr2(), ry: ry + (sr2() - .5) * .5, rx: (sr2() - .5) * (out ? .5 : .07), rz: (sr2() - .5) * (out ? .5 : .07), tint: mo || out ? [.5 + .2 * sr2(), .68 + .16 * sr2(), .42 + .14 * sr2()] : [.66 + .4 * sr2(), .66 + .35 * sr2(), .64 + .32 * sr2()] }); } } e += bl; } } });
-          const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals(); NS(M(g, ge, blood, 0, 0, 0)); });
-        SLUICE.basins.forEach((b, bi) => { const p = Wp(b), x = p[0] - c[0], z = p[1] - c[1]; NS(k.C(22, 22, .4, 28, bloodP, x, yb + .1, z)); for (let i = 0; i < 20; i++) { const a = i * .314; B2(7.2, 2.4 + (i % 3) * .5, 3.4, i % 4 ? stoneM : stoneL, x + Math.cos(a) * 25.4, 1.2, z + Math.sin(a) * 25.4, -a + Math.PI / 2); }
-          for (let i = 0; i < 3; i++) { const a = i * 2.094 + bi; B2(3.6, 4.6, 5.4, stoneD, x + Math.cos(a) * 24.4, 3.6, z + Math.sin(a) * 24.4, -a); M(g, new THREE.ConeGeometry(.8, 2.4, 4), stoneD, x + Math.cos(a + .08) * 25, 6.6, z + Math.sin(a + .08) * 25); M(g, new THREE.ConeGeometry(.8, 2.4, 4), stoneD, x + Math.cos(a - .08) * 25, 6.6, z + Math.sin(a - .08) * 25); NS(M(g, new THREE.PlaneGeometry(1.7, 3.4 - yb), bfall, x + Math.cos(a) * 21.2, (3.4 + yb) / 2, z + Math.sin(a) * 21.2, { ry: Math.PI / 2 - a })); }   // horned stone heads spouting into it
-          for (let i = 0; i < 4; i++) B2(8, 1, 2.6, stoneL, x + Math.cos(bi + 1) * (27.6 - i * 2.4), .8 - i * .9, z + Math.sin(bi + 1) * (27.6 - i * 2.4), -(bi + 1) + Math.PI / 2);                                                                 // steps down to the flow
-          if (bi === 6) { const wh = new THREE.Group(); M(wh, new THREE.CircleGeometry(19, 32), new THREE.MeshStandardMaterial({ map: swirl, roughness: .15, emissive: 0x3a0306, emissiveIntensity: .5 }), 0, 0, 0, { rx: -Math.PI / 2 }); wh.position.set(x, yb + .4, z); wh.traverse(m => { m.userData.noShadow = true; }); g.add(wh); spin.push({ o: wh, speed: -.7, bolt: false }); for (let i = 0; i < 8; i++) B2(1, .8, 9, ironM, x + (i - 3.5) * 1.1, yb + 1, z, 0); }
-          else { k.C(2.6, 3.4, 9, 8, stoneM, x, yb + 4.5, z); NS(k.S(1.6, redL, x, yb + 10, z)); } });
+        });
+        SLUICE.basins.forEach((b, bi) => {
+          const p = Wp(b), x = p[0]-c[0], z = p[1]-c[1];
+          let portalAngle=0, best=-1;
+          for (let i=0;i<30;i++) {
+            const a=i*Math.PI/15, dx=Math.cos(a), dz=Math.sin(a);
+            const dry=SLUICE.dist((p[0]+dx*33)/S,(p[1]+dz*33)/S);
+            if (dry>best) { best=dry; portalAngle=a; }
+            if (dry*S<16) continue;  // openings for the channels entering this well
+            B2(5.8,2.2+sr2(),4.2,stoneL,x+dx*27,.8+sr2()*.35,z+dz*27,-a+Math.PI/2);
+          }
+          const nx=Math.cos(portalAngle), nz=Math.sin(portalAngle), yaw=Math.atan2(nx,nz);
+          const px=x+nx*27, pz=z+nz*27, radius=bi%3===0?8:5;
+          sluiceArch(blocks,px,.3,pz,yaw,radius,5,stoneM);
+          for (let bar=-2;bar<=2;bar++) {
+            const u=bar*radius*.34, h=radius*.65+Math.sqrt(radius*radius-u*u);
+            B2(.52,h,.7,ironM,px+nz*u,h/2+.3,pz-nx*u,yaw);
+          }
+          // Stepped wing walls tie the culvert into the bank. Stones project at
+          // the waterline and moss hangs from the chipped upper course.
+          for (const sd of [-1,1]) for(let bay=0;bay<3;bay++){
+            const u=sd*(radius*1.34+3.2+bay*5.8), v=1.2+bay*1.5, h=radius*(1.48-.28*bay);
+            B2(6.2,h+2,5.8,stoneD,px+nz*u+nx*v,h/2-1,pz-nx*u+nz*v,yaw);
+            B2(6.7,1.1,6.45,stoneL,px+nz*u+nx*v,h+.22,pz-nx*u+nz*v,yaw+.025*sd);
+            for(let strand=0;strand<3;strand++){
+              const stem=u+(sr2()-.5)*5, drop=2+sr2()*4;
+              const path=new THREE.CatmullRomCurve3([[stem,h+1,v],[stem+.6,h+.8,v-3.1],[stem-.3,h-.3,v-3.7],[stem+.4,h-drop,v-3.4]].map(([u,y,v])=>new THREE.Vector3(px+nz*u+nx*v,y,pz-nx*u+nz*v)));
+              M(g,new THREE.TubeGeometry(path,5,.17+sr2()*.18,4,false),vineMat,0,0,0);
+            }
+          }
+          // A dark recess behind the bars and a chipped sill spilling into the well.
+          const recess=new THREE.Shape(); recess.moveTo(-radius,0);recess.lineTo(radius,0);
+          recess.lineTo(radius,radius*.69);recess.absarc(0,radius*.69,radius,0,Math.PI,false);recess.closePath();
+          M(g,new THREE.ShapeGeometry(recess),recessMat,px+nx*2.1,.3,pz+nz*2.1,{ry:yaw+Math.PI});
+          B2(radius*1.62,1.2,8,stoneD,px-nx*3,.5,pz-nz*3,yaw);
+          NS(M(g,new THREE.PlaneGeometry(radius*1.18,1.1-yb),bfall,px-nx*7,(1.1+yb)/2,pz-nz*7,{ry:yaw}));
+          NS(M(g,new THREE.PlaneGeometry(15,15),spray,px-nx*9,yb+.18,pz-nz*9,{rx:-Math.PI/2}));
+          // Roots cross the keystone, follow the mortar and hang over the edge.
+          for (let r=0;r<6;r++){
+            const side=r%2?1:-1, offset=radius*(.8+sr2()*.48)*side;
+            const path=[[offset*.25,radius*1.98,2],[offset*.76,radius*1.72,0],[offset,radius*1.10,-2.8],
+              [offset+side*.65,radius*.46,-3],[offset+side*1.5,-1-sr2()*3,-4]];
+            const root=new THREE.CatmullRomCurve3(path.map(([u,h,v])=>new THREE.Vector3(px+nz*u+nx*v,h,pz-nx*u+nz*v)));
+            const base=.22+sr2()*.33;
+            for(let j=0;j<6;j++) rod(g,plankD,root.getPoint(j/6).toArray(),root.getPoint((j+1)/6).toArray(),base*(1-j/6),base*(1-(j+.88)/6),5);
+          }
+          if (bi===6) for (let i=-3;i<=3;i++) B2(.7,.6,9,ironM,x+i*1.3,yb+.25,z,0);
+        });
         const A = SLUICE.A.map(Wp), Bq = SLUICE.B.map(Wp), Dq = SLUICE.D.map(Wp);
         A.forEach((p, i) => { if (!i || i === A.length - 1) return; const q = A[i + 1], ux = q[0] - p[0], uz = q[1] - p[1], l = Math.hypot(ux, uz), ry = -Math.atan2(uz, ux), x = p[0] + ux * .28 - c[0], z = p[1] + uz * .28 - c[1], gx = p[0] + ux * .72 - c[0], gz = p[1] + uz * .72 - c[1];
-          B2(11, 2, 34, stoneM, x, 2, z, ry); M(g, new THREE.TorusGeometry(10, 1.6, 5, 12, Math.PI), stoneD, x, -5, z, { ry: ry + Math.PI / 2 }); for (const sd of [-1, 1]) for (const e of [-1, 1]) B2(1.4, 3, 1.4, stoneL, x + (ux / l) * e * 4.6 - (uz / l) * sd * 15, 4.4, z + (uz / l) * e * 4.6 + (ux / l) * sd * 15, ry);                               // a slab bridge on an arch, with parapet stubs
+          B2(11, 2, 34, stoneM, x, 2, z, ry); sluiceArch(blocks,x,-15,z,ry+Math.PI/2,9,10,stoneD); for (const sd of [-1, 1]) for (const e of [-1, 1]) B2(1.4, 3, 1.4, stoneL, x + (ux / l) * e * 4.6 - (uz / l) * sd * 15, 4.4, z + (uz / l) * e * 4.6 + (ux / l) * sd * 15, ry);                               // a slab bridge on an arch, with parapet stubs
           if (i % 2) { for (const sd of [-1, 1]) B2(3, 17, 3, stoneM, gx - uz / l * sd * 13, 6.5, gz + ux / l * sd * 13, ry); B2(3.4, 2.6, 32, stoneD, gx, 15.6, gz, ry); B2(1.2, 9.6, 22, plankD, gx, 6.4, gz, ry); M(g, new THREE.TorusGeometry(2.6, .4, 5, 12), ironM, gx, 19.6, gz, { ry: ry + Math.PI / 2 }); rod(g, ironM, [gx, 17, gz], [gx, 12, gz], .3, .3, 5); }   // a sluice-gate, half raised, with its wheel
           for (const sd of [-1, 1]) { const lx = p[0] - uz / l * sd * 18, lz = p[1] + ux / l * sd * 18; rod(g, ironM, [lx - c[0], 0, lz - c[1]], [lx - c[0], 12, lz - c[1]], .45, .3, 5); M(g, new THREE.BoxGeometry(2, 2.6, 2), ironM, lx - c[0], 13, lz - c[1]); NS(k.S(1, redL, lx - c[0], 13, lz - c[1])); if (sd > 0) lamps.push([lx, lz]); } });
         Bq.forEach((p, i) => { if (i + 1 >= Bq.length) return; const q = Bq[i + 1], ux = q[0] - p[0], uz = q[1] - p[1], l = Math.hypot(ux, uz), ry = -Math.atan2(uz, ux), x = p[0] + ux * .3 - c[0], z = p[1] + uz * .3 - c[1];
@@ -4323,10 +4380,16 @@ function buildProps() {
           if (i === 2 || i === 6) { const tx = p[0] + ux / l * 26 + uz / l * 26 - c[0], tz = p[1] + uz / l * 26 - ux / l * 26 - c[1]; B2(11, 26, 11, stoneL, tx, 13, tz, ry); B2(12.6, 1.6, 12.6, stoneD, tx, 26.4, tz, ry); M(g, new THREE.ConeGeometry(9, 9, 4), stoneD, tx, 31.6, tz, { ry: ry + Math.PI / 4 }); for (const e of [-1, 1]) NS(B2(1.4, 6, .5, redL, tx + ux / l * e * 2.6 - uz / l * 5.7, 17, tz + uz / l * e * 2.6 + ux / l * 5.7, ry));
             const wx = tx - uz / l * 6.2, wz = tz + ux / l * 6.2; M(g, new THREE.TorusGeometry(4.4, .5, 5, 16), ironM, wx, 8, wz, { ry }); for (let e = 0; e < 3; e++) M(g, new THREE.BoxGeometry(8.6, .5, .5), ironM, wx, 8, wz, { ry, rz: e * 1.047 }); rod(g, ironM, [tx, 3, tz], [x + ux / l * 6, 0, z + uz / l * 6], 1.1, 1.1, 7); } });                                           // a valve tower, wheel on its wall and a pipe to the cut
         Dq.forEach((p, i) => { if (i % 2 || i + 1 >= Dq.length) return; const q = Dq[i + 1], ux = q[0] - p[0], uz = q[1] - p[1], l = Math.hypot(ux, uz), ry = -Math.atan2(uz, ux); let nx = -uz / l, nz = ux / l; if (nx + nz > 0) { nx = -nx; nz = -nz; } const tx = p[0] + ux * .5 + nx * 34 - c[0], tz = p[1] + uz * .5 + nz * 34 - c[1];
-          B2(34, 6, 22, stoneD, tx, 3, tz, ry); NS(B2(29.6, .4, 17.6, bloodP, tx, 6.1, tz, ry)); for (let e = 0; e < 3; e++) B2(8, 2 * (3 - e), 2.4, stoneL, tx - nx * (12.2 + e * 2.4) + ux / l * 9, 3 - e, tz - nz * (12.2 + e * 2.4) + uz / l * 9, ry + Math.PI / 2 * 0);
+          B2(34, 5, 22, stoneD, tx, 2.5, tz, ry); NS(B2(30.2, .25, 18.2, blood, tx, 5.2, tz, ry));
+          for(const side of [-1,1]){
+            B2(34,2.4,2.2,stoneL,tx+nx*side*10,5.7,tz+nz*side*10,ry);
+            B2(2.2,2.4,18,stoneL,tx+ux/l*side*16,5.7,tz+uz/l*side*16,ry);
+          } for (let e = 0; e < 3; e++) B2(8, 2 * (3 - e), 2.4, stoneL, tx - nx * (12.2 + e * 2.4) + ux / l * 9, 3 - e, tz - nz * (12.2 + e * 2.4) + uz / l * 9, ry + Math.PI / 2 * 0);
           B2(3, 2.4, 9, stoneL, tx - nx * 15, 5, tz - nz * 15, ry + Math.PI / 2); NS(M(g, new THREE.PlaneGeometry(1.8, 6.4 - yb), bfall, tx - nx * 20.6, (5.6 + yb) / 2, tz - nz * 20.6, { ry: Math.atan2(-nx, -nz) })); });                                                                           // a raised settling tank, brim-full, overflowing by a lip back into the cut
       }, { y: y0, hexes: HX, top: 40, view: 900 });
-      st.group.traverse(m => { const nm = m.isMesh && m.material.name; if (nm === 'blood' || nm === 'bloodP') { m.material.onBeforeCompile = bloodSh(nm === 'blood'); m.material.customProgramCacheKey = () => 'sx' + nm + '2'; m.material.needsUpdate = true; } });
+      st.group.traverse(m => { if (!m.isMesh) return;
+        if (m.material.name === 'sluice-spray') { m.material.uniforms.t=U.uTime; m.material.uniforms.mistNoise=U.uNoise; }
+        else if (m.material.name.startsWith('sluice-')) dressSluice(m.material,U); });
       for (const list of [kerbs, flags]) { const km = instanced(new THREE.BoxGeometry(1, 1, 1), stoneM, list); if (km) km.raycast = () => {}; }
       { const piles = [], reedL = [], rocks = [], er = mulberry32(7741);
         for (const L0 of SLUICE.lines) { const L = L0.map(Wp); for (let i = 1; i < L.length; i++) { const A = L[i - 1], B = L[i], sl = Math.hypot(B[0] - A[0], B[1] - A[1]), ux = (B[0] - A[0]) / sl, uz = (B[1] - A[1]) / sl;
@@ -4338,7 +4401,7 @@ function buildProps() {
                 else if (kind < .8) { const n = 3 + (er() * 5 | 0); for (let j = 0; j < n; j++) { const a = er() * 6.283, d = 3 * Math.sqrt(er()), hh = 4 + 5 * er(); reedL.push({ x: px + Math.cos(a) * d, y: Math.max(gy, -.6) + hh / 2 - .3, z: pz + Math.sin(a) * d, sx: .6, sy: hh, sz: .6, rx: (er() - .5) * .3, rz: (er() - .5) * .3, tint: [.7 + .5 * er(), .8 + .4 * er(), .6 + .3 * er()] }); } }
                 else { const r = 1.6 + 2 * er(); rocks.push({ x: bx, y: by + r * .15, z: bz, sx: r * (.8 + .5 * er()), sy: r * (.45 + .3 * er()), sz: r, ry: er() * 3, rx: (er() - .5) * .4, tint: er() < .5 ? [.55, .75, .5] : [.8 + .25 * er(), .8 + .2 * er(), .78] }); } } } }
         for (const [geo, mat, list] of [[new THREE.CylinderGeometry(.42, .5, 1, 6), solid(0x3a2c20, .95), piles], [new THREE.ConeGeometry(.5, 1, 4), solid(0x3c5a2c, 1, { flatShading: true }), reedL], [new THREE.IcosahedronGeometry(1, 0), stoneM, rocks]]) { const im = instanced(geo, mat, list); if (im) im.raycast = () => {}; } }
-      lamps.forEach((p, i) => { if (i % 2 === 0) lanternPts.push([p[0], y0 + 13, p[1], { c: [2.6, .3, .2], size: 9, drift: .2, speed: .5 }]); }); SLUICE.basins.forEach(b => { const p = Wp(b); lanternPts.push([p[0], y0 + 8, p[1], { c: [2.6, .3, .2], size: 12, drift: .2, speed: .5 }]); }); }
+      lamps.forEach((p, i) => { if (i % 2 === 0) lanternPts.push([p[0], y0 + 13, p[1], { c: [.98, .72, .28], size: 3.4, drift: .2, speed: .5 }]); }); SLUICE.basins.forEach(b => { const p = Wp(b); lanternPts.push([p[0], y0 + 8, p[1], { c: [.88, .67, .24], size: 2.7, drift: .2, speed: .5 }]); }); }
 
     // The Sinkhole (26,39; not on the live map): where the swamp's water goes. Several collapses run into one ragged hole, sheer on most sides and slumped to a slope on the east. The swamp stands in water right up to it;
     // a broken lip of rock keeps the water back in places, and wherever the lip is missing the water simply goes over - thin where the gap is narrow, a broad curtain where it is wide - and is mist long before it lands.
@@ -7645,7 +7708,7 @@ setTimeout(async () => {
   const local = await terrainCache.get();
   let packed = null;
   if (!local) {
-    try { const {loadPackedTerrain} = await import('./terrain-pack.js?v=1'); packed = await loadPackedTerrain(terrainCache.key,NX,NZ,DX,DZ); }
+    try { const {loadPackedTerrain} = await import('./terrain-pack.js?v=2'); packed = await loadPackedTerrain(terrainCache.key,NX,NZ,DX,DZ); }
     catch { /* The procedural sculpt also works without packaged terrain. */ }
   }
   const cache = local || packed; if (cache) loading.textContent = 'Raising the campus…';
