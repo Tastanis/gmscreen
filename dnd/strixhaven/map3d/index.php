@@ -155,7 +155,7 @@ require_once '../../version.php';
 <section id="pinnedScroll" aria-labelledby="pinnedSchool" hidden><header><h2 id="pinnedSchool"></h2><button class="scroll-close" type="button" aria-label="Close campus scroll">×</button></header><div class="scroll-entries"></div></section>
 <span id="scrollStatus" class="scroll-a11y" role="status"></span>
 <script type="module">
-import {installCampusTable,tableMargin} from './campus-scrolls.js?v=4';
+import {installCampusTable,tableMargin} from './campus-scrolls.js?v=5';
 import * as THREE from 'three';
 import { cutChannel, cutHex, sluiceMaterial, dressSluice, sluiceArch, sluiceSpray, wellspringSkull } from './sluice.js?v=2';
 import { surveyPavement, surveyStairs, underworldRoom, cascadeGeometry } from './dungeon-workshops.js';
@@ -3285,7 +3285,20 @@ function buildProps() {
       lanternPts.push([c[0], cy + 36, c[1], { c: [.9, 1.8, 2.8], size: 30, drift: .2, speed: .5 }]); }
 
     // the Large Pillars: one beside each road. Every thirty seconds, all together, the hammer drops and a wave of force rolls out from each for a hex or two
-    for (const [q, r] of THUMP) { const c = hexW(q, r), y0 = heightAt(c[0], c[1]), col = glowM(0x9fb4ff, 2.6); let ham;
+    // Surveyed on both terrain grids. Keep the hammer, pulse and light on the same footing.
+    const pillarSetbacks = { '11,28': [58, -18], '15,31': [-22, 20], '22,23': [-10, -24] };
+    for (const [q, r] of THUMP) {
+      const c = hexW(q, r), offset = pillarSetbacks[hexKey(q, r)];
+      if (offset) { c[0] += offset[0]; c[1] += offset[1]; }
+      let y0 = heightAt(c[0], c[1]);
+      if (offset) {
+        for (let i = 0; i < 8; i++) {
+          const angle = i * Math.PI / 4;
+          y0 = Math.min(y0, heightAt(c[0] + 17 * Math.cos(angle), c[1] + 17 * Math.sin(angle)));
+        }
+        y0 -= 1; // Seat the level octagonal base below the lowest edge.
+      }
+      const col = glowM(0x9fb4ff, 2.6); let ham;
       addThing('Large Pillar', '🗼', c, 1, 30, g => { const k = kit(g); k.C(13, 17, 10, 8, LDK, 0, 5, 0); for (let i = 0; i < 3; i++) { const a = i * 2.094 + .4; k.B(3, 40, 3, ironM, Math.cos(a) * 15, 16, Math.sin(a) * 15, { rz: Math.cos(a) * .5, rx: -Math.sin(a) * .5 }); }
         k.C(5.4, 7.4, 160, 8, LST, 0, 90, 0); for (let j = 0; j < 6; j++) k.T(7.6 - j * .3, 1, brassM, 0, 30 + j * 26, 0, { rx: Math.PI / 2 }); for (let i = 0; i < 4; i++) NS(k.B(.8, 120, .8, col, Math.cos(i * 1.571) * 6.6, 95, Math.sin(i * 1.571) * 6.6));
         k.C(9, 6, 8, 8, brassM, 0, 172, 0); NS(M(g, new THREE.OctahedronGeometry(7, 0), col, 0, 186, 0)); for (let i = 0; i < 4; i++) { const a = i * 1.571 + .78; k.B(1, 20, 1, brassM, Math.cos(a) * 7, 184, Math.sin(a) * 7, { rz: Math.cos(a) * .3, rx: -Math.sin(a) * .3 }); }
@@ -4675,6 +4688,12 @@ function buildProps() {
   for (let n = 0, c = 0; n < 8000 && c < 14; n++) { const [x, z] = rndS(); weightsW(x, z); if (WT[PRIS] < .7 || heightAt(x, z) < 9 * S || nearWalk(x, z, 30) || z > Z(.86) * S) continue;
     if (Math.hypot(x - FW[0], z - FW[1]) < FR * 1.4 || Math.hypot(x - PH[0], z - PH[1]) < 170 || !free(x, z)) continue; pushSpire(x, z, 40 + 110 * rngS()); c++; }
 
+  // The round Rose Stage extends beyond its original center hex. Leave a walking
+  // strip outside its wall and allow for each tree's crown and leaning branches.
+  const roseCenter = Wp(ROSE), roseWallRadius = 102.5;
+  for (const kind of ['conifer', 'broad', 'mangrove', 'dead', 'bog']) {
+    L[kind] = L[kind].filter(t => Math.hypot(t.x - roseCenter[0], t.z - roseCenter[1]) > roseWallRadius + 12 + 6 * t.s);
+  }
   instanced(conifer, treeMat, L.conifer); instanced(broad, treeMat, L.broad); instanced(mangrove, treeMat, L.mangrove); instanced(dead, treeMat, L.dead); instanced(bogTree, treeMat, L.bog);
   const marble = new THREE.MeshStandardMaterial({ roughness: .22, metalness: 0, envMapIntensity: 1 });
   instanced(new THREE.BoxGeometry(1, 1, 1), marble, L.box); instanced(new THREE.ConeGeometry(1, 1, 4), marble, L.spire);

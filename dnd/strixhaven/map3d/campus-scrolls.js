@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildDesk } from './campus-desk.js';
+import { buildDesk } from './campus-desk.js?v=2';
 
 export const tableMargin = {x:1450,z:1090};
 const colleges = [
@@ -62,7 +62,7 @@ function scrollArt(college, entries, layout, renderer) {
 }
 
 function entriesFor(things,name) {
-  const entries=things.filter(t=>t.campus===name);
+  const entries=things.filter(t=>t.campus===name && !(name==='Lorehold' && t.name==='Large Pillar'));
   return entries.map(thing=>{
     const hex=thing.hexes[0],duplicate=entries.some(t=>t!==thing&&t.name===thing.name);
     return {thing,label:duplicate&&hex?thing.name+' ('+hex.q+', '+hex.r+')':thing.name};
