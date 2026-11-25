@@ -34,14 +34,29 @@ again and again and the host answered 522. Anything a page asks for on a timer m
   line in `chat_handler.php`, `character_sheet/handler.php`, `inventory_handler.php` and the two campus
   map APIs. Requests that change something keep the session to their end; do not release it for those
   unless the change is guarded by its own file lock (the campus map APIs are).
+- **A board change takes that person's turn, not the session** (Build 652). Every non-GET under `api/v2` lets go
+  of the session too, then waits on `storage/turn-<sha1 of the user>.lock` (`vttSyncV2TakeChangeTurn`): one person's
+  changes are still made one at a time, and their reads no longer queue behind a slow command. Session first, then
+  the turn; never the other way round.
 - **A change is one locked read, alter, write.** `withPingLock(true, ...)`, `withOverlayLock(...)`.
 - **One read out at a time per feed, with back-off.** Campus map: `sharedFeed` in `map3d/index.php`.
   Table: `pollRead` in `table-apps.js`. Board: `recovery-polling.js`. A bare `setInterval(fetch)` is not
-  allowed for a new feed.
+  allowed for a new feed. Build 652 closed the old ones that still were: vision (`sight-test.mjs`), the sheet's
+  hero tokens (`character_sheet/app.js`), the Projects page's revision (`campaign.js`), and the heroes' Stamina,
+  now read one sheet after another instead of all at once (`token-library.js` `readStaminaInTurn`).
 - **"Seen here" is written once a second at most** (`SyncV2Store::touchPresence`). Who is here is still
   anyone seen in the last five seconds; do not raise `PRESENCE_REFRESH_MS` without re-checking that.
 
-Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php` and `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs`.
+What the host's access log showed for that evening (read November 25): about 1,200 requests a minute at the peak
+from six browsers, thirteen separate "has anything changed?" timers and no runaway loop. One request in flight is
+two processes (Apache and PHP), so about 32 fit. The pile-ups were one browser's timers stacking up behind a
+request of its own that held the session: up to 94 open from one browser, nearly all from feeds with no guard.
+The slow holders were board commands (half over 0.75 s, the slowest 25 s) and chat requests.
+Still open: the number of requests itself (every embedded page runs its own chat panel; the board's hero panel
+asks `action=live` every 1.6 s), `sync-v2.sqlite` at 241 MB, and deploying during play (the 9:02 pm deploy).
+
+Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php`, `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs` and
+`dnd/vtt/assets/js/ui/__tests__/one-read-at-a-time.test.mjs`.
 
 ## Table fixes after the November 24, 2026 session (Build 651)
 

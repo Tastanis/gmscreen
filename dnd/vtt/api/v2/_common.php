@@ -38,12 +38,17 @@ function vttSyncV2RequireShadowGm(): array
 }
 
 /**
- * Who is asking, read from the session. A GET here only reads (sync, snapshot, vision, status), and nothing in
- * the VTT writes the session, so a GET lets go of the session file as soon as it knows who is asking. PHP
- * otherwise holds that file until the request ends, and every other request from the same player (the sheet,
- * the chat, the next sync) waits in a queue behind it, each one a process held open on the host.
- * A request that changes something keeps the session to its end, as before, so one player's changes are still
- * taken one at a time.
+ * Who is asking, read from the session. Nothing in the VTT writes the session, so every request here lets go of
+ * the session file as soon as it knows who is asking. PHP otherwise holds that file until the request ends, and
+ * every other request from the same browser (the sheet, the chat, the next sync) waits in a queue behind it, each
+ * one a process held open on the host.
+ *
+ * A GET only reads (sync, snapshot, vision, status) and simply goes ahead.
+ *
+ * A request that changes something first takes that person's turn (vttSyncV2TakeChangeTurn): their changes are
+ * still taken one at a time, in the order they arrive, as the session used to make them. What no longer happens
+ * is their reads waiting behind a change. On November 24, 2026 half of the board's commands took over 0.75 s and
+ * the slowest 8.8 s; every poll from that browser stood in line for all of it, two processes each.
  */
 function vttSyncV2AuthContext(): array
 {
@@ -52,14 +57,52 @@ function vttSyncV2AuthContext(): array
         return $released;
     }
     $auth = getVttUserContext();
-    if (
-        strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) === 'GET'
-        && session_status() === PHP_SESSION_ACTIVE
-    ) {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        // The session first, then the turn: a change waiting for its turn must not hold the session meanwhile.
         session_write_close();
         $released = $auth;
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'GET'
+            && ($auth['isLoggedIn'] ?? false)
+        ) {
+            vttSyncV2TakeChangeTurn((string) ($auth['user'] ?? ''));
+        }
     }
     return $auth;
+}
+
+/** Where the board keeps its database; the turn files sit beside it. */
+function vttSyncV2StorageFolder(): string
+{
+    $configuredPath = getenv('VTT_SYNC_V2_DATABASE');
+    return is_string($configuredPath) && trim($configuredPath) !== ''
+        ? dirname(trim($configuredPath))
+        : (__DIR__ . '/../../storage');
+}
+
+/**
+ * One change at a time for each person: an exclusive lock on a small file named for them, held until this request
+ * ends (PHP lets go of it when the script finishes, however it finishes). A second change from the same person
+ * waits here, as it used to wait for the session. Returns false when the file could not be opened or locked: the
+ * change then goes ahead, and the store's own revision checks and database lock still guard it.
+ */
+function vttSyncV2TakeChangeTurn(string $user): bool
+{
+    static $turns = [];
+    $key = sha1(strtolower(trim($user)));
+    if (isset($turns[$key])) {
+        return true;
+    }
+    $handle = @fopen(vttSyncV2StorageFolder() . '/turn-' . $key . '.lock', 'c');
+    if ($handle === false) {
+        return false;
+    }
+    if (!flock($handle, LOCK_EX)) {
+        fclose($handle);
+        return false;
+    }
+    $turns[$key] = $handle;   // kept open, so the lock lasts to the end of the request
+    return true;
 }
 
 function vttSyncV2RequireGm(string $message = 'GM access required.'): array

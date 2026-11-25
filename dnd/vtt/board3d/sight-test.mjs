@@ -211,9 +211,14 @@ export async function startSight({ readOnly = false } = {}) {
   // The party's memory as the server has it, added to what this page already has: a refresh never takes a square
   // away, so nothing pops black and back (Brandon, October 28, 2026). Only the Director's Forget wipes it: the
   // scene's forget count changes. Another scene starts empty.
+  // One request out at a time for each of this file's three repeating requests (the memory, what was just explored,
+  // the shared setting). Each was sent on its timer whether or not the last had been answered; on November 24, 2026
+  // one browser whose requests were held up had 18 of them open at once, two processes each on the host.
+  let memoryLoading = '', exploreSending = false, listening = false;
   function loadMemory(scene) {
     if (scene !== memoryScene) { memoryData.fill(0); memoryTexture.needsUpdate = true; unsent = new Set(); memoryScene = scene; memoryForgotten = null; }
-    if (!scene) return;
+    if (!scene || memoryLoading === scene) return;
+    memoryLoading = scene;
     fetch(VISION_URL + '?explored=' + encodeURIComponent(scene), { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((j) => {
       if (!j?.success || memoryScene !== scene) return;
       const forgotten = Number(j.forgotten) || 0;
@@ -222,18 +227,20 @@ export async function startSight({ readOnly = false } = {}) {
       let added = false;
       for (const cell of j.cells || []) { const [c, r] = String(cell).split(',').map(Number); if (Number.isInteger(c) && Number.isInteger(r) && markCell(c, r)) added = true; }
       memoryTexture.needsUpdate = true;
-    }).catch(() => { /* next time */ });
+    }).catch(() => { /* next time */ }).finally(() => { if (memoryLoading === scene) memoryLoading = ''; });
   }
   if (!readOnly) setInterval(() => { if (LOOKS[look].memory && on && memoryScene) loadMemory(memoryScene); }, 10000);   // what the rest of the party saw
   if (!readOnly) setInterval(() => {
     if (!LOOKS[look].memory || !on) return;
     const scene = String(bridge.getContext().sceneId || '');
     if (scene !== memoryScene) { loadMemory(scene); return; }
-    if (unsent.size) {
+    if (unsent.size && !exploreSending) {   // squares seen meanwhile wait in `unsent` for the next turn of the timer
       const cells = [...unsent].slice(0, 5000); cells.forEach((c) => unsent.delete(c));
+      exploreSending = true;
       fetch(VISION_URL, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ explore: scene, cells, ...(memoryForgotten !== null ? { forgotten: memoryForgotten } : {}) }) })
         .then((r) => r.json()).then((j) => { if (j?.success && Number(j.forgotten) !== memoryForgotten) loadMemory(scene); })   // the Director wiped it meanwhile
-        .catch(() => cells.forEach((c) => unsent.add(c)));
+        .catch(() => cells.forEach((c) => unsent.add(c)))
+        .finally(() => { exploreSending = false; });
     }
   }, 3000);
   window.vttVisionMemory = { count: () => { let n = 0; for (let k = 0; k < memoryData.length; k += 4) if (memoryData[k]) n += 1; return n; }, scene: () => memoryScene, reload: () => loadMemory(memoryScene) };   // for checking from the console
@@ -260,11 +267,12 @@ export async function startSight({ readOnly = false } = {}) {
       .catch(() => window.UIKit?.toast?.('Vision was not saved.', 'warning'));
   }
   function listen() {
-    if (document.hidden) return;
+    if (document.hidden || listening) return;
+    listening = true;
     fetch(VISION_URL, { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json()).then((j) => {
       if (!j?.success || j.vision.updatedAt === heard) return;
       heard = j.vision.updatedAt; apply(j.vision);
-    }).catch(() => { /* next time */ });
+    }).catch(() => { /* next time */ }).finally(() => { listening = false; });
   }
   if (!readOnly) {
     listen();

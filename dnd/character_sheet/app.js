@@ -890,8 +890,11 @@ function listen() {
     renderStatus();
   });
   // The party's hero tokens are not a sheet field: read them every few seconds, as the classic sheet did.
+  // One read out at a time: the next is not sent while the last is unanswered (the host counts every open request).
+  let readingHeroTokens = false;
   window.setInterval(async () => {
-    if (document.visibilityState === 'hidden' || !state.loaded) return;
+    if (document.visibilityState === 'hidden' || !state.loaded || readingHeroTokens) return;
+    readingHeroTokens = true;
     try {
       const response = await fetch(`${HANDLER}?action=sync-hero-tokens&character=${encodeURIComponent(character)}`, { credentials: 'same-origin', cache: 'no-store' });
       const answer = await response.json();
@@ -901,7 +904,7 @@ function listen() {
         state.baseline.hero.heroTokens = [...next];
         renderStatus();
       }
-    } catch (_) { /* next time */ }
+    } catch (_) { /* next time */ } finally { readingHeroTokens = false; }
   }, 4000);
   window.addEventListener('pagehide', () => { live.releaseAll({ beacon: true }); saveSheet({ keepalive: true }); });
 }

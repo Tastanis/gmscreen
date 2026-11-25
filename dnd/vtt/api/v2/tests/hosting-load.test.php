@@ -232,10 +232,14 @@ try {
     // The campus map's own changes are each guarded by their file's lock, so they let go of the session too.
     $held('cal', 'POST', $ping, ['action' => 'add_ping', 'x' => 0.5, 'y' => 0.5], 'released', 'Sending a ping');
     $held('cal', 'POST', $path, ['action' => 'save_marker', 'q' => 5, 'r' => 5, 'note' => 'Camp'], 'released', 'Saving a destination');
-    // Everything else that changes something keeps it to the end, as it always has: one player's changes one at a time.
-    $held('cal', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['1,1', '2,1']], 'held', 'Adding explored squares', static fn ($s, $a) => $s === 200 && ($a['count'] ?? 0) === 2);
-    $held('GM', 'POST', 'vtt/api/v2/vision.php', ['on' => true, 'look' => 'Dark'], 'held', 'The Director setting vision', static fn ($s, $a) => $s === 200 && ($a['vision']['look'] ?? '') === 'Dark');
-    $held('GM', 'POST', 'vtt/api/v2/commands.php', ['operationId' => 'load-observe-1', 'type' => 'shadow.observe', 'baseRevision' => 0, 'payload' => ['note' => 'x']], 'held', 'A board command', static fn ($s, $a) => $s !== 0 && $s !== 401 && $s !== 500);
+    // The board's changes let go of it too: each takes that person's turn instead (a file lock of its own, below), so
+    // one person's changes are still made one at a time and their reads no longer stand behind a slow one.
+    $held('cal', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['1,1', '2,1']], 'released', 'Adding explored squares', static fn ($s, $a) => $s === 200 && ($a['count'] ?? 0) === 2);
+    $held('GM', 'POST', 'vtt/api/v2/vision.php', ['on' => true, 'look' => 'Dark'], 'released', 'The Director setting vision', static fn ($s, $a) => $s === 200 && ($a['vision']['look'] ?? '') === 'Dark');
+    $held('GM', 'POST', 'vtt/api/v2/commands.php', ['operationId' => 'load-observe-1', 'type' => 'shadow.observe', 'baseRevision' => 0, 'payload' => ['note' => 'x']], 'released', 'A board command', static fn ($s, $a) => $s !== 0 && $s !== 401 && $s !== 500);
+    loadCheck(is_file("$base/turn-" . sha1('cal') . '.lock') && is_file("$base/turn-" . sha1('gm') . '.lock'), 'Each of them took their turn: a small file beside the database, named for the person');
+    loadCheck($ask('', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['7,7']])[0] === 401 && count(glob("$base/turn-*.lock")) === 2, 'Nobody signed in is refused, and takes no turn');
+    // Everything else that changes something keeps the session to the end, as it always has.
     $held('cal', 'POST', 'chat_handler.php', $form(['action' => 'chat_send', 'message' => 'hello', 'target' => 'all']), 'held', 'Sending a chat message', static fn ($s, $a) => $s === 200 && is_array($a));
     $held('cal', 'POST', 'character_sheet/handler.php', $form(['action' => 'load', 'character' => 'cal']), 'held', 'A sheet request sent as a change', static fn ($s, $a) => $s === 200 && is_array($a));
     $held('cal', 'POST', 'character_sheet/inventory_handler.php', $form(['action' => 'not-an-action']), 'held', 'An inventory change', static fn ($s, $a) => $s === 200 && is_array($a));
@@ -258,11 +262,34 @@ try {
         loadCheck($status === 200 && ($answer['success'] ?? false) && $took < 3.0, 'The same browser\'s route read is answered while its ping read waits: ' . json_encode([$status, round($took, 2)]));
         loadCheck($boardStatus === 200, 'and so is its read of the party\'s Stamina');
         loadCheck($slowStatus === 200 && is_array($slowAnswer['data']['pings'] ?? null), 'and the waiting ping read is answered once the file is free: ' . json_encode([$slowStatus, $slowAnswer]));
+
+        // ---- a board change waits for that person's turn, and their reads do not wait behind it ----
+        // (November 24, 2026: half the board's commands took over 0.75 s, the slowest 25 s, and every poll from that
+        // browser stood in line for all of it.) The test takes Cal's turn itself, as a slow change of his would.
+        $turn = fopen("$base/turn-" . sha1('cal') . '.lock', 'c');
+        loadCheck($turn !== false && flock($turn, LOCK_EX), 'The test holds Cal\'s turn');
+        $change = $send('cal', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['3,1']], 'onebrowser');
+        usleep(400000);                                                    // it is now waiting for its turn
+        $started = microtime(true);
+        [$status, $answer] = $finish($send('cal', 'GET', 'vtt/api/v2/vision.php?explored=scene-1', null, 'onebrowser'), 6.0);
+        $took = microtime(true) - $started;
+        loadCheck($status === 200 && ($answer['cells'] ?? null) === ['1,1', '2,1'] && $took < 3.0, 'The same browser\'s read is answered while its change waits, and the change is not made yet: ' . json_encode([$status, $answer, round($took, 2)]));
+        [$syncStatus] = $finish($send('cal', 'GET', 'character_sheet/handler.php?action=party-vitals', null, 'onebrowser'), 6.0);
+        loadCheck($syncStatus === 200, 'and so is its read of the party\'s Stamina');
+        [$otherStatus, $other] = $finish($send('sharon', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['9,9']], 'otherbrowser'), 6.0);
+        loadCheck($otherStatus === 200 && ($other['count'] ?? 0) === 3, 'Another player\'s change does not wait for Cal\'s turn: ' . json_encode([$otherStatus, $other]));
+        $second = $send('cal', 'POST', 'vtt/api/v2/vision.php', ['explore' => 'scene-1', 'cells' => ['4,1']], 'onebrowser');
+        usleep(300000);
+        loadCheck(($ask('cal', 'GET', 'vtt/api/v2/vision.php?explored=scene-1')[1]['cells'] ?? null) === ['1,1', '2,1', '9,9'], 'A second change of Cal\'s waits as well: his changes are still made one at a time');
+        flock($turn, LOCK_UN); fclose($turn);
+        [$changeStatus, $changed] = $finish($change, 10.0);
+        [$secondStatus, $secondChanged] = $finish($second, 10.0);
+        loadCheck($changeStatus === 200 && $secondStatus === 200 && max($changed['count'] ?? 0, $secondChanged['count'] ?? 0) === 5, 'and both are made once his turn comes: ' . json_encode([$changeStatus, $changed, $secondStatus, $secondChanged]));
     }
 
     $log = (string) @file_get_contents("$base/server.log");
     loadCheck(!preg_match('/PHP (Warning|Fatal|Deprecated|Notice)|Uncaught/', $log), 'None of it raised a PHP warning or error: ' . substr($log, 0, 1500));
-    echo 'hosting load: ping reads only read; pings sent at once are all kept; repeated reads let go of the session' . ($many ? ' and are not queued behind each other' : ' (overlap not tried: one worker here)') . "; presence is written once a second and five seconds still decides who is here\n";
+    echo 'hosting load: ping reads only read; pings sent at once are all kept; repeated reads and board changes let go of the session' . ($many ? ', reads are not queued behind each other or behind a change, and one person\'s changes still go one at a time' : ' (overlap not tried: one worker here)') . "; presence is written once a second and five seconds still decides who is here\n";
 } finally {
     if (is_resource($server)) { proc_terminate($server); proc_close($server); }
     $remove($base);
