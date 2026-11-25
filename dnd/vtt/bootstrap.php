@@ -288,7 +288,8 @@ function overlaySyncV2Placements(array $boardState, ?array $authContext = null):
             (string) ($config['world_id'] ?? 'default'),
             (int) ($config['event_retention'] ?? 1000),
             (int) ($config['snapshot_interval'] ?? 100),
-            (int) ($config['snapshot_retention'] ?? 20)
+            (int) ($config['snapshot_retention'] ?? 20),
+            (int) ($config['operation_retention'] ?? 5000)
         );
         if ($authContext !== null && ($authContext['isGM'] ?? false) === true) {
             vttStorageNotice($store->storageStatus());

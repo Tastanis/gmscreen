@@ -138,7 +138,8 @@ if ($is_gm) {
 
 // Log the access
 $log_entry = date('Y-m-d H:i:s') . " - Load request: User: $user, Type: " . ($is_gm ? 'GM' : 'Player') . ", Week: $week\n";
-file_put_contents('data/access_log.txt', $log_entry, FILE_APPEND | LOCK_EX);
+require_once __DIR__ . '/log-line.php';
+scheduleLogLine('data/access_log.txt', $log_entry);
 
 // Return the data
 header('Content-Type: application/json');

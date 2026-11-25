@@ -53,10 +53,38 @@ two processes (Apache and PHP), so about 32 fit. The pile-ups were one browser's
 request of its own that held the session: up to 94 open from one browser, nearly all from feeds with no guard.
 The slow holders were board commands (half over 0.75 s, the slowest 25 s) and chat requests.
 Still open: the number of requests itself (every embedded page runs its own chat panel; the board's hero panel
-asks `action=live` every 1.6 s), `sync-v2.sqlite` at 241 MB, and deploying during play (the 9:02 pm deploy).
+asks `action=live` every 1.6 s) and deploying during play (the 9:02 pm deploy). The 241 MB of `sync-v2.sqlite`
+(snapshots 114 MB, ledger 90 MB) stops growing with Build 653; the file only shrinks with a VACUUM.
 
 Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php`, `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs` and
 `dnd/vtt/assets/js/ui/__tests__/one-read-at-a-time.test.mjs`.
+
+## What a board command costs, and what is cleaned up (Build 653)
+
+From the host's log and a copy of the live database (November 25, 2026): a board command took about half a second
+with nothing in its way, whatever its kind (a 460-byte ping as long as a token change). The cost is fixed: every
+command reads the whole world, 5.8 MB of JSON then, and writes the 1.8 MB light row back.
+
+- **Design parts come ready-unpacked** (`lib/SyncV2CompiledParts.php`, used by `SyncV2Layout::unpackPart`). Each
+  large part (ground, walls) is also kept as a PHP file in `storage/compiled-parts/`, named for its text, and
+  loaded from opcache instead of being unpacked. It returns exactly what `json_decode` returned; where opcache is
+  off, or does not keep files between requests, it switches itself off and the text is unpacked as before. One file
+  is written or compiled per request, at its end. The folder may be deleted at any time.
+  Before a release that touches it, run `php dnd/vtt/tools/check-compiled-parts.php <copy of sync-v2.sqlite>`.
+- **Still to do if commands must be faster**: the light row (`vtt_state_main`) holds every scene's tokens and is
+  unpacked, packed, written and unpacked again by every command. Keeping each scene's tokens in a row of their own
+  is the next step; it changes the layout, so it needs a carry-over like the split had.
+- **The command ledger is trimmed** (`SyncV2Store::pruneOperations`): the newest `operation_retention` rows (5,000)
+  are kept, older ones go 300 at a time when a snapshot is taken. Never fewer than `event_retention`. The numbering
+  of the rows is used and no row is opened: do not replace it with a count or a scan, which would read the table.
+- **Also capped**: session backups of monsters, templates and dashboard characters (two, as their comments always
+  said); the schedule's three logs (`schedule/log-line.php`, a quarter megabyte); dated `before-split` database
+  copies (three).
+- **Left alone on purpose**: uploaded pictures and maps, the builder's saved characters (they are the user's own),
+  `vtt_snapshots` (20, never read by the site, about 6 MB each), and the two small tables that record collision
+  damage and zone entries (a few rows a session; deleting them would let an old claim be made twice).
+
+Tests: `api/v2/tests/compiled-parts.test.php`, `operation-ledger.test.php`, `growing-files.test.php`.
 
 ## Table fixes after the November 24, 2026 session (Build 651)
 

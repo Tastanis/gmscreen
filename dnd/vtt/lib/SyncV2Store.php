@@ -42,6 +42,10 @@ final class SyncV2Store
     private int $eventRetention;
     private int $snapshotInterval;
     private int $snapshotRetention;
+    /** How many of the newest accepted commands the ledger keeps (pruneOperations). */
+    private int $operationRetention;
+    /** The most ledger rows removed in one go: a first clean-up of years of rows is spread over many commands. */
+    private const OPERATION_PRUNE_BATCH = 300;
     private ?array $snapshotCache = null;
     private ?int $snapshotDataVersion = null;
     /** Where the world is kept in the file, and how it is read and written (SyncV2Layout). */
@@ -54,7 +58,8 @@ final class SyncV2Store
         string $worldId = 'default',
         int $eventRetention = 1000,
         int $snapshotInterval = 100,
-        int $snapshotRetention = 20
+        int $snapshotRetention = 20,
+        int $operationRetention = 5000
     ) {
         $this->playerCharacterUserIds = PlayerRoster::playerIds();
         $this->playerAliases = PlayerRoster::aliases();
@@ -87,6 +92,9 @@ final class SyncV2Store
         $this->eventRetention = max(1, $eventRetention);
         $this->snapshotInterval = max(1, $snapshotInterval);
         $this->snapshotRetention = max(2, min(200, $snapshotRetention));
+        // Never fewer than the events kept: an event still on file names its command, and that command's row must
+        // be there to answer a repeat of it (the events table refuses the same command twice).
+        $this->operationRetention = max($this->eventRetention, $operationRetention);
         $this->initializeSchema();
     }
 
@@ -2753,6 +2761,7 @@ final class SyncV2Store
             'eventRetention' => $this->eventRetention,
             'snapshotInterval' => $this->snapshotInterval,
             'snapshotRetention' => $this->snapshotRetention,
+            'operationRetention' => $this->operationRetention,
             'storage' => $this->storage->status(),
         ];
     }
@@ -4205,6 +4214,38 @@ final class SyncV2Store
         $prune->bindValue(':sub_world_id', $this->worldId, PDO::PARAM_STR);
         $prune->bindValue(':snapshot_limit', $this->snapshotRetention, PDO::PARAM_INT);
         $prune->execute();
+        $this->pruneOperations();
+    }
+
+    /**
+     * The ledger of accepted commands (vtt_operations) is what lets a command that arrives twice be answered once:
+     * a page that did not hear its answer sends the same command again and is given the first answer. A page only
+     * does that while it is open, so only the newest rows are ever asked for. Until Build 653 nothing removed the
+     * older ones: on November 25, 2026 the live file held every command since July, 12,447 rows and 90 MB.
+     *
+     * The newest `operationRetention` rows of the file are kept. A repeat of a command older than that is treated
+     * as a new command, and the revision checks every command already passes decide it.
+     *
+     * Rows are numbered in the order they were written, so "older than the newest N" is worked out from the two
+     * ends of the numbering and never opens a row (a row's JSON sits in the same pages as its number: counting or
+     * scanning them would read the whole table). It runs when a snapshot is taken, inside that command's
+     * transaction, and removes at most OPERATION_PRUNE_BATCH rows. The file does not shrink: the freed pages are
+     * used again by the rows that follow.
+     */
+    private function pruneOperations(): void
+    {
+        $newest = $this->pdo->query('SELECT MAX(rowid) FROM vtt_operations')->fetchColumn();
+        $oldest = $this->pdo->query('SELECT MIN(rowid) FROM vtt_operations')->fetchColumn();
+        if ($newest === null || $newest === false || $oldest === null || $oldest === false) {
+            return;
+        }
+        $last = min((int) $newest - $this->operationRetention, (int) $oldest + self::OPERATION_PRUNE_BATCH - 1);
+        if ($last < (int) $oldest) {
+            return;
+        }
+        $statement = $this->pdo->prepare('DELETE FROM vtt_operations WHERE rowid <= :last');
+        $statement->bindValue(':last', $last, PDO::PARAM_INT);
+        $statement->execute();
     }
 
     private function pruneEvents(int $currentRevision): void

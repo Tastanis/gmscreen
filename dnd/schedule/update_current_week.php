@@ -70,7 +70,8 @@ if (file_put_contents($schedules_file, $json_content) === false) {
 
 // Log the week update
 $log_entry = date('Y-m-d H:i:s') . " - Week update: User: $user, Week: $week\n";
-file_put_contents('data/week_log.txt', $log_entry, FILE_APPEND | LOCK_EX);
+require_once __DIR__ . '/log-line.php';
+scheduleLogLine('data/week_log.txt', $log_entry);
 
 // Return success
 echo json_encode(array(
