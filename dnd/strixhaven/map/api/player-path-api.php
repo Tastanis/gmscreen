@@ -125,7 +125,7 @@ function publicState($data) {
     ];
 }
 
-function withOverlayLock($callback) {
+function withOverlayLock($callback, $readOnly = false) {
     global $dataFile, $lockFile;
 
     $lockFp = fopen($lockFile, 'c');
@@ -133,7 +133,7 @@ function withOverlayLock($callback) {
         sendError(500, 'Could not open overlay lock');
     }
 
-    if (!flock($lockFp, LOCK_EX)) {
+    if (!flock($lockFp, $readOnly ? LOCK_SH : LOCK_EX)) {
         fclose($lockFp);
         sendError(500, 'Could not acquire overlay lock');
     }
@@ -143,7 +143,7 @@ function withOverlayLock($callback) {
         cleanExpiredLock($data);
         $result = $callback($data);
 
-        file_put_contents($dataFile, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
+        if (!$readOnly) file_put_contents($dataFile, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
 
         flock($lockFp, LOCK_UN);
         fclose($lockFp);
@@ -232,6 +232,7 @@ function normalizeDifficulty($difficulty) {
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    session_write_close();
     $action = $_GET['action'] ?? 'get_state';
     if ($action !== 'get_state') {
         sendError(400, 'Invalid action');
@@ -239,7 +240,7 @@ if ($method === 'GET') {
 
     $data = withOverlayLock(function (&$data) {
         return publicState($data);
-    });
+    }, true);
     sendSuccess($data);
 }
 
