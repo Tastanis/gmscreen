@@ -21,6 +21,13 @@ if (PHP_SAPI !== 'cli') {
 
     $chatAction = substr($_POST['action'], 5); // remove "chat_" prefix
 
+    // The two reads every open page repeats (new messages, and the tests a hero has been asked for) only read the
+    // session. They let go of it here, so the same player's other requests are not queued behind them. Every
+    // action that changes something keeps the session to its end, as before.
+    if (in_array($chatAction, ['fetch', 'test_state'], true) && session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
     switch ($chatAction) {
         case 'send':
             handleChatSend($chatDataFile, $maxMessages, $chatParticipantIds);

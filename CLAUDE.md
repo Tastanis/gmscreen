@@ -21,6 +21,28 @@ The campaign vault entry point is `Guides/Dungeon-Alchemist-Map-Import.md` under
 `C:/Users/tasta/Desktop/Claude Work/Claude DND/Obsidian DND/Claude dnd`.
 Keep technical instructions in the gmscreen guide; vault instructions link to it.
 
+## Host load: repeated reads (November 24, 2026 incident)
+
+The site is on shared hosting with a limit of 65 processes. During play the account hit that limit
+again and again and the host answered 522. Anything a page asks for on a timer must follow these rules:
+
+- **A read only reads.** A GET (or `chat_fetch`, `chat_test_state`, inventory `load`) never rewrites a
+  data file. Clean-up of expired entries happens on the next real change (see `ping-api.php`).
+- **A read lets go of the session.** PHP keeps the session file locked until the request ends, so one
+  slow request queues every other request from that player. Repeated reads call `session_write_close()`
+  as soon as they know who is asking: `vttSyncV2AuthContext()` for every `api/v2` GET, and the same
+  line in `chat_handler.php`, `character_sheet/handler.php`, `inventory_handler.php` and the two campus
+  map APIs. Requests that change something keep the session to their end; do not release it for those
+  unless the change is guarded by its own file lock (the campus map APIs are).
+- **A change is one locked read, alter, write.** `withPingLock(true, ...)`, `withOverlayLock(...)`.
+- **One read out at a time per feed, with back-off.** Campus map: `sharedFeed` in `map3d/index.php`.
+  Table: `pollRead` in `table-apps.js`. Board: `recovery-polling.js`. A bare `setInterval(fetch)` is not
+  allowed for a new feed.
+- **"Seen here" is written once a second at most** (`SyncV2Store::touchPresence`). Who is here is still
+  anyone seen in the last five seconds; do not raise `PRESENCE_REFRESH_MS` without re-checking that.
+
+Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php` and `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs`.
+
 ## Version System
 
 ### Overview

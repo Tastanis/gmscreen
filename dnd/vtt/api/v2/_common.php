@@ -37,9 +37,34 @@ function vttSyncV2RequireShadowGm(): array
     );
 }
 
+/**
+ * Who is asking, read from the session. A GET here only reads (sync, snapshot, vision, status), and nothing in
+ * the VTT writes the session, so a GET lets go of the session file as soon as it knows who is asking. PHP
+ * otherwise holds that file until the request ends, and every other request from the same player (the sheet,
+ * the chat, the next sync) waits in a queue behind it, each one a process held open on the host.
+ * A request that changes something keeps the session to its end, as before, so one player's changes are still
+ * taken one at a time.
+ */
+function vttSyncV2AuthContext(): array
+{
+    static $released = null;
+    if ($released !== null) {
+        return $released;
+    }
+    $auth = getVttUserContext();
+    if (
+        strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) === 'GET'
+        && session_status() === PHP_SESSION_ACTIVE
+    ) {
+        session_write_close();
+        $released = $auth;
+    }
+    return $auth;
+}
+
 function vttSyncV2RequireGm(string $message = 'GM access required.'): array
 {
-    $auth = getVttUserContext();
+    $auth = vttSyncV2AuthContext();
     if (!($auth['isLoggedIn'] ?? false)) {
         vttSyncV2Respond(401, [
             'success' => false,
@@ -57,7 +82,7 @@ function vttSyncV2RequireGm(string $message = 'GM access required.'): array
 
 function vttSyncV2RequireAuthenticated(): array
 {
-    $auth = getVttUserContext();
+    $auth = vttSyncV2AuthContext();
     if (!($auth['isLoggedIn'] ?? false)) {
         vttSyncV2Respond(401, [
             'success' => false,

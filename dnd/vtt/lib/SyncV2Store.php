@@ -29,6 +29,9 @@ require_once __DIR__ . '/SyncV2Layout.php';
 
 final class SyncV2Store
 {
+    /** How fresh a "seen here" mark must be for touchPresence to leave it as it is. Well inside the five seconds. */
+    private const PRESENCE_REFRESH_MS = 1000;
+
     private array $playerCharacterUserIds;
     /** id => words a token's name may carry to be that player's (PlayerRoster::aliases). */
     private array $playerAliases;
@@ -115,6 +118,25 @@ final class SyncV2Store
         if ($actorId === '') {
             return;
         }
+        $now = $this->nowMilliseconds();
+        // Whoever was seen in the last five seconds is here (resolvePromptRecipient). A mark made within the last
+        // second already says so, and writing it again would take the database's one write lock, which every
+        // command and every other page's sync also needs. So a fresh mark is only read: a page asking twice a
+        // second, or two pages of the same player, write once a second between them. A mark is still never older
+        // than the time between a page's requests plus that one second.
+        $seen = $this->pdo->prepare(
+            'SELECT is_gm, last_seen FROM vtt_presence
+             WHERE world_id = :world_id AND user_id = :user_id'
+        );
+        $seen->execute(['world_id' => $this->worldId, 'user_id' => $actorId]);
+        $row = $seen->fetch();
+        $seen->closeCursor();
+        if (is_array($row) && (int) $row['is_gm'] === ($isGm ? 1 : 0)) {
+            $age = $now - (int) $row['last_seen'];
+            if ($age >= 0 && $age < self::PRESENCE_REFRESH_MS) {
+                return;
+            }
+        }
         $statement = $this->pdo->prepare(
             'INSERT INTO vtt_presence (world_id, user_id, is_gm, last_seen)
              VALUES (:world_id, :user_id, :is_gm, :last_seen)
@@ -126,7 +148,7 @@ final class SyncV2Store
             'world_id' => $this->worldId,
             'user_id' => $actorId,
             'is_gm' => $isGm ? 1 : 0,
-            'last_seen' => $this->nowMilliseconds(),
+            'last_seen' => $now,
         ]);
     }
 
