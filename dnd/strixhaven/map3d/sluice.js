@@ -41,6 +41,18 @@ export function cutChannel(distance, waterY, bankY, withPaving = false) {
   return { sample, triangle, finish: () => ({ water:geometry(water), walls:geometry(walls), paving:geometry(paving) }) };
 }
 
+export function cutHex(channel, x, z, radius, divisions) {
+  for (let side = 0; side < 6; side++) {
+    const a = side*Math.PI/3, b = (side+1)*Math.PI/3;
+    const point = (i,j) => channel.sample(x + radius*(i*Math.cos(a)+j*Math.cos(b))/divisions,
+      z + radius*(i*Math.sin(a)+j*Math.sin(b))/divisions);
+    for (let i=0;i<divisions;i++) for (let j=0;j<divisions-i;j++) {
+      channel.triangle(point(i,j),point(i,j+1),point(i+1,j));
+      if (i+j+1<divisions) channel.triangle(point(i+1,j),point(i,j+1),point(i+1,j+1));
+    }
+  }
+}
+
 export function sluiceMaterial(kind, color, uniforms) {
   const stone = kind === 'stone';
   const material = new THREE.MeshStandardMaterial({name:'sluice-'+kind,color,roughness:stone ? .85 : .30,
@@ -151,4 +163,63 @@ export function sluiceSpray(uniforms, fall) {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`});
+}
+
+// Sculpt the dam relief as a single surface so the recesses have actual depth.
+export function wellspringSkull() {
+  const oval=(x,y,z,a,b,c)=>(Math.hypot(x/a,y/b,z/c)-1)*Math.min(a,b,c);
+  const join=(a,b,k)=>Math.min(a,b)-Math.max(k-Math.abs(a-b),0)**2/(4*k);
+  function field(x,y,z){
+    const u=Math.abs(x);
+    let d=oval(x,y-30.7,z,13.0,13.4,10.4);
+    d=join(d,oval(x,y-20,z-3,9.5,8,8.6),2.5);
+    d=join(d,oval(u-9.4,y-22.8,z-5.2,4.4,3.3,5.7),1.7);
+    d=join(d,oval(u-7.7,y-16,z-1.8,2.5,9.5,4),1.5);
+    d=join(d,oval(x,y-9.5,z-5.4,8.4,3.8,6.6),1.6);
+    d=join(d,oval(u-5.1,y-32.1-.16*(u-5),z-8.6,5.4,1.65,2.6),1.2);
+    d=join(d,oval(x,y-25.9,z-8.9,1.65,4.3,2.4),.9);
+    d=Math.max(d,-oval(u-11.8,y-27.5,z-5.3,2.8,4.4,3.8));
+    d=Math.max(d,-oval(u-8.9,y-19.3,z-6.2,2.3,3.2,3.6));
+    d=Math.max(d,-oval(u-5.55,y-28.1-.19*(u-5.55),z-10.6,4.45,4.05,5.7));
+    d=Math.max(d,-oval(u-5.55,y-27.05,z-4.0,2.15,2.05,7.0));
+    d=Math.max(d,-oval(x,y-22,z-10.8,1.85+.14*Math.max(0,23-y),3.5,4.1));
+    d=Math.max(d,-oval(x,y-14.4,z-10,7.4,3.5,8.7));
+    return d;
+  }
+  const pos=[], normals=[], stride=.72, nx=43, ny=64, nz=36;
+  const dots=[];
+  for(let k=0;k<nz;k++)for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=-15.2+i*stride,y=3+j*stride,z=-11.2+k*stride;
+    dots.push([x,y,z,field(x,y,z)]);
+  }
+  const plane=nx*ny, offsets=[0,1,nx+1,nx,plane,plane+1,plane+nx+1,plane+nx];
+  const tetra=[[0,1,2,6],[0,2,3,6],[0,3,7,6],[0,7,4,6],[0,4,5,6],[0,5,1,6]];
+  function edge(a,b){
+    const t=a[3]/(a[3]-b[3]);
+    return new THREE.Vector3().fromArray(a).lerp(new THREE.Vector3().fromArray(b),t);
+  }
+  const gradient=v=>{const {x,y,z}=v,e=.03;return new THREE.Vector3(field(x+e,y,z)-field(x-e,y,z),field(x,y+e,z)-field(x,y-e,z),field(x,y,z+e)-field(x,y,z-e)).normalize();};
+  function face(a,b,c){
+    const normal=gradient(a);if(b.clone().sub(a).cross(c.clone().sub(a)).dot(normal)<0)[b,c]=[c,b];
+    for(const v of [a,b,c]){pos.push(v.x,v.y,v.z);const n=v===a?normal:gradient(v);normals.push(n.x,n.y,n.z);}
+  }
+  for(let k=0;k<nz-1;k++)for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){
+    const base=k*plane+j*nx+i,c=offsets.map(o=>dots[base+o]);
+    if(c.every(p=>p[3]>=0)||c.every(p=>p[3]<0))continue;
+    for(const t of tetra){
+      const inside=t.map(n=>c[n]).filter(p=>p[3]<0),outside=t.map(n=>c[n]).filter(p=>p[3]>=0);
+      if(!inside.length||!outside.length)continue;
+      if(inside.length===2){
+        const [a,b]=inside,[u,v]=outside,A=edge(a,u),B=edge(a,v),C=edge(b,u),D=edge(b,v);
+        face(A,B,C);face(B,D,C);
+      }else{
+        const [one]=inside.length===1?inside:outside,three=inside.length===1?outside:inside;
+        face(...three.map(v=>edge(one,v)));
+      }
+    }
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));
+  return geo;
 }

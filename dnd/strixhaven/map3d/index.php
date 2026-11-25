@@ -157,7 +157,9 @@ require_once '../../version.php';
 <script type="module">
 import {installCampusTable,tableMargin} from './campus-scrolls.js?v=4';
 import * as THREE from 'three';
-import { cutChannel, sluiceMaterial, dressSluice, sluiceArch, sluiceSpray } from './sluice.js?v=1';
+import { cutChannel, cutHex, sluiceMaterial, dressSluice, sluiceArch, sluiceSpray, wellspringSkull } from './sluice.js?v=2';
+import { surveyPavement, surveyStairs, underworldRoom, cascadeGeometry } from './dungeon-workshops.js';
+import { archiveFinishes, volumes, giantMushroom, paperCranes, ripplingPool } from './prismari-details.js';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -413,7 +415,20 @@ const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0]
 // the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
 const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622], WKI = [8, 81.5, -87.5, 20.5];   // the workshop's gate, its dome, the way the gate looks; and the hall behind it: how far into the hill it runs (from, to) and how far along the face (from, to), measured from the gate
 // the Wanderer's round of Prismari: east of the Draftfire House, over the hills behind it, south through Furygale, out to the mountains in the south-east and back along the lake
-const WANDER = [[.064,.718],[.098,.745],[.150,.755],[.200,.762],[.232,.80],[.228,.85],[.255,.888],[.290,.900],[.283,.845],[.272,.787],[.243,.768],[.205,.735],[.16,.715],[.118,.69],[.109,.642],[.096,.622],[.081,.588],[.078,.553],[.064,.528],[.040,.540],[.024,.566],[.010,.600],[.012,.650],[.024,.705]];
+const WANDER = [
+  [0.064,0.718], [0.07499,0.72624], [0.08472,0.73566], [0.09574,0.74388], [0.10849,0.75051], [0.12224,0.75687],
+  [0.13652,0.76055], [0.15089,0.76443], [0.16578,0.76739], [0.17918,0.76992], [0.19215,0.76677], [0.20757,0.76691],
+  [0.22251,0.77276], [0.23297,0.78321], [0.24365,0.7954], [0.24779,0.81102], [0.24735,0.82576], [0.24261,0.83698],
+  [0.24224,0.84637], [0.24762,0.85448], [0.25496,0.86259], [0.26329,0.86934], [0.2675,0.8815], [0.27164,0.87102],
+  [0.27479,0.85737], [0.27644,0.84398], [0.28138,0.83071], [0.28448,0.81773], [0.28487,0.8046], [0.28117,0.79117],
+  [0.27407,0.77747], [0.25828,0.77229], [0.24377,0.76857], [0.23027,0.76221], [0.21736,0.75527], [0.20486,0.74928],
+  [0.19384,0.74391], [0.18081,0.74192], [0.16706,0.73857], [0.15023,0.73759], [0.13701,0.73124], [0.123,0.7247],
+  [0.11086,0.71057], [0.09927,0.69464], [0.0961,0.67744], [0.09492,0.6635], [0.09212,0.65267], [0.08568,0.64598],
+  [0.07714,0.63792], [0.06778,0.62594], [0.0613,0.61281], [0.05765,0.59774], [0.0464,0.58375], [0.04801,0.57658],
+  [0.04853,0.57209], [0.05314,0.56549], [0.04617,0.56727], [0.03898,0.57262], [0.03355,0.57887], [0.02447,0.5843],
+  [0.02402,0.59565], [0.01769,0.6061], [0.01735,0.61789], [0.02237,0.62977], [0.02376,0.64209], [0.02527,0.65478],
+  [0.01994,0.66791], [0.01912,0.68045], [0.02163,0.69227], [0.02549,0.70368], [0.03681,0.70938], [0.05032,0.7138]
+];
 const WPATH = makePath(uvs([...WANDER, WANDER[0]]), 160, 60);
 const CHASM = makePath(uvs([[.265,.285],[.245,.32],[.215,.365],[.19,.40],[.17,.425]]), 24, 110);
 // bridge across the Pillardrop (Effigy Row)
@@ -2627,19 +2642,46 @@ function buildProps() {
         const mq = m.getWorldQuaternion(new THREE.Quaternion()).invert(), mats = [];
         m.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = false; o.computeBoundingSphere(); o.boundingSphere.radius *= 1.4; o.raycast = () => {}; o.material.envMapIntensity = 1.6; mats.push(o.material); } });   // clicked through the movers box, like the old one
         // each moving bone keeps its rest turn and the model's three axes as seen from its parent, so a joint turns about the dragon's own axes
-        const J = {}; for (const n of ['wing1_L', 'wing2_L', 'wing1_R', 'wing2_R', 'tail1', 'tail2', 'tail3', 'tail4', 'tail5', 'neck1', 'neck2', 'head', 'jaw']) { const b = m.getObjectByName(n); if (!b) continue;
+        const J = {}; for (const n of ['body', 'arm_L', 'arm_R', 'leg_L', 'leg_R', 'wing1_L', 'wing2_L', 'wing1_R', 'wing2_R', 'tail1', 'tail2', 'tail3', 'tail4', 'tail5', 'neck1', 'neck2', 'head', 'jaw']) { const b = m.getObjectByName(n); if (!b) continue;
           const pq = b.parent.getWorldQuaternion(new THREE.Quaternion()).premultiply(mq).invert(); J[n] = { b, q0: b.quaternion.clone(), x: new THREE.Vector3(1, 0, 0).applyQuaternion(pq), y: new THREE.Vector3(0, 1, 0).applyQuaternion(pq), z: new THREE.Vector3(0, 0, 1).applyQuaternion(pq) }; }
         // the fire leaves from between his jaws, along his snout
         const mouth = new THREE.Group(); mouth.position.set(0, .16, .9); mouth.rotation.y = -Math.PI / 2; mouth.scale.setScalar(1.8 / K); m.add(mouth); m.updateMatrixWorld(true); if (J.head) J.head.b.attach(mouth); mouth.add(fire);
         const th = things.find(x => x.name === 'Valthrex'); for (const mt of mats) { mt.userData.e0 = mt.emissive.clone(); if (th) th.mats.push(mt); }   // lights up with the rest of the place when picked
         rig = { J, mats }; }, undefined, () => console.warn('dragon model not loaded: ' + 'models/valthrex.glb'));
       const q = new THREE.Quaternion(), turn = (j, ...r) => { if (!j) return; j.b.quaternion.copy(j.q0); for (let i = r.length - 2; i >= 0; i -= 2) j.b.quaternion.premultiply(q.setFromAxisAngle(j[r[i]], r[i + 1])); };
-      anim.push(t => { const th = t * .26, fl = Math.sin(t * 2.5); d.position.set(Math.cos(th) * FR, topY + 165 + Math.sin(t * .5) * 18 - 3 * fl, Math.sin(th) * FR); d.rotation.y = -(th + Math.PI / 2); d.rotation.x = .3 + .05 * Math.sin(t * .9); d.rotation.z = .05 * Math.sin(t * .5 + 1.5);
+      // Shoulder elevation, wrist elevation relative to the shoulder, and rearward sweep.
+      // Eight evenly timed poses from the flight study; interpolate through the loop seam.
+      const beats = [[.50,-.13,.07], [.32,.15,.02], [-.16,.26,-.035], [-.53,.12,-.055],
+        [-.48,-.24,.06], [-.26,-.43,.23], [.09,-.46,.30], [.39,-.32,.20]];
+      const stroke = (i, u, joint) => {
+        const a = beats[(i + 7) % 8][joint], b = beats[i][joint], c = beats[(i + 1) % 8][joint], e = beats[(i + 2) % 8][joint];
+        return b + .5 * u * ((c - a) + u * (2*a - 5*b + 4*c - e + u * (3*b - a - 3*c + e)));
+      };
+      anim.push(t => {
+        const th = t * .26, phase = t / 2, beat = (phase % 1) * 8, i = Math.floor(beat), u = beat - i;
+        // Ease out of powered flight for a few seconds on each circuit.
+        const power = sstep(-.75, .15, Math.cos(th)), heave = Math.sin(phase * 2 * Math.PI - 1.88) * power;
+        d.position.set(Math.cos(th) * FR, topY + 165 + Math.sin(t * .5) * 18 + 3 * heave, Math.sin(th) * FR);
+        d.rotation.y = -(th + Math.PI / 2); d.rotation.x = .30 + .045 * Math.sin(th);
+        d.rotation.z = .08 * Math.cos(t * .5) + .025 * heave;
         const c = t % 11, k = c < 2.6 ? Math.sin(c / 2.6 * Math.PI) : 0; fire.visible = k > .01; fmat.uniforms.uK.value = k;
-        if (!rig) return; const J = rig.J, f2 = Math.sin(t * 2.5 - .9);
-        turn(J.wing1_L, 'z', -(.05 + .38 * fl)); turn(J.wing1_R, 'z', .05 + .38 * fl); turn(J.wing2_L, 'z', -(.08 + .3 * f2)); turn(J.wing2_R, 'z', .08 + .3 * f2);   // wing beats, the outer wing a little behind
-        for (let i = 1; i <= 5; i++) turn(J['tail' + i], 'y', .055 * Math.sin(t * 1.3 - i * .6), 'x', .03 * Math.sin(t * 1.7 + 1 - i * .6));
-        turn(J.neck1, 'y', .05 * Math.sin(t * .7), 'x', .03 * Math.sin(t * 1.1)); turn(J.neck2, 'y', .05 * Math.sin(t * .7 - .4));
+        if (!rig) return;
+        const J = rig.J, shoulder = lerp(.08, stroke(i, u, 0), power), wrist = lerp(-.04, stroke(i, u, 1), power), sweep = lerp(.08, stroke(i, u, 2), power);
+        turn(J.wing1_L, 'y', -.26 * sweep, 'z', -shoulder); turn(J.wing1_R, 'y', .26 * sweep, 'z', shoulder);
+        turn(J.wing2_L, 'y', -sweep, 'z', -wrist); turn(J.wing2_R, 'y', sweep, 'z', wrist);
+        const cycle = phase * Math.PI * 2, recoil = power * Math.sin(cycle - 1.2);
+        turn(J.body, 'x', -.095 * recoil, 'z', .035 * Math.sin(th));
+        for (const [side, sign] of [['L', -1], ['R', 1]]) {
+          const trail = power * Math.sin(cycle - 2.0 + sign * .18);
+          turn(J['leg_' + side], 'x', .16 + .25 * trail + .055 * Math.sin(t * .8 + sign), 'z', sign * (.08 + .055 * recoil));
+          turn(J['arm_' + side], 'x', .10 + .15 * power * Math.sin(cycle - .8), 'z', sign * (.07 - .06 * recoil));
+        }
+        for (let segment = 1; segment <= 5; segment++) {
+          turn(J['tail' + segment], 'y', .065 * Math.sin(t * 1.3 - segment * .6),
+            'x', .085 * power * Math.sin(cycle - 1.3 - segment * .48) + .025 * Math.sin(t - segment * .4));
+        }
+        turn(J.neck1, 'y', .05 * Math.sin(t * .7), 'x', .06 * recoil + .025 * Math.sin(t * 1.1));
+        turn(J.neck2, 'y', .05 * Math.sin(t * .7 - .4), 'x', .025 * recoil);
         turn(J.head, 'x', .14 * k); turn(J.jaw, 'x', -.14 + .5 * k);                                                                                              // head dips and the jaw opens wide as he breathes
         for (const mt of rig.mats) mt.emissiveIntensity = 1.5 + .4 * Math.sin(t * 2.2) + 2.5 * k; });                                                            // the furnace cracks pulse, and flare with the fire
     }, { y: 0, hexes: [[10, 34]], top: topY + 60, view: 800 }); }
@@ -4737,18 +4779,21 @@ function buildProps() {
   // Its feet are planted on the ground where they fall and stay there until they lift; the body rides level above them, so on a slope the uphill legs fold and step higher instead of the whole beast tipping.
   // Since Oct 17 2026 it is a sculpted model, models/wanderer.glb: Brandon's Meshy colossus cut to 60k triangles and repainted after his picture (grey cracked stone, the barrel's seams burning orange,
   // the seams under the neck and chest glowing icy blue, olive moss, frost along the back, a burning eye), with bones for neck, head and each leg's thigh and shin; the walk below solves the legs to their footfalls
-  { const ctl = WANDER.map(([u, v]) => new THREE.Vector3(X(u) * S, 0, Z(v) * S)), curve = new THREE.CatmullRomCurve3(ctl, true, 'centripetal'), LEN = curve.getLength(), N = Math.round(LEN / 4), sp = curve.getSpacedPoints(N);
+  { const ctl = WANDER.map(([u, v]) => new THREE.Vector3(X(u) * S, 0, Z(v) * S)), curve = new THREE.CatmullRomCurve3(ctl, true, 'centripetal');
+    curve.arcLengthDivisions = ctl.length * 32;
+    const LEN = curve.getLength(), N = Math.round(LEN / 4), sp = curve.getSpacedPoints(N);
     const KS = 140, ZS = KS / 175, LT = .25 * KS, LS = .653 * KS, HN = .95 * (LT + LS), SPD = 20 * ZS, TC = 3.8, BETA = .72;   // model scale (Oct 17: a fifth smaller, it stood above the mountains), ZS the same as a share of the first size, thigh and shin as the model's legs measure, standing hip height, pace, seconds per stride, share of the stride each foot spends planted
-    const PX = new Float32Array(N), PZ = new Float32Array(N), FX = new Float32Array(N), FZ = new Float32Array(N), raw = new Float32Array(N), bel = new Float32Array(N), pr = new Float32Array(N);
+    const PX = new Float32Array(N), PZ = new Float32Array(N), FX = new Float32Array(N), FZ = new Float32Array(N), raw = new Float32Array(N), bel = new Float32Array(N), pr = new Float32Array(N), bank = new Float32Array(N);
     for (let i = 0; i < N; i++) { PX[i] = sp[i].x; PZ[i] = sp[i].z; const a = sp[(i + 6) % N], b = sp[(i - 6 + N) % N], dx = a.x - b.x, dz = a.z - b.z, l = Math.hypot(dx, dz); FX[i] = dx / l; FZ[i] = dz / l; }
     for (let i = 0; i < N; i++) { const x = PX[i], z = PZ[i], fx = FX[i], fz = FZ[i], hAt = (a, b) => heightAt(x + fx * a - fz * b, z + fz * a + fx * b);
       let m = 0; for (const [a, b] of [[0, 0], [72, 45], [72, -45], [-72, 45], [-72, -45], [72, 0], [-72, 0]]) m += hAt(a * ZS, b * ZS); m /= 7;
       let bm = -1e9; for (const a of [-110, -55, 0, 55, 110, 170]) for (const b of [-25, 25]) bm = Math.max(bm, hAt(a * ZS, b * ZS));
-      raw[i] = Math.max(m + HN, bm + 46 * ZS); bel[i] = bm; pr[i] = clamp(.6 * Math.atan2(hAt(72 * ZS, 0) - hAt(-72 * ZS, 0), 144 * ZS), -.3, .3); }
+      raw[i] = Math.max(m + HN, bm + 46 * ZS); bel[i] = bm; pr[i] = clamp(Math.atan2(hAt(60, 0) - hAt(-60, 0), 120), -.68, .68);
+      bank[i] = clamp(Math.atan2(hAt(0, -40) - hAt(0, 40), 80), -.38, .38); }
     const blur = (src, rad) => { const o = new Float32Array(N); for (let i = 0; i < N; i++) { let q = 0; for (let j = -rad; j <= rad; j++) q += src[(i + j + N) % N]; o[i] = q / (2 * rad + 1); } return o; };
-    let GY = blur(blur(raw, 12), 12); for (let i = 0; i < N; i++) GY[i] = Math.max(GY[i], bel[i] + 34 * ZS); GY = blur(GY, 4); const PT = blur(blur(pr, 12), 8);
+    let GY = blur(blur(raw, 12), 12); for (let i = 0; i < N; i++) GY[i] = Math.max(GY[i], bel[i] + 34 * ZS); GY = blur(GY, 4); const PT = blur(pr, 5), BT = blur(bank, 5);
     const pose = (dist, o) => { const q = ((dist % LEN) + LEN) % LEN / LEN * N, i0 = Math.floor(q) % N, i1 = (i0 + 1) % N, f = q - Math.floor(q); o.x = lerp(PX[i0], PX[i1], f); o.z = lerp(PZ[i0], PZ[i1], f);
-      const fx = lerp(FX[i0], FX[i1], f), fz = lerp(FZ[i0], FZ[i1], f), l = Math.hypot(fx, fz); o.fx = fx / l; o.fz = fz / l; o.y = lerp(GY[i0], GY[i1], f); o.p = lerp(PT[i0], PT[i1], f); };
+      const fx = lerp(FX[i0], FX[i1], f), fz = lerp(FZ[i0], FZ[i1], f), l = Math.hypot(fx, fz); o.fx = fx / l; o.fz = fz / l; o.y = lerp(GY[i0], GY[i1], f); o.p = lerp(PT[i0], PT[i1], f); o.roll = lerp(BT[i0], BT[i1], f); };
 
     // ---- the beast itself (body frame: +x ahead, +y up, origin between the four hips)
     const root = new THREE.Group(), body = new THREE.Group(); root.add(body); scene.add(root); movers.push({ o: body, target: () => ({ hex: hexAt(59, 59), label: 'The Wanderer' }) });   // no hex of its own on the map: its notes live on one off the edge
@@ -4767,7 +4812,7 @@ function buildProps() {
       body.updateMatrixWorld(true); const bqi = body.getWorldQuaternion(new THREE.Quaternion()).invert(), rel = o => o.getWorldQuaternion(new THREE.Quaternion()).premultiply(bqi), loc = o => body.worldToLocal(o.getWorldPosition(new THREE.Vector3()));
       for (const leg of LEGS) { const T = m.getObjectByName('thigh_' + leg.n), Sh = m.getObjectByName('shin_' + leg.n), Toe = m.getObjectByName('toe_' + leg.n); if (!T || !Sh || !Toe) continue;
         const hp = loc(T), kp = loc(Sh), fp = loc(Toe);
-        Object.assign(leg, { T, Sh, L1: hp.distanceTo(kp), L2: kp.distanceTo(fp), a: hp.x, b: hp.z, fb: fp.z, tq0: rel(T), sq0: rel(Sh), pq: rel(T.parent), d1: kp.clone().sub(hp).normalize(), d2: fp.clone().sub(kp).normalize() }); }
+        Object.assign(leg, { T, Sh, k: null, L1: hp.distanceTo(kp), L2: kp.distanceTo(fp), a: hp.x, b: hp.z, fb: fp.z, tq0: rel(T), sq0: rel(Sh), pq: rel(T.parent), d1: kp.clone().sub(hp).normalize(), d2: fp.clone().sub(kp).normalize() }); }
       const joint = n => { const b = m.getObjectByName(n); if (!b) return null; const pi = rel(b.parent).invert(); return { b, q0: b.quaternion.clone(), y: new THREE.Vector3(0, 1, 0).applyQuaternion(pi), z: new THREE.Vector3(0, 0, 1).applyQuaternion(pi) }; };
       rig = { neck: joint('neck1'), head: joint('head'), mat }; }, undefined, () => console.warn('Wanderer model not loaded: models/wanderer.glb'));
     const turn = (j, ...r) => { if (!j) return; j.b.quaternion.copy(j.q0); for (let i = r.length - 2; i >= 0; i -= 2) j.b.quaternion.premultiply(qA.setFromAxisAngle(j[r[i]], r[i + 1])); };
@@ -4775,33 +4820,106 @@ function buildProps() {
     // ---- the walk
     const PB = {}, PF = {}, H = new THREE.Vector3(), Fp = new THREE.Vector3(), K = new THREE.Vector3(), dir = new THREE.Vector3(), perp = new THREE.Vector3(), mtx = new THREE.Matrix4(), vx = new THREE.Vector3(), vy = new THREE.Vector3(), vz = new THREE.Vector3();
     const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), qB = new THREE.Quaternion(), q1 = new THREE.Quaternion(), qT = new THREE.Quaternion(), qS = new THREE.Quaternion();
-    const footfall = (leg, k, out) => { pose(SPD * (k - leg.ph + BETA / 2) * TC, PF); const x = PF.x + PF.fx * leg.a - PF.fz * leg.fb, z = PF.z + PF.fz * leg.a + PF.fx * leg.fb; out[0] = x; out[1] = heightAt(x, z) - 2; out[2] = z; };   // where the hoof comes down: ahead of its own hip as the body will stand at mid-stride
+    // A broad stone hoof needs support across its sole, especially on a side slope.
+    const soleHeight = (x, z) => {
+      let top = heightAt(x, z);
+      for (const dx of [-18, 0, 18]) for (const dz of [-18, 0, 18]) top = Math.max(top, heightAt(x + dx, z + dz));
+      return top + 1;
+    };
+    // Contact samples in the resting shin frame, measured from the toe pivot.
+    // The broad stone tip extends 25 units ahead of the pivot and rotates with the shin.
+    const hoofSurface = [[-6, 3, 0], [0, 0, 0], [5, 1, -9], [5, 1, 9],
+      [16, 2, -7], [16, 2, 7], [24, 4, 0], [5, 22, -7], [5, 22, 7], [0, 44, 0]];
+    const solePoint = new THREE.Vector3(), toeWorld = new THREE.Vector3(), soleTurn = new THREE.Quaternion();
+    const footfall = (leg, k, out) => {
+      pose(SPD * (k - leg.ph + BETA / 2) * TC, PF);
+      const hipY = PF.y + leg.a * Math.sin(PF.p) - leg.b * Math.sin(PF.roll), reach = leg.L1 + leg.L2;
+      let best = Infinity;
+      // Prefer the usual hoofprint. On a ledge, try nearby ground under the same hip.
+      for (const ahead of [0, -10, 10, -22, 22, -36, 36]) for (const side of [0, -9, 9, -18, 18]) {
+        const a = leg.a + ahead, b = leg.fb + side;
+        const x = PF.x + PF.fx * a - PF.fz * b, z = PF.z + PF.fz * a + PF.fx * b;
+        const y = soleHeight(x, z), drop = hipY - y;
+        const distance = Math.hypot(drop, ahead, b - leg.b);
+        const miss = Math.max(0, leg.L2 - drop, distance - reach + 4);
+        const cost = 4 * miss + Math.hypot(ahead, side * 1.5) + 2 * (y - heightAt(x, z));
+        if (cost < best) { best = cost; out[0] = x; out[1] = y; out[2] = z; }
+        if (cost === 0) return;
+      }
+    };
     const step = t0 => { const t = window.__wanderT ?? t0, c = t / TC; pose(SPD * t, PB);
       for (const leg of LEGS) { const cp = c + leg.ph, k = Math.floor(cp), p = cp - k;
         if (leg.k !== k) { leg.k = k; footfall(leg, k, leg.F0); footfall(leg, k + 1, leg.F1); let need = 0;                                             // a new stride: find the next footfall, and how high the hoof must lift to clear the ground between
-          for (const f of [.2, .4, .6, .8]) { const e = f * f * (3 - 2 * f); need = Math.max(need, (heightAt(lerp(leg.F0[0], leg.F1[0], e), lerp(leg.F0[2], leg.F1[2], e)) + 9 - lerp(leg.F0[1], leg.F1[1], e)) / Math.sin(Math.PI * f)); }
-          leg.lift = 18 * ZS + .3 * Math.abs(leg.F1[1] - leg.F0[1]) + Math.max(0, need); }
+          for (const f of [.2, .4, .6, .8]) { const e = f * f * (3 - 2 * f); need = Math.max(need, (soleHeight(lerp(leg.F0[0], leg.F1[0], e), lerp(leg.F0[2], leg.F1[2], e)) + 3 - lerp(leg.F0[1], leg.F1[1], e)) / Math.sin(Math.PI * f)); }
+          leg.lift = Math.max(18 * ZS, need); }
         if (p < BETA) { leg.f[0] = leg.F0[0]; leg.f[1] = leg.F0[1]; leg.f[2] = leg.F0[2]; }
         else { const u = (p - BETA) / (1 - BETA), e = u * u * (3 - 2 * u); leg.f[0] = lerp(leg.F0[0], leg.F1[0], e); leg.f[2] = lerp(leg.F0[2], leg.F1[2], e); leg.f[1] = lerp(leg.F0[1], leg.F1[1], e) + leg.lift * Math.sin(Math.PI * u); } }
-      const sw = Math.sin(c * 6.283), cs = Math.cos(PB.p), sn = Math.sin(PB.p), lx = -PB.fz, lz = PB.fx, bx = PB.x + lx * 3 * sw, bz = PB.z + lz * 3 * sw; let yb = PB.y + 2.2 * Math.sin(c * 12.566);
-      const hip = (leg, y) => H.set(bx + PB.fx * leg.a * cs + lx * leg.b, y + leg.a * sn, bz + PB.fz * leg.a * cs + lz * leg.b);
-      const yb0 = yb;   // where the body would ride; the two rules below may move it, and that move is eased in so it never jumps
-      for (let it = 0; it < 2; it++) for (const leg of LEGS) { const RM = leg.L1 + leg.L2 - 2; hip(leg, yb); const hd = Math.hypot(leg.f[0] - H.x, leg.f[2] - H.z), dy = H.y - leg.f[1]; if (hd * hd + dy * dy > RM * RM) yb -= dy - Math.sqrt(Math.max(RM * RM - hd * hd, 400)); }   // never higher than the longest leg can reach
-      for (const leg of LEGS) { hip(leg, yb); const lo = .16 * (leg.L1 + leg.L2); if (H.y - leg.f[1] < lo) yb += lo - (H.y - leg.f[1]); }                  // and never so low a hoof comes up past its own hip (a planted hoof on a high rock folds its leg up a long way first)
-      { const dtw = clamp(t - (step.lt ?? t), 0, .1), need = yb - yb0; step.lt = t; step.off = step.off === undefined ? need : step.off + (need - step.off) * Math.min(1, dtw * 1.4); yb = yb0 + step.off; }   // the body settles to it over a second or so: a leg may stretch or a hoof sink a little meanwhile, never a jump
-      vx.set(PB.fx * cs, sn, PB.fz * cs); vy.set(-PB.fx * sn, cs, -PB.fz * sn); vz.set(lx, 0, lz); mtx.makeBasis(vx, vy, vz); body.quaternion.setFromRotationMatrix(mtx); body.position.set(bx, yb, bz); body.rotateX(.03 * sw);
+      const sw = Math.sin(c * Math.PI * 2), lx = -PB.fz, lz = PB.fx;
+      const bx = PB.x + lx * 3 * sw, bz = PB.z + lz * 3 * sw;
+      // Fit the torso to the slope under all four feet. A raised hoof must not tip the whole body.
+      const ground = LEGS.map(leg => soleHeight(leg.f[0], leg.f[2]));
+      const pitch = clamp(Math.atan2(ground[0] + ground[1] - ground[2] - ground[3],
+        LEGS[0].a + LEGS[1].a - LEGS[2].a - LEGS[3].a), -.78, .78);
+      const bank = clamp(Math.atan2(ground[1] + ground[3] - ground[0] - ground[2],
+        LEGS[0].fb + LEGS[2].fb - LEGS[1].fb - LEGS[3].fb), -.48, .48);
+      const dt = t - (step.lt ?? t);
+      const follow = dt > 0 && dt < .25 ? 1 - Math.exp(-dt * 4) : 1;
+      step.lt = t;
+      step.pitch = lerp(step.pitch ?? pitch, pitch, follow);
+      step.bank = lerp(step.bank ?? bank, bank, follow);
+      const roll = step.bank + .025 * sw, cs = Math.cos(step.pitch), sn = Math.sin(step.pitch);
+      vx.set(PB.fx * cs, sn, PB.fz * cs); vy.set(-PB.fx * sn, cs, -PB.fz * sn); vz.set(lx, 0, lz);
+      mtx.makeBasis(vx, vy, vz); body.quaternion.setFromRotationMatrix(mtx); body.rotateX(roll);
+      let floor = -Infinity, ceiling = Infinity;
+      for (const [index, leg] of LEGS.entries()) {
+        leg.f[1] = Math.max(leg.f[1], ground[index]) + (dt > 0 && dt < .25 ? leg.contactLift || 0 : 0);
+        H.set(leg.a, 0, leg.b).applyQuaternion(body.quaternion);
+        const dx = leg.f[0] - bx - H.x, dz = leg.f[2] - bz - H.z;
+        const reach = leg.L1 + leg.L2 - 1;
+        ceiling = Math.min(ceiling, leg.f[1] - H.y + Math.sqrt(Math.max(0, reach * reach - dx * dx - dz * dz)));
+        // Reserve room for the uphill knee at its furthest allowed forward/back bend.
+        K.set(leg.kn * .97 * leg.L1, -.24 * leg.L1, 0).applyQuaternion(body.quaternion);
+        const span = (dx - K.x) ** 2 + (dz - K.z) ** 2;
+        floor = Math.max(floor, leg.f[1] - H.y - K.y + Math.sqrt(Math.max(0, leg.L2 ** 2 - span)));
+      }
+      // Ground directly beneath the belly can sit higher than any of the four hoofprints.
+      for (const a of [-65, -30, 0, 35, 70]) for (const b of [-24, 0, 24]) {
+        H.set(a, 0, b).applyQuaternion(body.quaternion);
+        floor = Math.max(floor, heightAt(bx + H.x, bz + H.z) - H.y + 8);
+      }
+      body.position.set(bx, Math.max(floor, Math.min(ceiling, PB.y + 2 * Math.sin(c * 4 * Math.PI))), bz);
       if (!rig) return;
       turn(rig.neck, 'z', .05 * Math.sin(c * 12.566 + 1)); turn(rig.head, 'y', .1 * Math.sin(c * 3.1416), 'z', .07 * Math.sin(c * 6.283 + .5));          // the head nods with the stride and looks a little about
       if (rig.mat) rig.mat.emissiveIntensity = 1.6 + .4 * Math.sin(t * 1.6) + .2 * Math.sin(t * 5.3);                                                          // the fire and ice in its seams breathe
       body.updateMatrixWorld(true); const bqi = body.getWorldQuaternion(qB).invert();
       for (const leg of LEGS) { if (!leg.T) continue; const L1 = leg.L1, L2 = leg.L2, RL = L1 + L2 - .5;
-        leg.T.getWorldPosition(H); Fp.set(leg.f[0], leg.f[1], leg.f[2]); dir.subVectors(Fp, H); const dist = dir.length(), d = clamp(dist, .4 * RL, RL); dir.multiplyScalar(1 / dist);
+        leg.T.getWorldPosition(H); Fp.set(leg.f[0], leg.f[1], leg.f[2]); dir.subVectors(Fp, H).applyQuaternion(bqi);
+        // Lowest hoof adjustment that keeps the knee below the belly at its bend limit.
+        const kneeDrop = .18 * L1, kneeReach = Math.sqrt(L1 * L1 - kneeDrop * kneeDrop);
+        perp.set(leg.kn, 0, leg.b * .008).normalize();
+        const dx = dir.x - kneeReach * perp.x, dz = dir.z - kneeReach * perp.z;
+        const safeDrop = kneeDrop + Math.sqrt(Math.max(0, L2 * L2 - dx * dx - dz * dz));
+        dir.y = Math.min(dir.y, -safeDrop);
+        const dist = dir.length(), d = clamp(dist, Math.abs(L2 - L1) + .5, RL);
+        dir.multiplyScalar(1 / dist);
         const ca = clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1), sa = Math.sqrt(1 - ca * ca);
-        perp.set(PB.fx * leg.kn + lx * leg.b * .008, 0, PB.fz * leg.kn + lz * leg.b * .008); perp.addScaledVector(dir, -perp.dot(dir)).normalize();
-        K.copy(H).addScaledVector(dir, L1 * ca).addScaledVector(perp, L1 * sa);                                                                           // the knee: forward on the forelegs, back on the hind legs
-        v1.subVectors(K, H).normalize().applyQuaternion(bqi); v2.copy(H).addScaledVector(dir, d).sub(K).normalize().applyQuaternion(bqi);                   // thigh and shin lines, in the body's frame
+        perp.addScaledVector(dir, -perp.dot(dir)).normalize();
+        // Both the goal and the bend plane are hip-relative in body space, including roll on hillsides.
+        K.copy(dir).multiplyScalar(L1 * ca).addScaledVector(perp, L1 * sa);
+        v1.copy(K).normalize(); v2.copy(dir).multiplyScalar(d).sub(K).normalize();
         qT.copy(q1.setFromUnitVectors(leg.d1, v1)).multiply(leg.tq0); leg.T.quaternion.copy(leg.pq).invert().multiply(qT);                                 // each bone turned from its rest line onto its new one
-        qS.copy(q1.setFromUnitVectors(leg.d2, v2)).multiply(leg.sq0); leg.Sh.quaternion.copy(qT).invert().multiply(qS); } };
+        qS.copy(q1.setFromUnitVectors(leg.d2, v2)).multiply(leg.sq0); leg.Sh.quaternion.copy(qT).invert().multiply(qS);
+        toeWorld.copy(dir).multiplyScalar(d).applyQuaternion(body.quaternion).add(H);
+        soleTurn.copy(body.quaternion).multiply(q1);
+        let clearance = Infinity;
+        for (const sample of hoofSurface) {
+          solePoint.fromArray(sample).applyQuaternion(soleTurn).add(toeWorld);
+          clearance = Math.min(clearance, solePoint.y - heightAt(solePoint.x, solePoint.z));
+        }
+        // On the next frame bring the actual sole onto the slope, including its forward lip.
+        leg.contactLift = dt > 0 && dt < .25
+          ? clamp((leg.contactLift || 0) + clamp(1 - clearance, -4, 8) * follow, 0, 35) : 0;
+ } };
     anim.push(step); step(0); window.__wander = { step, body, LEGS, LEN, SPD, heightAt, get rig() { return rig; } }; }
 
   // ================= the five campus pools: formal, man-made, each a little different =================
@@ -5235,7 +5353,7 @@ $('tpToggle').onclick = () => setCircles(!tp.on);
 // The Pillardrop is a shaft, not a cavern: going down it the view stays inside the shaft and turns to see every side, and the wheel, a right-drag or W and S take you up and down it.
 // To go down: select the place and keep zooming in on it, or press Go below in its panel; the Under button goes down wherever you are, and the same button (Surface) comes back up
 const UNDER_AT = {
-  'Grandloft Hall': { name: 'The Underloft', ring: 2, col: 0x4a5a86, glow: 0x9ab8ff },
+  'Grandloft Hall': { name: 'The Underloft', ring: 3, col: 0x4a5a86, glow: 0x9ab8ff },
   'Archive of Unfinished Spells': { name: 'Archive of Unfinished Spells: the depths', ring: 2, reach: [[2, -1], [4, -2], [6, -3], [8, -4], [1, 1], [3, 0], [5, -1], [7, -2], [1, -2], [3, -3], [5, -4], [7, -5]], col: 0x55406e, glow: 0xb070ff },   // reach: more centres east of the door, and a row either side (Oct 24: widened into a broad cave of pockets)
   'Sanguine Sluice': { name: 'The city under the Sanguine Sluice', ring: 1, col: 0x6a2626, glow: 0xff5a44 },
   'Crystal Pavilion Hedgemaze': { name: 'The Hedgemaze labyrinth', ring: 2, col: 0x1f5258, glow: 0x60f0ff, maze: true },
@@ -5363,8 +5481,8 @@ UNDER_BUILD['Grandloft Hall'] = (g, area, R) => {
   const ci = Math.round((area.x - K.x0) / u - .5) | 1, cj = Math.round((area.z - K.z0) / u - .5) | 1, rooms = [];
   const carve = (i0, j0, i1, j1, name) => { for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) if (inside(i, j)) open.set(key(i, j), name); rooms.push({ i0, j0, i1, j1, name }); };
   for (let i = ci - 3; i <= ci + 3; i++) for (let j = cj - 3; j <= cj + 3; j++) if ((i - ci) ** 2 + (j - cj) ** 2 <= 10.5 && inside(i, j)) open.set(key(i, j), 'cistern');
-  const far = nodes.slice().sort((a, b) => Math.hypot(b[0] - ci, b[1] - cj) - Math.hypot(a[0] - ci, a[1] - cj)), kinds = ['deep', 'cells', 'deep2', 'guard'];
-  for (const nd of far) { if (rooms.length >= 4) break; if (Math.hypot(nd[0] - ci, nd[1] - cj) < 6) continue;
+  const far = nodes.slice().sort((a, b) => Math.hypot(b[0] - ci, b[1] - cj) - Math.hypot(a[0] - ci, a[1] - cj)), kinds = ['sealed', 'wharf', 'deep', 'cells', 'market', 'deep2', 'exchange', 'guard'];
+  for (const nd of far) { if (rooms.length >= kinds.length) break; if (Math.hypot(nd[0] - ci, nd[1] - cj) < 6) continue;
     for (const [oi, oj] of [[-2, -2], [0, -2], [-2, 0], [0, 0]]) { const i0 = nd[0] + oi, j0 = nd[1] + oj; let ok = true;
       for (let i = i0; i <= i0 + 2 && ok; i++) for (let j = j0; j <= j0 + 2; j++) if (!inside(i, j)) { ok = false; break; }
       if (!ok || rooms.some(r => Math.abs(r.i0 - i0) < 6 && Math.abs(r.j0 - j0) < 6)) continue; carve(i0, j0, i0 + 2, j0 + 2, kinds[rooms.length]); break; } }
@@ -5423,6 +5541,15 @@ UNDER_BUILD['Grandloft Hall'] = (g, area, R) => {
   { const [x, z] = at(ci, cj); K.mark('cistern', x, 10, z); K.mark('trunk', at(Math.max(1, ci - 6), cj)[0], 8, z); }
   for (const rm of rooms) { const [ax0, az0] = at(rm.i0, rm.j0), [ax1, az1] = at(rm.i1, rm.j1), mx = (ax0 + ax1) / 2, mz = (az0 + az1) / 2, w = ax1 - ax0 + u, d = az1 - az0 + u; K.mark(rm.name, mx, 6, mz);
     P(w - 2, d - 2, flag, mx, 1.15, mz);
+    if (['sealed','wharf','market','exchange'].includes(rm.name)) {
+      // Face the back of the chamber toward solid rock and keep the nearest approach clear.
+      const sides = [[0,1],[1,0],[0,-1],[-1,0]];
+      const backed = sides.filter(([a,b]) => !isOpen(rm.i0+1+2*a,rm.j0+1+2*b));
+      const openFront = sides.filter(([a,b]) => isOpen(rm.i0+1-2*a,rm.j0+1-2*b));
+      const candidates = rm.name==='wharf' && openFront.length ? openFront : backed.length ? backed : sides;
+      const [a,b] = candidates.sort(([a,b],[c,d])=>(c-a)*(mx-area.x)+(d-b)*(mz-area.z))[0];
+      underworldRoom(K,rm.name,mx,mz,Math.atan2(a,b),{wood,iron,stone,brick:brickD,flame,water});
+    }
     if (rm.name === 'cells') { for (let q = 0; q < 5; q++) { const x = ax0 - u / 2 + 4 + q * (w - 8) / 4.5, z = az0 - u / 2 + 6; for (let b2 = 0; b2 < 6; b2++) C(.35, .35, 16, 5, iron, x - 4 + b2 * 1.6, 9, z + 5);
         B(.8, 16, 10, brickD, x - 5, 9, z); S(2.2, new THREE.MeshStandardMaterial({ color: 0x8a7a4a, roughness: 1 }), x, 1.6, z - 1, 1.6, .3, 1, 6); C(.3, .3, 6, 4, iron, x + 2, 5, z - 4, 0, 0, .5); S(.9, curb, x + 2, 1.8, z - 3, 1.4, .5, 1, 5); }   // straw, a chain, a bucket                                                                         // a row of cells with bars
       B(10, 4, 5, wood, mx, 3, mz + 6); K.light(mx, 20, mz, 0xff9a4a, 3.4, 170); K.K(1.1, 3, 6, flame, mx + w / 2 - 3, 13, mz);
@@ -5487,13 +5614,12 @@ UNDER_BUILD['Grandloft Hall'] = (g, area, R) => {
 // the outer walls are catacombs, niche over niche of skulls. Off the channel a stepped ziggurat carries the empire's throne between braziers of green fire, and ghost-lights drift
 UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   const K = underKit(g, area, R), { rnd, inA, B, C, S, T, P, add, tr } = K;
-  const flag = new THREE.MeshStandardMaterial({ map: flagTex('#5c5652', '#22201e', 4), roughness: .9, color: 0xd0c8c0 }), stoneD = new THREE.MeshStandardMaterial({ map: flagTex('#57514c', '#1c1a18', 2), roughness: .92, color: 0xc8c0b8 });
+  const flag=sluiceMaterial('stone',0xa99d86,U), stoneD=sluiceMaterial('stone',0x8e826e,U);
   const marble = new THREE.MeshStandardMaterial({ map: noiseTex('tomb2', '#c8c0b2', ['rgba(0,0,0,A)', 'rgba(255,250,240,A)'], .05), roughness: .45, color: 0xf2ece2 }), dark = new THREE.MeshStandardMaterial({ color: 0x0a0909, roughness: 1 });
   const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x6a6460 }), bone = new THREE.MeshStandardMaterial({ color: 0xcfc4a8, roughness: .8 }), iron = new THREE.MeshStandardMaterial({ color: 0x2a2426, roughness: .5, metalness: .7 });
-  const blood = new THREE.MeshStandardMaterial({ map: noiseTex('blood', '#4a0606', ['rgba(140,10,10,A)', 'rgba(0,0,0,A)'], .4), color: 0x9a1414, roughness: .35, metalness: 0, envMapIntensity: .15, emissive: 0x500404, emissiveIntensity: 1.5 });
-  blood.map.repeat.set(1 / 40, 1 / 40); anim.push(t => { if (UNDER.on) blood.map.offset.set(t * .004, -t * .009); });
-  const ghost = K.glow(0x6aff9a, 3.2), ember = K.glow(0x40ff80, 4), redGlow = K.glow(0xff3030, 3), shroud = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: .95 });
-  K.floor(flag, 1, 40); K.rim(capM, 70, 30);
+  const blood=sluiceMaterial('liquid',0x681322,U), fall=sluiceSpray(U,true), splash=sluiceSpray(U,false);
+  const ghost = K.glow(0x6aff9a, 3.2), ember = K.glow(0x40ff80, 4), redGlow = K.glow(0xff3030, 3);
+  K.rim(capM, 70, 30);
   // the spine: the hexes of the Sluice above in order down the chain, smoothed
   const src = area.src.hexes.map(h => [h.x, h.z]), mx0 = src.reduce((a, p) => a + p[0], 0) / src.length, mz0 = src.reduce((a, p) => a + p[1], 0) / src.length;
   let sxx = 0, sxz = 0, szz = 0; for (const [x, z] of src) { sxx += (x - mx0) ** 2; sxz += (x - mx0) * (z - mz0); szz += (z - mz0) ** 2; } const ang = .5 * Math.atan2(2 * sxz, sxx - szz), ax = [Math.cos(ang), Math.sin(ang)];
@@ -5503,17 +5629,27 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   { const s0 = spine[0], s1 = spine[1], e0 = spine[spine.length - 1], e1 = spine[spine.length - 2], l0 = Math.hypot(s0[0] - s1[0], s0[1] - s1[1]), l1 = Math.hypot(e0[0] - e1[0], e0[1] - e1[1]); spine = [[s0[0] + (s0[0] - s1[0]) / l0 * 120, s0[1] + (s0[1] - s1[1]) / l0 * 120], ...spine, [e0[0] + (e0[0] - e1[0]) / l1 * 120, e0[1] + (e0[1] - e1[1]) / l1 * 120]]; }
   { const out = []; for (let i = 0; i + 1 < spine.length; i++) { const p0 = spine[Math.max(0, i - 1)], p1 = spine[i], p2 = spine[i + 1], p3 = spine[Math.min(spine.length - 1, i + 2)]; for (let k = 0; k < 6; k++) { const t = k / 6, t2 = t * t, t3 = t2 * t, f = (a, b, c, d) => .5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]); } } out.push(spine[spine.length - 1]); spine = out; }   // and drawn through as a smooth curve
   const segInfo = (x, z) => { let b = 1e9, bt = 0, bi = 0; for (let i = 0; i + 1 < spine.length; i++) { const [ax2, az2] = spine[i], dx = spine[i + 1][0] - ax2, dz = spine[i + 1][1] - az2, l2 = dx * dx + dz * dz, t = clamp(((x - ax2) * dx + (z - az2) * dz) / l2, 0, 1), d = Math.hypot(ax2 + dx * t - x, az2 + dz * t - z); if (d < b) { b = d; bt = t; bi = i; } } return { d: b, i: bi, t: bt }; };
-  // the channel: laid as short overlapping pieces down the spine, banks of dressed stone each side, a sluice gate every so often, and hooded statues along both banks
-  const CW = 26; let run = 0;
+  const CW=26, waterY=-4.4;
+  const cut=cutChannel((x,z)=>segInfo(x,z).d-CW/2,waterY,1,true);
+  for(const hex of area.hexes) cutHex(cut,hex.x,hex.z,R,16);
+  const bed=cut.finish(); add(bed.water,blood); add(bed.walls,stoneD); add(bed.paving,flag);
+  let run=0;
   for (let i = 0; i + 1 < spine.length; i++) { const [ax2, az2] = spine[i], [bx, bz] = spine[i + 1], L = Math.hypot(bx - ax2, bz - az2), ux = (bx - ax2) / L, uz = (bz - az2) / L, ry = Math.atan2(ux, uz), n = Math.ceil(L / 12);
     for (let k = 0; k < n; k++) { const t = (k + .5) / n, x = ax2 + (bx - ax2) * t, z = az2 + (bz - az2) * t; if (!inA(x, z, 10)) continue; run += L / n;
-      add(tr(new THREE.BoxGeometry(CW, .8, L / n + 3), x, 1.2, z, ry), blood); for (const s of [-1, 1]) { add(tr(new THREE.BoxGeometry(5, 4, L / n + 3), x + uz * s * (CW / 2 + 2.5), 2.5, z - ux * s * (CW / 2 + 2.5), ry), stoneD); }
+      for (const s of [-1, 1]) { add(tr(new THREE.BoxGeometry(5, 4, L / n + 3), x + uz * s * (CW / 2 + 2.5), 2.5, z - ux * s * (CW / 2 + 2.5), ry), stoneD); }
       if (k % 7 === 3) K.light(x, 10, z, 0xff3a2a, 1.6, 120, .08);
       if (run > 140) { run = 0; for (const s of [-1, 1]) { const px = x + uz * s * (CW / 2 + 3), pz = z - ux * s * (CW / 2 + 3); B(6, 30, 6, stoneD, px, 15, pz, ry); K.K(3.6, 6, 4, stoneD, px, 33, pz, ry + Math.PI / 4); }   // a sluice gate: two towers and a portcullis over the blood
         add(tr(new THREE.BoxGeometry(CW + 6, 4, 4), x, 26, z, ry), stoneD); for (let q = 0; q < 7; q++) add(tr(new THREE.BoxGeometry(.8, 18, .8), x + uz * (q - 3) * 3.6, 15, z - ux * (q - 3) * 3.6, ry), iron); add(tr(new THREE.BoxGeometry(CW, .8, .8), x, 9, z, ry), iron);
+        sluiceArch(add,x,8,z,ry,CW*.49,4,stoneD);
+        for(const side of [-1,1]){
+          const px=x+uz*side*(CW/2-1), pz=z-ux*side*(CW/2-1);
+          add(tr(new THREE.PlaneGeometry(3,6-waterY),px,(6+waterY)/2,pz,ry+Math.PI/2),fall);
+          P(12,12,splash,px-uz*side*2,waterY+.1,pz+ux*side*2);
+          for(let link=0;link<7;link++) T(.8,.16,iron,px,20-link*1.15,pz,ry+(link%2)*Math.PI/2);
+        }
         K.light(x, 14, z, 0xff4030, 2.2, 160, .12); }
-      if (k % 3 === 1) for (const s of [-1, 1]) { const px = x + uz * s * (CW / 2 + 5), pz = z - ux * s * (CW / 2 + 5); if (!inA(px, pz, 6)) continue;   // a hooded figure on a plinth, facing the channel, a green flame in its hands
-        B(5, 4, 5, stoneD, px, 3, pz, ry); C(1.6, 3.2, 14, 8, shroud, px, 12, pz); S(2.2, shroud, px, 20, pz, 1, 1.2, 1, 8); K.K(2.6, 4, 8, shroud, px, 22.5, pz); S(.9, ghost, px - uz * s * 2.4, 14, pz + ux * s * 2.4, 1, 1, 1, 6); } } }
+    }
+  }
   // the city of the dead, laid out along the channel: measured as distance along it (a) and out from it (b). A quay each side of the blood, then block after block of tombs
   // back to back, each row facing its own street, shoulder to shoulder - pillared mausoleums, crypt-houses under slate and copper roofs, gothic chapels with spires, columbarium towers, walled grave plots with dead trees - with cross streets, small squares,
   // and the throne of the empire in its own great square off the channel
@@ -5523,12 +5659,24 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   const L = arc[arc.length - 1], Q0 = CW / 2 + 6, QW = 18, ROWD = 24, STW = 12, BL = 92, CSW = 12, cells = [], thr = { a: L * .62, b: 0 };
   for (const sd of [-1, 1]) { if (thr.b) break; for (const bb of [118, 140, 100]) { const p = at2(L * .62, sd * bb); if (inA(p.x, p.z, 58)) { thr.b = sd * bb; break; } } }
   const thrP = thr.b ? at2(thr.a, thr.b) : null, nearThrone = (x, z, m = 0) => thrP && Math.hypot(x - thrP.x, z - thrP.z) < 74 + m;
-  const pave = new THREE.MeshStandardMaterial({ map: flagTex('#6e6862', '#26231f', 3), roughness: .85, color: 0xe0d8d0 }), lampM = K.glow(0x60ff90, 3.6);
+  const pave = sluiceMaterial('stone',0xb2a796,U), lampM = K.glow(0x60ff90, 3.6);
   const slate = new THREE.MeshStandardMaterial({ map: utex('slate2', () => ctex(256, 256, (c, w, h) => { c.fillStyle = '#14171c'; c.fillRect(0, 0, w, h); const r = mulberry32(5); for (let y = 0, row = 0; y < h; y += 16, row++) for (let x = (row % 2) * -12; x < w; x += 24) { const k = r() * .3; c.fillStyle = 'rgb(' + (58 + k * 90 | 0) + ',' + (64 + k * 90 | 0) + ',' + (78 + k * 90 | 0) + ')'; c.fillRect(x + 1, y + 1, 22, 14); } })), roughness: .65, color: 0x9ea2aa });
-  slate.map.wrapS = slate.map.wrapT = THREE.RepeatWrapping; slate.map.repeat.set(.08, .08);
+  slate.map.wrapS = slate.map.wrapT = THREE.RepeatWrapping; slate.map.repeat.set(.047, .047); slate.bumpMap=slate.map; slate.bumpScale=.23;
   const copper = new THREE.MeshStandardMaterial({ map: noiseTex('verd2', '#3f8a76', ['rgba(16,50,40,A)', 'rgba(150,215,190,A)'], .22), color: 0x7a9a90, roughness: .7, metalness: .1 }), deadW = new THREE.MeshStandardMaterial({ color: 0x1c1814, roughness: 1 });
   const lancet = K.glow(0x5aff90, 2.2), boneD = new THREE.MeshStandardMaterial({ color: 0x8e8670, roughness: .85 });
-  const gable = (w, h, d) => { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.closePath(); const ge = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false }); ge.translate(0, 0, -d / 2); const uv = ge.attributes.uv, pos = ge.attributes.position; for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) + pos.getZ(i), pos.getY(i) + pos.getZ(i) * .5); return ge; };   // a pitched roof, ridge along z
+  const gable = (w, h, d) => { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.closePath(); const ge = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false }); ge.translate(0, 0, -d / 2); const uv = ge.attributes.uv, pos = ge.attributes.position; for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) + pos.getZ(i), pos.getY(i) + pos.getZ(i) * .5); const parts=[ge.index?ge.toNonIndexed():ge];
+    const strip=(width,height,length,x,y,z,angle=0)=>{
+      parts.push(new THREE.BoxGeometry(width,height,length).rotateZ(angle).translate(x,y,z).toNonIndexed());
+    };
+    const slope=Math.atan2(h,w/2), rows=Math.max(2,Math.round(Math.hypot(h,w/2)/3.4));
+    strip(.85,.64,d+.35,0,h+.1,0);
+    for(const side of [-1,1]){
+      strip(.65,.8,d+.22,side*w/2,-.13,0);
+      for(let row=1;row<rows;row++){
+        const f=row/rows;strip(.48,.26,d,side*w*.5*f,h*(1-f)+.14,0,-side*slope);
+      }
+    }
+    return mergeGeometries(parts); };   // a pitched roof, ridge along z
   const deadTree = (x, z, y, len, ang, tilt, dd) => { const ex = x + Math.sin(tilt) * Math.cos(ang) * len, ez = z + Math.sin(tilt) * Math.sin(ang) * len, ey = y + Math.cos(tilt) * len;
     add(new THREE.CylinderGeometry(.15 + dd * .18, .25 + dd * .24, len, 5).translate(0, len / 2, 0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ex - x, ey - y, ez - z).normalize())).translate(x, y, z), deadW);
     if (dd > 0) for (let b = 0; b < (dd > 2 ? 3 : 2); b++) deadTree(ex, ez, ey, len * (.62 + rnd() * .15), ang + (b - .8) * 1.3 + (rnd() - .5) * .8, Math.min(1.35, tilt + .35 + rnd() * .3), dd - 1); };
@@ -5545,14 +5693,37 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   // the tombs
   const bld = (p, face, w, d, kind) => { const put = (geo, mat) => add(geo.rotateY(face).translate(p.x, 0, p.z), mat), h0 = 2.2;
     put(new THREE.BoxGeometry(w + 1, h0, d + 1).translate(0, h0 / 2 + 1, 0), stoneD);
+    if(kind==='crypt'||kind==='mauso'||kind==='tower'){
+      const front=kind==='mauso'?d/2-6:d/2, lintel=kind==='tower'?7.2:8.2;
+      for(const side of [-1,1]){
+        put(new THREE.BoxGeometry(1.2,lintel,1.05).translate(side*w*.22,3.5+lintel/2,front+.2),marble);
+        put(new THREE.BoxGeometry(2.1,1,1.6).translate(side*w*.22,3.5+lintel,front+.2),stoneD);
+        for(let i=0;i<3;i++)put(new THREE.BoxGeometry(2.4,1.1,1.25).translate(side*(w/2-1.2),4.6+i*2,front+.15),stoneD);
+      }
+      put(new THREE.BoxGeometry(w*.52,1.35,1.5).translate(0,4.2+lintel,front+.2),marble);
+    }
     if (kind === 'mauso') { const h = w * .75 + rnd() * 6; put(new THREE.BoxGeometry(w - 1, h, d - 6).translate(0, 2 + h0 + h / 2, -3), marble); put(new THREE.BoxGeometry(w * .34, h * .6, .6).translate(0, 2 + h0 + h * .3, d / 2 - 6.3), dark);
       for (const k of [-1, -.33, .33, 1]) put(new THREE.CylinderGeometry(1, 1.2, h, 8).translate(k * (w / 2 - 1.6), 2 + h0 + h / 2, d / 2 - 1.8), marble);
       put(new THREE.BoxGeometry(w + 1, 1.6, d).translate(0, 2.8 + h0 + h, -.5), marble); put(gable(w + 1.6, w * .3, d + .6).translate(0, 3.6 + h0 + h, -.5), rnd() < .6 ? slate : copper); put(gable(w * .9, w * .24, .5).translate(0, 3.7 + h0 + h, d / 2 - .1), marble); }
     else if (kind === 'crypt') { const h = 12 + rnd() * 14, m = rnd() < .5 ? marble : stoneD; put(new THREE.BoxGeometry(w - 1, h, d - 1).translate(0, 2 + h0 + h / 2, 0), m); put(new THREE.BoxGeometry(w + .6, 1.2, d + .6).translate(0, 2.6 + h0 + h, 0), marble); const along = rnd() < .5, rh = (along ? w : d) * (.38 + rnd() * .2), roofM = rnd() < .55 ? slate : copper;
       put((along ? gable(w + 1.4, rh, d + 1.4) : gable(d + 1.4, rh, w + 1.4).rotateY(Math.PI / 2)).translate(0, 3.2 + h0 + h, 0), roofM); put(new THREE.BoxGeometry(.6, 4, .6).translate(0, 5 + h0 + h + rh, 0), iron); put(new THREE.BoxGeometry(2.6, .6, .6).translate(0, 6 + h0 + h + rh, 0), iron);
+      for(const side of [-1,1])for(const bay of [-1,1]){
+        const z=bay*d*.24, x=side*(w-.85)/2;
+        put(new THREE.BoxGeometry(.55,h*.34,2.8).translate(x,4+h*.55,z),dark);
+        put(new THREE.BoxGeometry(.8,.7,3.6).translate(x,4+h*.38,z),marble);
+        put(new THREE.BoxGeometry(.6,h*.34,.26).translate(x+side*.16,4+h*.55,z),iron);
+      }
+      put(new THREE.BoxGeometry(w-1.1,1.15,1.35).translate(0,3+h*.46,-d/2+.1),stoneD);
+      put(new THREE.BoxGeometry(2.3,rh*.75+3,2.6).translate(-w*.26,4+h+rh*.56,-d*.22),stoneD);
+      put(new THREE.BoxGeometry(3,.9,3.2).translate(-w*.26,6+h+rh*.93,-d*.22),marble);
       put(new THREE.BoxGeometry(w * .4, h * .55, .6).translate(0, 2 + h0 + h * .28, d / 2 - .2), dark);
       if (rnd() < .4) for (const k of [-1, 1]) put(new THREE.BoxGeometry(1.4, 1.4, .4).translate(k * w * .3, 2 + h0 + h * .62, d / 2 - .2), ghost); }
     else if (kind === 'tower') { const h = 34 + rnd() * 22; put(new THREE.BoxGeometry(w - 1, h, d - 1).translate(0, 2 + h0 + h / 2, 0), stoneD); for (let r = 0; r < 6; r++) for (let c = -1; c <= 1; c++) put(new THREE.BoxGeometry(2.4, 3, .5).translate(c * (w * .28), 8 + h0 + r * (h - 10) / 6, d / 2 - .3), dark);
+      for(const fraction of [.36,.72]){
+        put(new THREE.BoxGeometry(w+.6,1.1,d+.6).translate(0,4+h*fraction,0),marble);
+        for(const side of [-1,1])for(const bay of [-1,1])
+          put(new THREE.BoxGeometry(.7,4.5,1.7).translate(side*(w-.9)/2,7+h*fraction,bay*d*.24),dark);
+      }
       put(new THREE.BoxGeometry(w + .8, 1.6, d + .8).translate(0, 2.8 + h0 + h, 0), marble); put(new THREE.ConeGeometry((w + .4) * .72, w * 1.4, 4).rotateY(Math.PI / 4).translate(0, 3.6 + h0 + h + w * .7, 0), slate); put(new THREE.ConeGeometry(.5, 5, 4).translate(0, 6 + h0 + h + w * 1.4, 0), iron); }
     else if (kind === 'chapel') { const h = 13 + rnd() * 5, nw = w * .72, nd = d - 3, roofM = rnd() < .7 ? slate : copper;   // a gothic chapel: a nave under a steep roof, buttresses, green lancet windows, a spire over the door
       put(new THREE.BoxGeometry(nw, h, nd).translate(0, 2 + h0 + h / 2, -1), stoneD); put(gable(nw + 1.6, nw * .9, nd + 1).translate(0, 2 + h0 + h, -1), roofM);
@@ -5573,15 +5744,10 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
     const sb = b0 + 2 * ROWD + STW / 2; for (let a2 = 30; a2 < L; a2 += 96) { const q = at2(a2, sd * (sb - STW / 2 + 1)); if (inA(q.x, q.z, 6) && !nearThrone(q.x, q.z)) { lantern(q.x, q.z, 9); } } });
   // ---- the ghouls' city (Oct 24): the great buildings, each given a whole block and facing the channel - the Ghoul Lord's palace, a cathedral ribbed with bone, the charnel
   // market, an ossuary tower built of skulls, a fountain running with blood, the gallows square, the embalmers' guild smoking green, and a small arena of the dead;
-  // ghouls about the streets, and black boats poled slowly along the blood
-  const ghoulM = new THREE.MeshStandardMaterial({ color: 0x7a8670, roughness: .8 }), ragM = new THREE.MeshStandardMaterial({ color: 0x3a3430, roughness: 1 }), meatM = new THREE.MeshStandardMaterial({ color: 0x6a1414, roughness: .5, emissive: 0x200404, emissiveIntensity: .6 });
+  const meatM = new THREE.MeshStandardMaterial({ color: 0x6a1414, roughness: .5, emissive: 0x200404, emissiveIntensity: .6 });
   const awn = [0x5a2a3a, 0x2a4a3a, 0x4a3a22, 0x3a3a5a].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: .95, side: THREE.DoubleSide })), banner = new THREE.MeshStandardMaterial({ color: 0x5a0a0e, roughness: .9, side: THREE.DoubleSide, emissive: 0x200204, emissiveIntensity: .5 });
-  const ghoul = (x, z, ry, y = 1.2, s = 1) => { const P3 = ge => ge.scale(s, s, s).rotateY(ry).translate(x, y, z);   // hunched, long-armed, in rags
-    add(P3(new THREE.CylinderGeometry(.9, 1.3, 4.2, 6).rotateX(.5).translate(0, 4, .6)), ragM); add(P3(new THREE.SphereGeometry(.85, 7, 5).translate(0, 5.5, 1.9)), ghoulM);
-    for (const sd of [-1, 1]) { add(P3(new THREE.CylinderGeometry(.25, .18, 4.6, 4).rotateX(.35).rotateZ(sd * .12).translate(sd * 1.1, 3.3, 1.5)), ghoulM); add(P3(new THREE.CylinderGeometry(.32, .25, 3, 4).translate(sd * .55, 1.5, 0)), ghoulM); }
-    add(P3(new THREE.SphereGeometry(.16, 4, 3).translate(-.32, 5.7, 2.7)), ghost); add(P3(new THREE.SphereGeometry(.16, 4, 3).translate(.32, 5.7, 2.7)), ghost); };
   for (const st of SITES) { const { x: cx, z: cz, face, W, D } = st, y0 = 1.2, P2 = (ge, mt) => add(ge.rotateY(face).translate(cx, y0, cz), mt), at3 = (lx, lz) => [cx + Math.sin(face) * lz + Math.cos(face) * lx, cz + Math.cos(face) * lz - Math.sin(face) * lx];
-    const toC = (lx, lz, y, s) => { const [x, z] = at3(lx, lz); ghoul(x, z, Math.atan2(cx - x, cz - z), y, s); }, lit = (lx, h, lz, col, k = 1.6, d = 130) => { const [x, z] = at3(lx, lz); K.light(x, y0 + h, z, col, k, d, .2); };
+    const lit = (lx, h, lz, col, k = 1.6, d = 130) => { const [x, z] = at3(lx, lz); K.light(x, y0 + h, z, col, k, d, .2); };
     P2(new THREE.BoxGeometry(W, .6, D).translate(0, .3, 0), pave); const [mx, mz] = at3(0, 0); K.mark(st.kind, mx, 10, mz);
     if (st.kind === 'palace') {   // the Ghoul Lord's palace: a black marble front of three storeys, wings, a portico of columns under a pediment, a verdigris dome, two towers behind, a grand stair, iron gates
       P2(new THREE.BoxGeometry(42, 2.4, 30).translate(0, 1.2, -4), marble); P2(new THREE.BoxGeometry(36, 26, 22).translate(0, 15.4, -6), stoneD); for (const sd of [-1, 1]) { P2(new THREE.BoxGeometry(14, 18, 28).translate(sd * 26, 11.4, -4), stoneD); P2(gable(15, 7, 29).translate(sd * 26, 20.4, -4), slate); }
@@ -5608,7 +5774,7 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
         P2(new THREE.BoxGeometry(8, 3, 3).translate(lx, 1.5, lz + (i < 4 ? 1.6 : -1.6)), stoneD); for (let k = 0; k < 4; k++) P2(new THREE.SphereGeometry(.7 + rnd() * .4, 6, 4).scale(1.4, .7, 1).translate(lx - 3 + k * 2, 3.4, lz + (i < 4 ? 1.6 : -1.6)), meatM); }
       P2(new THREE.BoxGeometry(18, .5, .5).translate(0, 9, -1), iron); for (const sd of [-1, 1]) P2(new THREE.CylinderGeometry(.35, .35, 9, 5).translate(sd * 9, 4.5, -1), iron); for (let k = 0; k < 6; k++) P2(new THREE.CapsuleGeometry(.9, 3, 3, 6).translate(-7 + k * 2.8, 5.6, -1), meatM);   // the hook rack
       P2(new THREE.SphereGeometry(3, 12, 8, 0, Math.PI * 2, Math.PI * .4, Math.PI * .6).translate(0, 3.4, 3), iron); P2(new THREE.CylinderGeometry(2.4, 2.4, .3, 12).translate(0, 4.6, 3), K.glow(0x70ff40, 2.4)); umist(g, ...at3(0, 3), { n: 18, seed: 6003, r0: 0, r1: 2, y0: y0 + 5, y1: y0 + 20, rise: .15, size: 18, alpha: .15, col: [.5, 1.4, .4] });
-      for (let k = 0; k < 14; k++) ghoul(...at3((rnd() - .5) * (W - 12), (rnd() - .5) * (D - 14)), rnd() * 6.28, y0 + .6); lit(0, 14, 0, 0x90ff60, 1.6, 140); }
+      lit(0, 14, 0, 0x90ff60, 1.6, 140); }
     else if (st.kind === 'ossuary') {   // an ossuary tower: course on course of skulls round a stone core, a lantern room at the top with a green beacon
       P2(new THREE.CylinderGeometry(13, 14, 4, 20).translate(0, 2, -2), stoneD); P2(new THREE.CylinderGeometry(8, 9, 54, 16).translate(0, 31, -2), stoneD);
       for (let r = 0; r < 16; r++) { const y = 6 + r * 3.2, n2 = 18; for (let k = 0; k < n2; k++) { const a = k / n2 * 6.283 + r * .17; P2(UNDER_SKULL.geo ? UNDER_SKULL.geo.clone().scale(2.9, 2.9, 2.9).rotateY(-a).translate(Math.cos(a) * 9.1, y - 1.2, -2 + Math.sin(a) * 9.1) : new THREE.SphereGeometry(1.25, 6, 5).scale(1, 1.05, 1.15).translate(Math.cos(a) * 8.9, y, -2 + Math.sin(a) * 8.9), r % 4 === 3 ? boneD : bone); } P2(new THREE.TorusGeometry(9.2, .45, 4, 20).rotateX(Math.PI / 2).translate(0, y + 1.6, -2), boneD); }
@@ -5617,14 +5783,13 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
       lit(0, 66, -2, 0x60ff90, 2.6, 240); umist(g, ...at3(0, -2), { n: 20, seed: 6004, r0: 0, r1: 6, y0: y0 + 60, y1: y0 + 80, rise: .1, spin: .5, size: 22, alpha: .14, col: [.4, 1.5, .7] }); }
     else if (st.kind === 'fountain') {   // the blood fountain: three basins stepping up, a ghoul king on top raising a cup, blood spilling from tier to tier, mourners kneeling round
       P2(new THREE.CylinderGeometry(22, 22, .8, 32).translate(0, .4, 0), pave); for (const [r, y] of [[14, 0], [9, 5], [5, 9]]) { P2(new THREE.CylinderGeometry(r, r + .6, 2.2, 28).translate(0, y + 1.1, 0), marble); P2(new THREE.CylinderGeometry(r - .8, r - .8, .3, 28).translate(0, y + 2, 0), blood); }
-      P2(new THREE.CylinderGeometry(2.2, 3, 9, 10).translate(0, 4.5, 0), marble); P2(new THREE.CylinderGeometry(1.2, 2.2, 7, 8).translate(0, 14.5, 0), marble); P2(new THREE.SphereGeometry(1.1, 8, 6).translate(0, 18.8, 0), marble); P2(new THREE.CylinderGeometry(.4, .4, 5, 5).rotateZ(-.5).translate(1.6, 19.4, 0), marble); P2(new THREE.CylinderGeometry(.9, .4, 1.4, 8).translate(2.8, 22, 0), K.glow(0xff3030, 2.6));
-      for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; toC(Math.cos(a) * 18, Math.sin(a) * 18, y0, .9); }
+      P2(new THREE.CylinderGeometry(2.2, 3, 9, 10).translate(0, 4.5, 0), marble);
       umist(g, ...at3(0, 0), { n: 30, seed: 6005, r0: 0, r1: 12, y0: y0 + 2, y1: y0 + 14, rise: .08, spin: .2, size: 18, alpha: .1, col: [1.4, .15, .1] }); lit(0, 12, 0, 0xff4040, 1.8, 120); }
     else if (st.kind === 'gallows') {   // the gallows square: three gallows on a scaffold, cages hanging, a pillory, braziers, and a crowd come to watch
       P2(new THREE.BoxGeometry(40, 5, 12).translate(0, 2.5, -8), stoneD); for (let i = 0; i < 3; i++) { const lx = -13 + i * 13; for (const sd of [-1, 1]) P2(new THREE.BoxGeometry(1.2, 16, 1.2).translate(lx + sd * 4, 13, -8), deadW || stoneD); P2(new THREE.BoxGeometry(10, 1.2, 1.2).translate(lx, 21, -8), deadW || stoneD);
         P2(new THREE.CylinderGeometry(.08, .08, 5, 3).translate(lx, 18.5, -8), iron); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; P2(new THREE.CylinderGeometry(.12, .12, 4.6, 3).translate(lx + Math.cos(a) * 1.6, 14, -8 + Math.sin(a) * 1.6), iron); } P2(new THREE.CylinderGeometry(1.7, 1.7, .3, 8).translate(lx, 11.7, -8), iron); }
       P2(new THREE.BoxGeometry(.8, 7, .8).translate(14, 3.5, 10), stoneD); P2(new THREE.BoxGeometry(6, 1.6, 1).translate(14, 6.4, 10), stoneD); for (const sd of [-1, 1]) { P2(new THREE.CylinderGeometry(2, 1.2, 3, 8).translate(sd * 22, 1.5, 6), iron); P2(new THREE.ConeGeometry(1.8, 4, 7).translate(sd * 22, 5, 6), ember); }
-      for (let k = 0; k < 12; k++) ghoul(...at3((rnd() - .5) * (W - 14), 4 + rnd() * 14), face + Math.PI + (rnd() - .5) * .6, y0 + .6); lit(0, 18, 0, 0x60ff90, 1.6, 140); }
+      lit(0, 18, 0, 0x60ff90, 1.6, 140); }
     else if (st.kind === 'mortuary') {   // the embalmers' guild: a long hall with three chimneys smoking green, vats steaming in its yard, coffins stacked, a hearse waiting
       P2(new THREE.BoxGeometry(46, 18, 20).translate(0, 9, -10), stoneD); P2(gable(48, 10, 22).translate(0, 18, -10), slate); for (let i = 0; i < 3; i++) { P2(new THREE.BoxGeometry(4, 16, 4).translate(-14 + i * 14, 28, -14), stoneD);
         umist(g, ...at3(-14 + i * 14, -14), { n: 18, seed: 6010 + i, r0: 0, r1: 4, y0: y0 + 36, y1: y0 + 62, rise: .07, spin: .2, size: 26, alpha: .12, col: [.45, 1.3, .5] }); }
@@ -5637,18 +5802,35 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
         P2(new THREE.CylinderGeometry(1, 1, .5, 40).scale(ex * sc + 3, 1, ez * sc + 3).translate(0, 2.6 + t2 * 2.6, 0), marble); }
       P2(new THREE.CylinderGeometry(1, 1, .4, 32).scale(ex * .6, 1, ez * .6).translate(0, .8, 0), pave); for (let k = 0; k < 14; k++) P2(new THREE.CylinderGeometry(.2, .2, 2.6, 4).rotateZ(Math.PI / 2).rotateY(rnd() * 3).translate((rnd() - .5) * ex, 1.1, (rnd() - .5) * ez * .9), bone);
       for (const sd of [-1, 1]) { P2(new THREE.BoxGeometry(2.4, 14, 6).translate(sd * ex, 7, -4), stoneD); P2(new THREE.BoxGeometry(2.4, 14, 6).translate(sd * ex, 7, 4), stoneD); P2(new THREE.BoxGeometry(2.6, 3, 14).translate(sd * ex, 15.5, 0), marble); }
-      for (let k = 0; k < 18; k++) { const a = rnd() * 6.283, f2 = .78 + rnd() * .18; toC(Math.cos(a) * ex * f2, Math.sin(a) * ez * f2, y0 + 3 + rnd() * 6, .8); }
       lit(0, 20, 0, 0x60ff90, 1.8, 150); } }
-  // ghouls about the streets and squares, some with a lantern
-  for (let k = 0; k < cells.length; k += 3) { const p = cells[k]; if (!p) continue; for (let q = 0; q < 2; q++) { const a = rnd() * 6.28, x = p.x + Math.cos(a) * 14, z = p.z + Math.sin(a) * 14; if (!inA(x, z, 4) || SITES.some(s => Math.hypot(s.x - x, s.z - z) < 40)) continue; ghoul(x, z, rnd() * 6.28); if (q === 0 && k % 2 === 0) S(.6, lampM, x + Math.cos(a + 1.6) * 1.4, 4.6, z + Math.sin(a + 1.6) * 1.4, 1, 1.3, 1, 6); } }
-  // black boats poled along the blood, a lantern at the prow and a ghoul at the pole
-  { const boats = [], hullM = new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: .6 });
-    for (let q = 0; q < 6; q++) { const bg = new THREE.Group(), parts = [[new THREE.BoxGeometry(3.6, 1.6, 12).translate(0, 1.2, 0), hullM], [new THREE.ConeGeometry(1.8, 3.6, 4).rotateX(Math.PI / 2).rotateZ(Math.PI / 4).scale(1, .5, 1).translate(0, 1.2, 7.8), hullM],
-        [new THREE.CylinderGeometry(.9, 1.3, 4.2, 6).rotateX(.3).translate(0, 4.2, -3.5), ragM], [new THREE.SphereGeometry(.85, 7, 5).translate(0, 6.4, -2.9), ghoulM], [new THREE.CylinderGeometry(.12, .12, 14, 4).rotateX(-.5).translate(.9, 5, -1.5), iron], [new THREE.SphereGeometry(.6, 6, 4).translate(0, 3.6, 7.6), lampM]];
-      for (const [ge, mt] of parts) { const m = new THREE.Mesh(ge, mt); m.raycast = () => {}; bg.add(m); } g.add(bg); boats.push([bg, rnd() * L, (q % 2 ? 1 : -1) * CW * .22, 3 + rnd() * 3]); }
-    anim.push(t => { if (!UNDER.on) return; for (const [bg, a0, b, v] of boats) { const a = ((a0 + t * v) % L + L) % L, p = at2(a, b); bg.position.set(p.x, .9 + Math.sin(t * 1.3 + a0) * .15, p.z); bg.rotation.y = Math.atan2(p.ux, p.uz); } }); }
+  // Lantern barges drift with the current.
+  {
+    const boats = [];
+    for (let q = 0; q < 6; q++) {
+      const boat = new THREE.Group();
+      boat.name = 'Lantern skiff ' + (q + 1);
+      boats.push({ boat, phase: (q + rnd() * .55) * L / 6, lane: (q % 2 ? 1 : -1) * CW * .22, speed: 3.8 });
+      g.add(boat);
+    }
+    laterGL.load('models/sluice-skiff.glb', ({scene: skiff}) => {
+      for (const {boat} of boats) {
+        const hull = skiff.clone(true);
+        hull.traverse(o => { o.layers.set(3); o.raycast = () => {}; });
+        boat.add(hull);
+      }
+    });
+    const drift = t => {
+      for (const {boat,phase,lane,speed} of boats) {
+        const p = at2((phase + t * speed) % L, lane), ripple = t * 1.2 + phase;
+        boat.position.set(p.x,waterY - .60 + Math.sin(ripple) * .09,p.z);
+        boat.rotation.set(Math.sin(ripple*.7)*.012, Math.atan2(p.ux,p.uz), Math.sin(ripple)*.024,'YXZ');
+      }
+    };
+    drift(0);
+    anim.push(t => { if (UNDER.on) drift(t); });
+  }
   // a statue on an obelisk in each small square
-  for (let k = 0; k < cells.length; k += 23) { const p = cells[k]; if ((k / 23) % 2) { add(new THREE.CylinderGeometry(.6, 2.4, 26, 4).translate(p.x, 14, p.z), marble); B(5, 3, 5, stoneD, p.x, 2.5, p.z); } else { B(9, 1.6, 9, stoneD, p.x, 1.8, p.z); deadTree(p.x, p.z, 2.4, 8, rnd() * 6.28, .1, 5); C(1.2, 2.6, 9, 7, shroud, p.x + 5, 6, p.z + 3); K.K(1.8, 3, 7, shroud, p.x + 5, 12, p.z + 3); } }
+  for (let k = 0; k < cells.length; k += 23) { const p = cells[k]; if ((k / 23) % 2) { add(new THREE.CylinderGeometry(.6, 2.4, 26, 4).translate(p.x, 14, p.z), marble); B(5, 3, 5, stoneD, p.x, 2.5, p.z); } else { B(9, 1.6, 9, stoneD, p.x, 1.8, p.z); deadTree(p.x, p.z, 2.4, 8, rnd() * 6.28, .1, 5); } }
   // the catacombs: round the outside, the rock face is cut into rows of niches, a skull in each
   for (const e of K.edges) { const ix = e.x - e.nx * 9, iz = e.z - e.nz * 9, tx = -e.nz, tz = e.nx, ry = Math.atan2(e.nx, e.nz);
     add(tr(new THREE.BoxGeometry(R * 1.02, 40, 6), ix + e.nx * 3, 20, iz + e.nz * 3, ry), stoneD);
@@ -5667,8 +5849,6 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
     add(new THREE.BoxGeometry(10, 12, 9).translate(0, 41, -2).rotateY(face).translate(x, 0, z), dark); add(new THREE.BoxGeometry(12, 22, 2).translate(0, 46, -6.5).rotateY(face).translate(x, 0, z), dark);
     for (let q = 0; q < 9; q++) { const a = Math.PI * q / 8; add(new THREE.CylinderGeometry(.5, .8, 14, 5).rotateZ(Math.PI / 2 - a).translate(Math.cos(a) * 9, 52 + Math.sin(a) * 9, -6).rotateY(face).translate(x, 0, z), bone); }
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const px = x + fx * sz * 40 + fz * sx * 40, pz = z + fz * sz * 40 - fx * sx * 40; C(3.6, 2.4, 8, 10, iron, px, 5, pz); K.K(3.2, 8, 8, ember, px, 13, pz); K.light(px, 18, pz, 0x40ff80, 2.4, 170, .3); }
-    for (let q = 0; q < 3; q++) for (const sx of [-1, 1]) { const lz = 58 + q * 10, px = x + fx * lz + fz * sx * 12, pz = z + fz * lz - fx * sx * 12; if (!inA(px, pz, 4)) continue;   // hooded statues lining the approach, a green flame in their hands
-      B(4.4, 3, 4.4, stoneD, px, 2.5, pz, face); C(1.5, 3.2, 13, 8, shroud, px, 10.5, pz); S(2, shroud, px, 18, pz, 1, 1.2, 1, 8); K.K(2.4, 3.6, 8, shroud, px, 20.4, pz); K.K(.7, 2, 6, ember, px - fz * sx * 2.2 + fx * 1.2, 14, pz + fx * sx * 2.2 + fz * 1.2); }
     K.light(x, 60, z, 0x60ff90, 2, 220, .15); }
   for (let k = 0; k < cells.length; k += Math.max(9, Math.ceil(cells.length / 14))) { const p = cells[k]; K.light(p.x, 26, p.z, k % 2 ? 0x60ff90 : 0xa0ffc0, 1.5, 120, .2); }   // soft green light over the streets
   // ghost-lights drifting over the dead
@@ -5681,20 +5861,6 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   for (let a2 = 18; a2 < L; a2 += 34) { const q = at2(a2, 0); umist(g, q.x, q.z, { n: 18, seed: 1400 + a2, r0: 0, r1: CW * .42, y0: 1.6, y1: 11, rise: .05, spin: .1, size: 26, alpha: .07, col: [1.3, .14, .08] }); }
   lanterns.slice(0, 56).forEach(([x, z, hg], n) => umist(g, x, z, { n: 7, seed: 1600 + n, r0: 0, r1: .45, y0: hg + 2.4, y1: hg + 5.6, rise: .55, spin: .8, size: 9, alpha: .4, col: [.4, 1.7, .7] }));
   if (thr.b) { const tp = at2(thr.a, thr.b), cp = at2(thr.a, 0), x = tp.x, z = tp.z, face = Math.atan2(cp.x - x, cp.z - z);
-    const W = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyAxisAngle(new THREE.Vector3(0, 1, 0), face).add(new THREE.Vector3(x, 0, z)), up = new THREE.Vector3(0, 1, 0);
-    const bn = (a, b, r, mat = boneD) => { const A = W(...a), Bv = W(...b), d = Bv.clone().sub(A), l = d.length(), ge = new THREE.CylinderGeometry(r * .75, r, l, 7);
-      ge.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, d.normalize())); ge.translate((A.x + Bv.x) / 2, (A.y + Bv.y) / 2, (A.z + Bv.z) / 2); add(ge, mat); S(r * 1.3, mat, Bv.x, Bv.y, Bv.z, 1, 1, 1, 7); };
-    const loc = (ge, mat) => add(ge.rotateY(face).translate(x, 0, z), mat), sockM = new THREE.MeshBasicMaterial({ color: 0x040605 });
-    // the colossus, kneeling behind the throne
-    loc(new THREE.SphereGeometry(7, 12, 8).scale(1.5, .7, 1).translate(0, 15, -60), boneD);
-    for (const s of [-1, 1]) { bn([s * 7, 15, -60], [s * 10, 4, -44], 2.6); bn([s * 10, 4, -44], [s * 10, 2.6, -70], 2.1); bn([s * 10, 2.6, -70], [s * 10, 2, -76], 1.6); }
-    for (let k = 0; k < 10; k++) loc(new THREE.SphereGeometry(2.4 - k * .06, 8, 6).scale(1.2, .8, 1).translate(0, 18 + k * 3.6, -60 + Math.sin(k / 9 * 2.6) * 3), boneD);
-    for (let k = 0; k < 6; k++) { const R = 11 - k * .4 - (k > 3 ? (k - 3) * 1.2 : 0), y = 30 + k * 3.4; loc(new THREE.TorusGeometry(R, .9, 6, 16, Math.PI * 1.5).rotateX(Math.PI / 2).rotateY(Math.PI * 1.25).translate(0, y, -59 + R), boneD); }
-    bn([-14, 52, -57], [14, 52, -57], 1.4); for (const s of [-1, 1]) { bn([s * 14, 52, -57], [s * 23, 40, -42], 2.2); bn([s * 23, 40, -42], [s * 12, 36.6, -12], 1.9);   // collarbone, then each arm reaching forward, its hand flat on the top tier
-      const hx = s * 12, hz = -12; loc(new THREE.BoxGeometry(5, 1.4, 5).translate(hx, 35.7, hz - 1), boneD); for (let f = 0; f < 4; f++) bn([hx - 2.4 + f * 1.6, 36.4, hz + 1], [hx - 2.8 + f * 1.9, 35.6, hz + 6], .55); }
-    { const sk = W(0, 63, -54); S(8, boneD, sk.x, sk.y, sk.z, 1, 1.05, 1.15, 14); const jw = W(0, 56.4, -50); S(5.4, boneD, jw.x, jw.y, jw.z, 1, .5, 1, 10);
-      for (const s of [-1, 1]) { const e = W(s * 3, 64, -46.6); S(2.2, sockM, e.x, e.y, e.z, 1, .85, .6, 8); S(.9, ember, e.x, e.y, e.z + 0, 1, 1, 1, 6); umist(g, e.x, e.z, { n: 10, seed: 1700 + s, r0: 0, r1: .8, y0: 65, y1: 74, rise: .35, spin: .6, size: 10, alpha: .22, col: [.35, 1.6, .65] }); }
-      const ns = W(0, 60.6, -46.6); S(1.1, sockM, ns.x, ns.y, ns.z, .8, 1.2, .5, 6); K.light(sk.x, 58, sk.z + 0, 0x40ff80, .5, 90, .25); }
     // the throne's crown: a ring of green fire turning slowly above the seat, each flame trailing smoke
     const crown = new THREE.Group(); crown.position.set(x, 0, z); g.add(crown); const orbM = K.glow(0x60ff90, 5);
     for (let q = 0; q < 5; q++) { const a = q / 5 * 6.283, ox = Math.cos(a) * 15, oz = Math.sin(a) * 15; const m = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), orbM); m.position.set(ox, 64, oz); m.raycast = () => {}; crown.add(m);
@@ -5720,40 +5886,83 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
         for (let lx = -hL; lx < hR; lx += 5) for (let lz = wz - 5; lz > wz - 300; lz -= 5) { const [x, z] = at3(lx + 2.5, lz - 2.5); if (!inA(x, z)) continue; for (const [ax, az] of [[0, 0], [5, 0], [0, -5], [5, -5]]) { const [px, pz] = at3(lx + ax, lz + az); pos.push(px, 43.4, pz); uv.push(px, pz); } idx.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); n += 4; }
         if (n) { const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals(); const bm2 = blood.clone(); bm2.side = THREE.DoubleSide; const bm = new THREE.Mesh(ge, bm2); bm.raycast = () => {}; g.add(bm); }
         const [rx, rz] = at3(wc, wz - 40); umist(g, rx, rz, { n: 40, seed: 7004, r0: 0, r1: Math.max(30, wl * .4), y0: 44, y1: 54, rise: .03, spin: .05, size: 40, alpha: .06, col: [1.4, .15, .1] }); K.light(rx, 54, rz, 0xff3030, 1.6, 200, .15); }
-      { const sz = wz + 5, sk = new THREE.MeshStandardMaterial({ map: marble.map, color: 0xcfc2a2, roughness: .8 }), skD = new THREE.MeshStandardMaterial({ map: marble.map, color: 0x9a8c6e, roughness: .85 }), hole = new THREE.MeshBasicMaterial({ color: 0x050303 }), tooth = new THREE.MeshStandardMaterial({ color: 0xece2c8, roughness: .5 });
-        // the skull carved in the dam: a high cranium, brow ridges, cheekbones, deep sockets with an ember far back in each, the nose a dark heart, cracks across the bone,
-        // a full row of upper teeth and the jaw dropped open below them, blood pouring out between
-        P2(new THREE.SphereGeometry(15, 28, 20).scale(1, 1.1, .78).translate(0, 31, sz), sk); P2(new THREE.SphereGeometry(13.5, 20, 14).scale(1.05, .7, .7).translate(0, 22, sz + 1), sk);
-        for (const sd of [-1, 1]) { P2(new THREE.SphereGeometry(4.6, 14, 8).scale(1.45, .42, .5).rotateZ(sd * -.12).translate(sd * 5.4, 33.2, sz + 9.6), sk);   // brow ridge, worn smooth into the bone
-          P2(new THREE.SphereGeometry(4, 14, 10).scale(1.08, .9, .5).rotateZ(sd * .22).translate(sd * 5.6, 28.4, sz + 11), hole);   // the socket, wider at the outer corner
-          P2(new THREE.SphereGeometry(.85, 8, 6).scale(1, 1, .5).translate(sd * 5.4, 28, sz + 13.1), redGlow); P2(new THREE.SphereGeometry(2.3, 12, 8).scale(1.3, .6, .6).translate(sd * 8.8, 23.6, sz + 9), sk);   // ember, cheekbone
-          P2(new THREE.BoxGeometry(2.2, 15, 3.6).rotateZ(sd * .08).translate(sd * 8.6, 11.4, sz + 3.6), skD); }   // the jaw's hinge, long, the jaw hanging right open
-        P2(new THREE.ConeGeometry(2.1, 5, 3).scale(1, 1, .4).translate(0, 22.8, sz + 12.2), hole); for (const sd of [-1, 1]) P2(new THREE.SphereGeometry(1.2, 8, 6).scale(1, 1, .4).translate(sd * .9, 20.8, sz + 12.3), hole);
-        { let x1 = -2.5, y1 = 45; for (let k = 0; k < 5; k++) { const x2 = x1 + (k % 2 ? 1.6 : -1.2), y2 = y1 - 2.6; P2(new THREE.BoxGeometry(.22, 2.9, .3).rotateZ(Math.atan2(x2 - x1, y1 - y2)).translate((x1 + x2) / 2, (y1 + y2) / 2, sz + .05 + 11.7 * Math.sqrt(Math.max(0, 1 - ((x1 + x2) / 30) ** 2 - (((y1 + y2) / 2 - 31) / 16.5) ** 2))), hole); x1 = x2; y1 = y2; } }   // one crack running down from the crown
-        P2(new THREE.CylinderGeometry(7.2, 6.4, 4.6, 20, 1, false, -Math.PI / 2, Math.PI).translate(0, 18.4, sz + 4.4), sk); P2(new THREE.BoxGeometry(13, 11, 8).translate(0, 9, sz + 6.4), hole); P2(new THREE.PlaneGeometry(10, 8).translate(0, 8.6, sz + 2.6), redGlow);   // the upper jaw; the mouth open wide, a tunnel lit red far back
-        for (let k = 0; k < 9; k++) { const a = (k - 4) / 4 * 1.05, tw = k === 4 ? 1.6 : 1.35; P2(new THREE.BoxGeometry(tw, 2.8, 1.2).translate(0, 0, 7.1).rotateY(a).translate(0, 15, sz + 4.4), tooth); }
-        P2(new THREE.CylinderGeometry(6.8, 6, 3, 20, 1, false, -Math.PI / 2, Math.PI).translate(0, 2.4, sz + 5.4), sk); P2(new THREE.SphereGeometry(3, 10, 6).scale(1.5, .6, .7).translate(0, 1.6, sz + 11.2), sk);   // the jaw dropped right down to the pool, its chin
-        for (let k = 0; k < 8; k++) { const a = (k - 3.5) / 3.5 * .95; P2(new THREE.BoxGeometry(1.3, 2.4, 1.1).translate(0, 0, 6.4).rotateY(a).translate(0, 5, sz + 5.4), tooth); }
-        P2(new THREE.BoxGeometry(11.6, 1, 11).translate(0, 4.6, sz + 7.4), blood); P2(new THREE.PlaneGeometry(13, 11).rotateX(-Math.PI / 2 + .3).translate(0, 3.4, sz + 17.6), blood); P2(new THREE.PlaneGeometry(17, 6).rotateX(-Math.PI / 2 + .1).translate(0, 2, sz + 24.5), blood);   // a river of blood running out over the jaw, spilling down into the pool
-        { const [mx2, mz2] = at3(0, sz + 22); umist(g, mx2, mz2, { n: 26, seed: 7003, r0: 0, r1: 8, y0: 2, y1: 9, rise: .14, spin: .3, size: 20, alpha: .14, col: [1.6, .2, .12] }); const [ix, iz] = at3(0, sz + 8); K.light(ix, 8, iz, 0xff2a1a, 1.4, 70, .2); }
-        for (const sd of [-1, 1]) P2(new THREE.PlaneGeometry(1.1, 10).translate(sd * 5.6, 22.4, sz + 12.3), blood); { const [kx, kz] = at3(0, sz + 12); K.mark('skull', kx, 26, kz); } }   // and running down from the eyes
+      {
+        const sz=wz+7, skull=wellspringSkull(), skullMat=new THREE.MeshStandardMaterial({
+          color:0xe0ceb0, roughness:.81, vertexColors:true
+        });
+        const pos=skull.attributes.position, tint=[];
+        for(let i=0;i<pos.count;i++){
+          const x=pos.getX(i), y=pos.getY(i), z=pos.getZ(i);
+          const socket=Math.hypot((Math.abs(x)-5.55)/4.4,(y-28.1)/4.1);
+          const mouth=Math.hypot(x/7.4,(y-14.4)/3.5), nose=Math.hypot(x/2.1,(y-22)/3.5);
+          const recess=(1-sstep(.72,1.16,Math.min(socket,mouth,nose)))*(1-sstep(5.4,10.3,z))*sstep(-4,-.8,z);
+          const grain=fbm(x*.72+z*.32,y*.69,3);
+          const seam=Math.abs(x-.20*(y-35)-.47*Math.sin(y*2.3)-.25*Math.sin(y*4.4));
+          const suture=(1-sstep(.12,.48,seam))*sstep(33,38,y)*sstep(2,6,z);
+          const tone=(.77+.21*fbm(x*.31,y*.31+z*.12,3)+.105*grain-.24*suture)*(1-.82*recess);
+          tint.push(tone,tone*.97,tone*.89);
+        }
+        skull.setAttribute('color',new THREE.Float32BufferAttribute(tint,3));
+        // Keep the relief's cavity shading when the city's ordinary masonry is batched.
+        const relief=new THREE.Mesh(skull,skullMat); relief.rotation.y=face;
+        const [sx,szWorld]=at3(0,sz); relief.position.set(sx,0,szWorld); g.add(relief);
+        for(let n=-4;n<=4;n++){
+          const a=n*.205, x=Math.sin(a)*7.0, z=sz+4.7+5.55*Math.cos(a);
+          P2(new THREE.SphereGeometry(1,12,10).scale(.75,1.23,.71).rotateZ(-a*.18).translate(x,17.6+.8*Math.abs(a),z),bone);
+        }
+        // Elliptical jets originate inside the carved outlets and narrow as they fall.
+        const stream=(x,top,startZ,width,reach,throat=0)=>{
+          const vert=[],uv=[],index=[],rows=22,sides=12;
+          for(let i=0;i<=rows;i++){
+            const t=i/rows, fall=Math.max(0,(t-throat)/(1-throat));
+            const y=top-(top-1.82)*fall*fall, z=sz+startZ+reach*t, w=width*(1-.45*fall);
+            for(let j=0;j<=sides;j++){
+              const angle=j/sides*Math.PI*2;
+              const drift=Math.sign(x)*1.2*t*(2-t);
+              vert.push(x+drift+w*Math.cos(angle),y+.48*w*Math.sin(angle)*(1-t),z+.44*w*Math.sin(angle)*t);
+              uv.push(j/sides,1-t);const k=i*(sides+1)+j;
+              if(i&&j)index.push(k-sides-2,k,k-1,k-sides-2,k-sides-1,k);
+            }
+          }
+          const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vert,3));
+          geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(index);geo.computeVertexNormals();
+          P2(geo,jet);P2(new THREE.PlaneGeometry(width*4.5+2,width*4.5+2).rotateX(-Math.PI/2).translate(x+Math.sign(x)*1.2,1.97,sz+startZ+reach),splash);
+        };
+        const jet=new THREE.MeshStandardMaterial({color:0x801824,roughness:.22,metalness:.04});
+        jet.onBeforeCompile=shader=>{
+          shader.uniforms.jetTime=U.uTime;shader.uniforms.jetNoise=U.uNoise;
+          shader.vertexShader='varying vec2 jetUV;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\njetUV=uv;');
+          shader.fragmentShader='varying vec2 jetUV; uniform float jetTime; uniform sampler2D jetNoise;\n'+shader.fragmentShader.replace('#include <opaque_fragment>',`
+            float drift=texture2D(jetNoise,vec2(jetUV.x*2.,jetUV.y*.65+jetTime*.28)).r;
+            float thread=texture2D(jetNoise,vec2(jetUV.x*5.+drift*.29,jetUV.y*1.4+jetTime*.52)).g;
+            outgoingLight=outgoingLight*(.65+.65*drift)+vec3(.16,.071,.057)*smoothstep(.48,.82,thread)*(.4+.6*drift);
+            #include <opaque_fragment>`);
+        };
+        const boreShadow=new THREE.MeshBasicMaterial({color:0x110c0e});
+        for(const side of [-1,1]){
+          P2(new THREE.CircleGeometry(2.0,24).translate(side*5.55,27.05,sz-.86),boreShadow);
+          stream(side*5.55,27.05,-1.05,.82,18.65,.36);
+        }
+        stream(0,14.1,7.2,3.6,19.4);
+        const [kx,kz]=at3(0,sz+11);K.mark('skull',kx,26,kz);
+      }
       // the sluice towers each side, a winding wheel and a chain down into the pool on each; a walk along the top with a rail of bone, and the gatekeepers on it
       for (const sd of [-1, 1]) { const tx = sd * (ww / 2 - 6); P2(new THREE.BoxGeometry(14, 60, 14).translate(tx, 30, wz + 2), stoneD); P2(new THREE.ConeGeometry(11, 18, 4).rotateY(Math.PI / 4).translate(tx, 69, wz + 2), slate); P2(new THREE.ConeGeometry(.6, 6, 4).translate(tx, 81, wz + 2), iron);
         for (let r2 = 0; r2 < 3; r2++) P2(new THREE.BoxGeometry(2, 4, .5).translate(tx, 18 + r2 * 13, wz + 9.3), lancet);
         P2(new THREE.TorusGeometry(7, .8, 6, 24).translate(tx - sd * 10, 40, wz + 8), iron); for (let k = 0; k < 6; k++) P2(new THREE.BoxGeometry(.6, 14, .6).rotateZ(k * Math.PI / 6).translate(tx - sd * 10, 40, wz + 8), iron); P2(new THREE.CylinderGeometry(1.2, 1.2, 4, 8).rotateX(Math.PI / 2).translate(tx - sd * 10, 40, wz + 8), iron);
         P2(new THREE.CylinderGeometry(.3, .3, 38, 4).translate(tx - sd * 10 + 6, 21, wz + 9), iron); P2(new THREE.BoxGeometry(5, 3, 1).translate(tx - sd * 10 + 6, 2.5, wz + 9), iron); }
       for (let q = -hL + 3; q <= hR - 3; q += 3) { P2(new THREE.CylinderGeometry(.3, .35, 3.6, 5).translate(q, 48.2, wz + 6.4), bone); if (Math.round(q / 3) % 3 === 0) P2(new THREE.SphereGeometry(.7, 6, 5).translate(q, 50.4, wz + 6.4), bone); }
-      for (let k = 0; k < 6; k++) ghoul(...at3(-ww / 3 + k * ww / 7.5, wz + 3), face, 46.4);
+
       for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; lantern(...at3(Math.cos(a) * (pr + 7), Math.sin(a) * (pr + 7) * .9), 10); }
-      umist(g, cx, cz, { n: 40, seed: 7001, r0: 0, r1: pr, y0: 2, y1: 14, rise: .04, spin: .1, size: 34, alpha: .08, col: [1.4, .15, .1] }); umist(g, ...at3(0, wz + 18), { n: 20, seed: 7002, r0: 0, r1: 6, y0: 2, y1: 12, rise: .15, size: 22, alpha: .12, col: [1.6, .2, .12] });
-      { const [lx, lz] = at3(0, 6), [mx2, mz2] = at3(0, wz + 22); K.light(lx, 16, lz, 0xff3030, 2.2, 200, .2); K.light(mx2, 30, mz2, 0xff4040, 1.6, 140, .3); } K.mark('wellspring', cx, 10, cz); } }
+      umist(g, cx, cz, { n: 40, seed: 7001, r0: 0, r1: pr, y0: 2, y1: 14, rise: .04, spin: .1, size: 34, alpha: .08, col: [1.4, .15, .1] });
+      { const [lx, lz] = at3(0, 6), [mx2, mz2] = at3(0, wz + 22); K.light(lx, 16, lz, 0xba5d45, .62, 120, .06); K.light(mx2, 30, mz2, 0xffa575, .75, 100, .06); } K.mark('wellspring', cx, 10, cz); } }
   { const e = ends[1]; if (e) { const { x: cx, z: cz, r, face } = e, P2 = (ge, mt) => add(ge.rotateY(face).translate(cx, 0, cz), mt), at3 = (lx, lz) => [cx + Math.sin(face) * lz + Math.cos(face) * lx, cz + Math.cos(face) * lz - Math.sin(face) * lx];
       const R0 = r * .86, NT = 5, rad = k => R0 * (1 - k * .16), hgt = k => 16 - k * 3.4;   // terraces stepping down inward, the outer rim highest
       for (let k = 0; k < NT; k++) { const ro = rad(k), ri = rad(k + 1), h = hgt(k); P2(new THREE.CylinderGeometry(ro, ro, h, 48, 1, true).translate(0, h / 2, 0), k % 2 ? stoneD : marble); P2(new THREE.RingGeometry(ri, ro, 48).rotateX(-Math.PI / 2).translate(0, h, 0), k % 2 ? pave : stoneD);
         P2(new THREE.CylinderGeometry(ri, ri, h, 48, 1, true).translate(0, h / 2, 0), dark); for (let q = 0; q < 10; q++) { const a = q / 10 * 6.283 + k * .3; P2(new THREE.BoxGeometry(1.6, 1.6, 1.6).translate(Math.cos(a) * (ri + 1.4), h + .8, Math.sin(a) * (ri + 1.4)), boneD); } }
       const rc = rad(NT); P2(new THREE.CylinderGeometry(rc, rc, .3, 40).translate(0, .4, 0), new THREE.MeshBasicMaterial({ color: 0x020403 })); P2(new THREE.CylinderGeometry(rc * .7, rc * .7, .2, 32).translate(0, .6, 0), K.glow(0x40ff70, 1.4));   // the bottom: black, a green light far down in it
       umist(g, cx, cz, { n: 60, seed: 7101, r0: 0, r1: rc, y0: 1, y1: 30, rise: .05, spin: .15, size: 28, alpha: .09, col: [.35, 1.4, .55] }); K.light(cx, 8, cz, 0x40ff70, 2.2, 160, .25);
-      for (let s = 0; s < 46; s++) { const a = s * .2, k = Math.min(NT - 1, Math.floor(s / 9.2)), rr = (rad(k) + rad(k + 1)) / 2, y = hgt(0) - s * (hgt(0) - 1) / 46; P2(new THREE.BoxGeometry(4, .8, 2.4).translate(rr, y, 0).rotateY(-a), pave); if (s % 5 === 2) ghoul(...at3(Math.cos(a) * rr, -Math.sin(a) * rr), face + a + Math.PI, y + .4, .9); }   // the stair winding down, ghouls on it
+      for (let s = 0; s < 46; s++) { const a = s * .2, k = Math.min(NT - 1, Math.floor(s / 9.2)), rr = (rad(k) + rad(k + 1)) / 2, y = hgt(0) - s * (hgt(0) - 1) / 46; P2(new THREE.BoxGeometry(4, .8, 2.4).translate(rr, y, 0).rotateY(-a), pave); }   // the stair winding down, ghouls on it
       for (const sd of [-1, 1]) { const gx = sd * R0 * .45;   // a crane of bone each side, a cage hanging over the pit from each
         P2(new THREE.CylinderGeometry(1.1, 1.6, 34, 6).translate(gx * 1.9, 17 + hgt(0), 0), boneD); P2(new THREE.CylinderGeometry(.7, .9, R0 * 1.1, 6).rotateZ(Math.PI / 2 - sd * .2).translate(gx * 1.05, 34 + hgt(0), 0), bone); P2(new THREE.SphereGeometry(2.2, 8, 6).translate(gx * 1.9, 35 + hgt(0), 0), bone);
         P2(new THREE.CylinderGeometry(.12, .12, 18, 3).translate(gx * .35, 25 + hgt(0), 0), iron); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; P2(new THREE.CylinderGeometry(.14, .14, 5, 3).translate(gx * .35 + Math.cos(a) * 1.8, 13.5 + hgt(0), Math.sin(a) * 1.8), iron); } P2(new THREE.CylinderGeometry(2, 2, .3, 8).translate(gx * .35, 11 + hgt(0), 0), iron); P2(new THREE.ConeGeometry(2.2, 1.6, 8).translate(gx * .35, 16.8 + hgt(0), 0), iron); }
@@ -5767,7 +5976,7 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
     for (let x = K.x0; x < K.x1; x += 21) for (let z = K.z0; z < K.z1; z += 21) { const px = x + (rnd() - .5) * 6, pz = z + (rnd() - .5) * 6; const e0 = ends[0]; if (e0 && e0.wz !== undefined && (px - e0.x) * Math.sin(e0.face) + (pz - e0.z) * Math.cos(e0.face) < e0.wz + 9 && Math.hypot(px - e0.x, pz - e0.z) < 420) continue; if (!inA(px, pz, 13) || spD(px, pz) < Q0 + QW + 4 || filled.some(f => Math.hypot(f[0] - px, f[1] - pz) < f[2] + 7)) continue;
       const e = ends.filter(Boolean).sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz))[0], face = e ? Math.atan2(e.x - px, e.z - pz) : rnd() * 6.28, snap = Math.round(face / (Math.PI / 2)) * Math.PI / 2;
       const rk = rnd(), kind = rk < .22 ? 'plot' : rk < .5 ? 'crypt' : rk < .7 ? 'mauso' : rk < .84 ? 'tower' : 'chapel', w = kind === 'chapel' ? 17 + rnd() * 3 : kind === 'tower' ? 12 + rnd() * 2 : 14 + rnd() * 4; bld({ x: px, z: pz }, snap, w, ROWD - 3, kind); filled.push([px, pz, 14]);
-      if (rnd() < .3) ghoul(px + 9, pz + 9, rnd() * 6.28); } }
+    } }
   K.flush();
 };
 // The Archive of Unfinished Spells, its depths (rebuilt Oct 24 2026 after Brandon's picture): a mass of dark rock dug out into pockets, each sunk to its own floor,
@@ -5780,8 +5989,8 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const K = underKit(g, area, R), { rnd, inA, B, C, S, T, add, tr } = K;
   const basaltTex = noiseTex('colrock', '#c4c0c8', ['rgba(0,0,0,A)', 'rgba(255,255,255,A)'], .22), colM = new THREE.MeshStandardMaterial({ map: basaltTex, vertexColors: true, roughness: .85, flatShading: true });
   const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x6a6070 });
-  const shelfW = new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: .75 }), books = new THREE.MeshStandardMaterial({ map: utex('spines', () => ctex(256, 128, (c, w, h) => { const r = mulberry32(9); for (let x = 0; x < w;) { const bw = 4 + r() * 9; c.fillStyle = ['#5a1e22', '#1e3a5a', '#2a4a22', '#5a4a1e', '#3a1e4a', '#6a5a4a'][(r() * 6) | 0]; c.fillRect(x, h * (.05 + r() * .15), bw - 1, h); c.fillStyle = 'rgba(220,180,90,.6)'; c.fillRect(x + 1, h * .5, bw - 3, 2); x += bw; } })), roughness: .75, emissive: 0x2a1a10, emissiveIntensity: .35 });
-  const page = new THREE.MeshStandardMaterial({ color: 0xf0e6c8, emissive: 0x6a5a30, emissiveIntensity: .5, side: THREE.DoubleSide, roughness: .9 });
+  const finish=archiveFinishes(K,mulberry32(8139)), shelfW=finish.wood, books=finish.books;
+  const page = new THREE.MeshStandardMaterial({ map:finish.manuscript, color: 0xf0e6c8, emissive: 0x6a5a30, emissiveIntensity: .5, side: THREE.DoubleSide, roughness: .9 });
   K.floor(capM, .5, 40); K.rim(capM, 110, 30);
   let xa = 1e9, xb = -1e9; for (const h of area.hexes) { xa = Math.min(xa, h.x); xb = Math.max(xb, h.x); }
   const zsA = area.hexes.map(h => h.z), zMid = zsA.reduce((a, v) => a + v, 0) / zsA.length, Z0 = Math.min(...zsA) - R, Z1 = Math.max(...zsA) + R;
@@ -5836,7 +6045,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const near3 = (x, z) => { const [wx, wz] = warp(x, z); let d1 = 1e9, i1 = 0; for (let i = 0; i < P.length; i++) { const d = Math.hypot(P[i].x - wx, P[i].z - wz); DD[i] = d; if (d < d1) { d1 = d; i1 = i; } }
     const g0 = P[i1].g; let dO = 1e9, iO = 0, dS = 1e9, iS = -1; for (let i = 0; i < P.length; i++) { if (i === i1) continue; if (P[i].g === g0) { if (DD[i] < dS) { dS = DD[i]; iS = i; } } else if (DD[i] < dO) { dO = DD[i]; iO = i; } } return [i1, iO, (dO - d1) / 2, iS, (dS - d1) / 2]; };
   const crestY = (x, z) => TOPY(tAt(x, z)) + 1.8 * N3(x / 34, z / 34);
-  const floorAt = (p, x, z) => p.fy + ss(-.16, .16, N3((x + p.ox) / 40, (z + p.oz) / 40) + p.tb) * p.th + 1.3 * N1(x / 13, z / 13);
+  const floorAt = (p, x, z) => p.fy + ss(-.3, .3, N3((x + p.ox) / 40, (z + p.oz) / 40) + p.tb) * p.th + 1.3 * N1(x / 13, z / 13);
   // the wall tops as a network: where two pockets meet, the line between them; joined where they meet, so the trail can be walked along them
   const EDG = [], NODES = [], MB = []; { const bins = new Map(), mbins = new Map();
     for (let x = xa - R; x < xb + R; x += 4) for (let z = Z0; z < Z1; z += 4) { if (!inA(x, z, 16) || Math.hypot(x - S0[0], z - S0[1]) < 118) continue; const [i1, i2, e, si, es] = near3(x, z); if (si >= 0 && es < 2.5) { const mk = Math.min(i1, si) * 1000 + Math.max(i1, si); if (!mbins.has(mk)) mbins.set(mk, [0, 0, 0]); const v = mbins.get(mk); v[0] += x; v[1] += z; v[2]++; } if (e > 2.5) continue; const k = Math.min(i1, i2) * 1000 + Math.max(i1, i2); if (!bins.has(k)) bins.set(k, []); bins.get(k).push([x, z]); }
@@ -5865,10 +6074,16 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const pathAt = (x, z) => { let b = 1e9, bi = 0; for (let i = 0; i < path.length; i++) { const d = (path[i].x - x) ** 2 + (path[i].z - z) ** 2; if (d < b) { b = d; bi = i; } } return [Math.sqrt(b), path[bi]]; };
   yield;
   // ---- the ground: the rock's flat top, the cliffs dropping into each pocket (rough, as if split along the grain), the pocket's floor with its ledges; the trail and the sanctum levelled
-  const ground = (x, z) => { const t = tAt(x, z), [pi, , e, si, es] = near3(x, z), p = P[pi], bi = p.bi, w = BI.map((_, i) => i === bi ? 1 : 0);
-    const cy = crestY(x, z), wh = 4.6 + 2 * N3(x / 45 + 9, z / 45), cw = 4.5 + 3 * (.5 + .5 * N2(x / 50, z / 50)), e2 = e + 1.8 * N1(x / 9, z / 9) + .8 * N2(x / 3.3, z / 3.3);
+  const ground = (x, z) => { const t = tAt(x, z), [pi, adjacent, e, si, es] = near3(x, z), p = P[pi], bi = p.bi, w = BI.map((_, i) => i === bi ? 1 : 0);
+    const other = P[adjacent].bi;
+    if (other !== bi && e < 32) {
+      const mix = .5 * (1 - ss(0,32,e));
+      w[bi] -= mix; w[other] += mix;
+    }
+    const cy = crestY(x,z), wh = 4.6 + 2*N3(x/45+9,z/45);
+    const cw = 9 + 4*(.5+.5*N2(x/50,z/50)), e2 = e + 1.1*N1(x/14,z/14);
     let fl = floorAt(p, x, z); if (si >= 0 && es < 24 && !p.void) { const ww = .5 + .5 * ss(0, 24, es); fl = fl * ww + floorAt(P[si], x, z) * (1 - ww); }
-    const k0 = clamp((e2 - wh) / cw, 0, 1), k = 1 - Math.pow(1 - k0, 2.6); let y = cy + (fl - cy) * k + 9 * ss(wh + cw + 16, wh + cw * .5, e2) * k, kind = k < .12 ? 'ridge' : p.void && k > .6 ? 'void' : 'rock';
+    const k0 = clamp((e2 - wh) / cw, 0, 1), k = k0*k0*(3-2*k0); let y = cy + (fl - cy) * k + 9 * ss(wh + cw + 16, wh + cw * .5, e2) * k, kind = k < .12 ? 'ridge' : p.void && k > .6 ? 'void' : 'rock';
     const pd = segD(pathPts, x, z); if (pd < 10) { const pp = pathAt(x, z)[1], kk = ss(10, 5, pd); y += (pp.y - .3 - y) * kk; if (kk > .6) kind = 'path'; }
     const sd = Math.hypot(x - S0[0], z - S0[1]); if (sd < 110) { const ks = ss(110, 82, sd); y += (4 - y) * ks; if (ks > .5) kind = 'sanctum'; }
     y = Math.max(1.2, y); const liq = p.liq && y < p.lv && kind !== 'path' && kind !== 'sanctum' ? p.liq : null; if (liq) kind = 'low';
@@ -5883,9 +6098,14 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
     for (let i = 0; i < GX; i++) for (let j = 0; j < GZ; j++) { const k = gid(i, j), v = GV[k], x = gx0 + i * G, z = gz0 + j * G; pos.set([x, v.y, z], k * 3); uv.set([(x + v.y * .6) / 44, (z + v.y * .6) / 44], k * 2); }
     for (let i = 0; i + 1 < GX; i++) for (let j = 0; j + 1 < GZ; j++) if (cellIn(i, j)) { const a = gid(i, j), b = gid(i + 1, j), c = gid(i, j + 1), d = gid(i + 1, j + 1); idx.push(a, c, b, b, c, d); }
     const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals();
-    const nrm = ge.attributes.normal, cT = new THREE.Color(), cB = new THREE.Color(), pathC = new THREE.Color(0xa08a6c), crestC = new THREE.Color(0xa07c56), lavaShore = new THREE.Color(0x1a0e0a);
+    const nrm = ge.attributes.normal, mixColor = new THREE.Color(), cT = new THREE.Color(), cB = new THREE.Color(), pathC = new THREE.Color(0xa08a6c), crestC = new THREE.Color(0xa07c56), lavaShore = new THREE.Color(0x1a0e0a);
     for (let k = 0; k < GV.length; k++) { const v = GV[k], b = BI[v.bi], x = pos[k * 3], z = pos[k * 3 + 2]; cT.setHex(b.top).multiplyScalar(.85 + .3 * (.5 + .5 * N1(x / 9, z / 9)));
       cB.setHex(b.body).multiplyScalar(.7 + .6 * (.5 + .5 * N2((x + z) / 3.5, v.y / 22)));   // the cliffs streaked down their height
+      if(v.w[v.bi]<1){
+        const other=v.w.findIndex((weight,id)=>id!==v.bi && weight>0);
+        cT.lerp(mixColor.setHex(BI[other].top),v.w[other]);
+        cB.lerp(mixColor.setHex(BI[other].body),v.w[other]);
+      }
       const flat = ss(.55, .85, nrm.getY(k)); cT.lerp(cB, 1 - flat); if (v.kind === 'ridge' && flat > .5) cT.lerp(crestC, v.bi === SNOW ? .2 : .6); if (v.kind === 'path') cT.lerp(pathC, .75); if (v.kind === 'sanctum') cT.setHex(0x0e0a14); if (P[v.pi].void) cT.multiplyScalar(.25 + .75 * ss(10, 40, v.y)); if (P[v.pi].liq === 'lava' && v.y < v.lv + 3) cT.lerp(lavaShore, .7);
       col.set([cT.r, cT.g, cT.b], k * 3); }
     ge.setAttribute('color', new THREE.BufferAttribute(col, 3)); const gm = new THREE.MeshStandardMaterial({ map: rockTex, vertexColors: true, roughness: .9, emissive: 0x2a2018, emissiveIntensity: .55 }); const me = new THREE.Mesh(ge, gm); me.raycast = () => {}; g.add(me); }
@@ -5894,12 +6114,25 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const cr = 10, cols = [], liquid = { lava: [], water: [], ice: [], ecto: [], spore: [], storm: [] };
   for (let x = xa - R; x < xb + R; x += cr) for (let z = Z0; z < Z1; z += cr) { if (!inA(x, z, 4)) continue; const v = ground(x, z), sl = Math.max(...[[6, 0], [-6, 0], [0, 6], [0, -6]].map(([a, b]) => Math.abs(ground(x + a, z + b).y - v.y))); const c = { x, z, ...v, sl }; cols.push(c); if (c.kind === 'low' && c.liq) liquid[c.liq].push([x, v.lv, z]); }
   // what gathers in the pockets: lava, turquoise water, ice, the lich's ectoplasm, a glowing jungle water, and in the storm a violet water that crackles
-  const lavaM = new THREE.MeshStandardMaterial({ map: noiseTex('lava', '#ff6a10', ['rgba(255,220,80,A)', 'rgba(120,10,0,A)'], .5), color: 0xffffff, emissive: 0xff4a08, emissiveIntensity: 2.4, roughness: .5 }); lavaM.emissiveMap = lavaM.map; lavaM.map.wrapS = lavaM.map.wrapT = THREE.RepeatWrapping; lavaM.map.repeat.set(1, 1);
-  const waterM = new THREE.MeshStandardMaterial({ color: 0x1a8aa8, roughness: .05, metalness: .3, emissive: 0x0a5a7a, emissiveIntensity: 1.2, transparent: true, opacity: .84 }), iceM = new THREE.MeshStandardMaterial({ color: 0xcfeeff, roughness: .15, emissive: 0x3a7aaa, emissiveIntensity: .6, transparent: true, opacity: .9 });
+  const lavaM = new THREE.MeshStandardMaterial({color:0x4d271b,roughness:.76});
+  lavaM.onBeforeCompile=shader=>{
+    shader.uniforms.flowTime=U.uTime; shader.uniforms.flowNoise=U.uNoise;
+    shader.vertexShader='varying vec2 lavaXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nlavaXZ=(modelMatrix*vec4(position,1.)).xz;');
+    shader.fragmentShader='varying vec2 lavaXZ; uniform float flowTime; uniform sampler2D flowNoise;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>',`
+      #include <emissivemap_fragment>
+      vec2 q=lavaXZ*.021+vec2(.003,-.004)*flowTime;
+      vec2 warp=texture2D(flowNoise,q*.63).rg;
+      float vein=texture2D(flowNoise,q*.72+warp*.17).r;
+      float grit=texture2D(flowNoise,q*2.9+warp*.22).g;
+      float hot=1.-smoothstep(.012,.105,abs(vein+.12*(grit-.5)-.51));
+      totalEmissiveRadiance+=vec3(.32,.023,.005)*(.25+grit)+hot*mix(vec3(.68,.092,.014),vec3(1.95,.56,.07),hot*hot);
+    `);
+  };
+  const waterM = ripplingPool(U.uTime,U.uNoise), iceM = new THREE.MeshStandardMaterial({ color: 0xcfeeff, roughness: .15, emissive: 0x3a7aaa, emissiveIntensity: .6, transparent: true, opacity: .9 });
   const iceClear = new THREE.MeshStandardMaterial({ color: 0xcfeeff, roughness: .05, emissive: 0x2a6a9a, emissiveIntensity: .35, transparent: true, opacity: .32, depthWrite: false });
   const LQ = { lava: lavaM, water: waterM, ice: iceM, ecto: new THREE.MeshStandardMaterial({ color: 0x3a1a5a, emissive: 0x6a20c0, emissiveIntensity: 1.6, roughness: .2, transparent: true, opacity: .85 }), spore: new THREE.MeshStandardMaterial({ color: 0x1aa89a, emissive: 0x0a7a6a, emissiveIntensity: 1.1, roughness: .05, metalness: .3, transparent: true, opacity: .86 }),
     storm: new THREE.MeshStandardMaterial({ color: 0x2a1a5a, emissive: 0x7a40ff, emissiveIntensity: 1.4, roughness: .1, metalness: .2, transparent: true, opacity: .86 }) };
-  anim.push(t => { if (!UNDER.on) return; lavaM.map.offset.set(t * .01, -t * .04); LQ.storm.emissiveIntensity = 1.2 + .5 * Math.max(0, Math.sin(t * 7.3) * Math.sin(t * 2.1)); });
+  anim.push(t => { if (!UNDER.on) return; LQ.storm.emissiveIntensity = 1.2 + .5 * Math.max(0, Math.sin(t * 7.3) * Math.sin(t * 2.1)); });
   // each liquid a surface at its own level over the hollows that hold it; the ground rises through it at the shores
   for (const k of Object.keys(LQ)) { yield; const pos = new Float32Array(GX * GZ * 3), uv = new Float32Array(GX * GZ * 2), idx = [];
     for (let i = 0; i < GX; i++) for (let j = 0; j < GZ; j++) { const n = gid(i, j), v = GV[n], x = gx0 + i * G, z = gz0 + j * G; pos.set([x, v.lv, z], n * 3); uv.set([x / 40, z / 40], n * 2); }
@@ -5909,7 +6142,28 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   // a few of each for the lights, spread out
   const lights = [], light = (x, y, z, col, k = 1.6, d = 130, fl = .1) => { if (lights.some(p => Math.hypot(p[0] - x, p[1] - z) < 55)) return; lights.push([x, z]); K.light(x, y, z, col, k, d, fl); };
   for (const k of ['lava', 'water', 'ecto', 'spore', 'storm']) liquid[k].forEach(([x, y, z], i) => { if (i % 9 === 0) light(x, y + 8, z, k === 'lava' ? 0xff6a20 : k === 'water' ? 0x30c0e0 : k === 'ecto' ? 0xa050ff : k === 'storm' ? 0x9a60ff : 0x40e0c0, 1.6, 110, k === 'lava' ? .3 : k === 'storm' ? .5 : .05); });
-  const fallTex = utex('fall', () => ctex(64, 256, (c, w, h) => { const r = mulberry32(21); c.fillStyle = '#000'; c.fillRect(0, 0, w, h); for (let i = 0; i < 60; i++) { const x = r() * w, g2 = c.createLinearGradient(0, 0, 0, h); g2.addColorStop(0, 'rgba(255,255,255,0)'); g2.addColorStop(.5, 'rgba(255,255,255,' + (.3 + r() * .5) + ')'); g2.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g2; c.fillRect(x, 0, 1 + r() * 3, h); } }));
+  const fallTex = utex('archive-falling-water',()=>ctex(128,256,(c,w,h)=>{
+    // Seamless, braided highlights broken by darker water between the strands.
+    const im=c.createImageData(w,h);
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const u=i/w*Math.PI*2,v=j/h*Math.PI*2;
+      const bend=u+.15*Math.sin(2*v+u)+.08*Math.sin(3*v-2*u);
+      const band=.5+.5*Math.cos(5*bend+.8*Math.sin(3*v+2*u));
+      const foam=band**2.6*(.35+.65*(.5+.5*Math.cos(3*v-2*u)));
+      const strand=(.5+.5*Math.cos(21*u+2*Math.cos(v+u)))**7;
+      const lum=80+123*foam+39*strand;
+      im.data.set([lum,lum,lum,255],(j*w+i)*4);
+    }c.putImageData(im,0,0);
+  }));
+  const fallMask=utex('archive-fall-edges',()=>ctex(128,128,(ctx,w,h)=>{
+    const im=ctx.createImageData(w,h);
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const edge=Math.sin(Math.PI*(i+.5)/w),end=Math.sin(Math.PI*(j+.5)/h);
+      const a=Math.round(255*Math.min(1,edge*2.5)*Math.min(1,end*7));
+      im.data.set([a,a,a,255],(j*w+i)*4);
+    }
+    ctx.putImageData(im,0,0);
+  }));
   const falls = [], spin = [];
   anim.push(t => { if (!UNDER.on) return; for (const tx of falls) tx.offset.y = t * .6; for (const [o, k, ax] of spin) o.rotation[ax] = t * k; });
   const grid = new Map(), gk = (x, z) => Math.round(x / (cr * 3)) * 10000 + Math.round(z / (cr * 3)); cols.forEach(c => { const k = gk(c.x, c.z); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(c); });
@@ -5927,21 +6181,45 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
       const mx = (A.x + Bq.x) / 2, mz = (A.z + Bq.z) / 2, th = Math.atan2(-(Bq.z - A.z), Bq.x - A.x), hl = L / 2, ia = hl - 3.2, sh = new THREE.Shape(); sh.moveTo(-hl, 0); sh.lineTo(hl, 0); sh.lineTo(hl, -D); sh.lineTo(ia, -D);
       for (let i = 0; i <= 28; i++) { const u = ia * (1 - 2 * i / 28); sh.lineTo(u, -2.8 - (D - 2.8) * (1 - Math.sqrt(Math.max(0, 1 - (u / ia) ** 2)))); } sh.lineTo(-hl, -D); sh.closePath();
       const ge = new THREE.ExtrudeGeometry(sh, { depth: 8, bevelEnabled: false }); const uv = ge.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 20, uv.getY(i) / 20); add(ge.translate(0, 0, -4).rotateY(th).translate(mx, yD, mz), stoneBr);
-      add(new THREE.BoxGeometry(L, .3, 7.4).translate(0, .15, 0).rotateY(th).translate(mx, yD, mz), flagM); for (const sd of [-1, 1]) { add(new THREE.BoxGeometry(L, 1.6, .8).translate(0, .8, sd * 3.7).rotateY(th).translate(mx, yD, mz), stoneBr); for (let q = 0; q <= 4; q++) add(new THREE.BoxGeometry(1.2, 2.4, 1.2).translate(-hl + q * L / 4, 1.2, sd * 3.7).rotateY(th).translate(mx, yD, mz), stoneBr); }
+      const deck=new THREE.BoxGeometry(L,.3,7.4), deckUV=deck.attributes.uv;
+      for(let i=0;i<deckUV.count;i++)deckUV.setX(i,deckUV.getX(i)*L/10);
+      add(deck.translate(0,.15,0).rotateY(th).translate(mx,yD,mz),flagM); for (const sd of [-1, 1]) { add(new THREE.BoxGeometry(L, 1.6, .8).translate(0, .8, sd * 3.7).rotateY(th).translate(mx, yD, mz), stoneBr); for (let q = 0; q <= 4; q++) add(new THREE.BoxGeometry(1.2, 2.4, 1.2).translate(-hl + q * L / 4, 1.2, sd * 3.7).rotateY(th).translate(mx, yD, mz), stoneBr); }
+      const block=(ge,mt)=>add(ge.rotateY(th).translate(mx,yD,mz),mt);
+      const bays=Math.ceil(L/5), pitch=L/bays;
+      for(let i=0;i<bays;i++){
+        const bx=-hl+(i+.5)*pitch;
+        for(const side of [-1,1])block(new THREE.BoxGeometry(pitch-.12,.42,1.22).translate(bx,1.77,side*3.7),flagM);
+      }
+      for(let i=0;i<19;i++){
+        const a=(i+.5)*Math.PI/19,ex=ia*Math.cos(a),ey=-D+(D-2.8)*Math.sin(a);
+        const roll=Math.atan2(-(D-2.8)*Math.cos(a),ia*Math.sin(a));
+        const width=Math.hypot(ia*Math.sin(a),(D-2.8)*Math.cos(a))*Math.PI/19;
+        for(const side of [-1,1])block(new THREE.BoxGeometry(width*.94,1.35,.54).rotateZ(roll).translate(ex,ey+.58,side*4.06),flagM);
+      }
       made++; K.mark('bridge' + made, mx, yD + 4, mz); } }
   // a stair down into every pocket the trail passes near, cut from its cliff, from the wall top to the floor
   for (const p of P) { if (p.liq === 'lava' || p === MT || p.void) continue; const [pd2, pp] = pathAt(p.x, p.z); if (pd2 > p.r * 1.6) continue; const a = Math.atan2(pp.z - p.z, pp.x - p.x), tp = rayHit(p, a, atTop); if (!tp) continue;
-    const inx = -Math.cos(a), inz = -Math.sin(a), ry = Math.atan2(inx, inz), n = Math.max(2, Math.ceil((tp.y - p.fy - 1) / 2.2)); for (let k = 0; k < n; k++) { const top = tp.y - 2.2 * (k + 1) + 2.2, bot = p.fy - 3, x = tp.x + inx * (1 + k * 2.6), z = tp.z + inz * (1 + k * 2.6); add(tr(new THREE.BoxGeometry(7, top - bot, 2.7), x, (top + bot) / 2, z, ry), flagM); }
+    const inx = -Math.cos(a), inz = -Math.sin(a), ry = Math.atan2(inx, inz), n = Math.max(2, Math.ceil((tp.y - p.fy - 1) / 2.2)); for (let k = 0; k < n; k++) { const top = tp.y - 2.2 * (k + 1) + 2.2, bot = p.fy - 3, x = tp.x + inx * (1 + k * 2.6), z = tp.z + inz * (1 + k * 2.6); add(tr(new THREE.BoxGeometry(7,top-bot,2.6),x,(top+bot)/2,z,ry),stoneBr);
+      const joints=k%2===0?[-3.6,-1.25,1.65,3.6]:[-3.6,-.35,3.6];
+      for(let i=1;i<joints.length;i++){
+        const offset=(joints[i]+joints[i-1])/2;
+        add(tr(new THREE.BoxGeometry(joints[i]-joints[i-1]-.07,.43,2.67),
+          x+inz*offset,top+.18,z-inx*offset,ry),stoneBr);
+      }
+      if(k%4===0)for(const side of [-1,1]){
+        add(tr(new THREE.BoxGeometry(.85,1.35,2.35),x+side*inz*3.65,top+.69,z-side*inx*3.65,ry),flagM);
+      }
+    }
     reserved.push([tp.x + inx * n * 1.3, tp.z + inz * n * 1.3, n * 1.5]); }
   // spires of rock everywhere, as in a cave that has stood a long time: in clusters on the wall tops, up through the pocket floors, out of the lava; in the storm some are violet crystal, in the snow ice
   { const rockS = new THREE.MeshStandardMaterial({ map: basaltTex, color: 0x5a4434, roughness: .95, flatShading: true }), rockV = new THREE.MeshStandardMaterial({ map: basaltTex, color: 0x4a3a62, roughness: .9, flatShading: true }), snowCap = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: .9 }), colSn = new THREE.MeshStandardMaterial({ map: basaltTex, color: 0x6a7686, roughness: .9, flatShading: true });
     const spireG = (r, h, sd) => { const ge = new THREE.ConeGeometry(r, h, 6, 5), pa = ge.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i); pa.setXYZ(i, x * (1 + .4 * N1(x * .4 + sd, y * .3)), y, z * (1 + .4 * N2(z * .4 - sd, y * .3))); } ge.computeVertexNormals(); return ge.translate(0, h / 2, 0); };
     let n = 0, nc = 0; const spire = (x, y, z, r, h, m) => { add(spireG(r, h, n * 1.7).rotateZ((rnd() - .5) * .22).rotateX((rnd() - .5) * .22).translate(x, y - 1, z), m); n++; };
     // the cliffs split into columns down their faces, floor to wall top, as the rock in the picture is
-    for (const c of cols) { if (nc > 1500 || c.rg < .15 || c.rg > .9 || c.kind === 'path' || c.kind === 'sanctum' || rnd() > .5 || (MT && Math.hypot(c.x - MT.x, c.z - MT.z) < MT.r * .7)) continue; const p = P[c.pi], top = crestY(c.x, c.z) - .5 - rnd() * 5, bot = p.fy - 3, r = 2.6 + rnd() * 3.4; if (top - bot < 8) continue;
+    for (const c of cols) { if (nc > 500 || c.rg < .15 || c.rg > .9 || c.kind === 'path' || c.kind === 'sanctum' || rnd() > .27 || (MT && Math.hypot(c.x - MT.x, c.z - MT.z) < MT.r * .7)) continue; const p = P[c.pi], top = crestY(c.x, c.z) - .5 - rnd() * 5, bot = p.fy - 3, r = 2.6 + rnd() * 3.4; if (top - bot < 8) continue;
       add(new THREE.CylinderGeometry(r * (.12 + rnd() * .2), r, top - bot, 5 + (rnd() * 2 | 0)).rotateY(rnd() * 3).translate(c.x + (rnd() - .5) * 6, (top + bot) / 2, c.z + (rnd() - .5) * 6), p.bi === AIR ? rockV : p.bi === SNOW ? colSn : rockS); nc++; }
-    for (const c of cols) { if (n > 900 || c.kind === 'path' || c.kind === 'void' || c.kind === 'sanctum' || (MT && Math.hypot(c.x - MT.x, c.z - MT.z) < MT.r * .7)) continue; const p = P[c.pi], v = rnd();
-      if (c.kind === 'ridge' && v < .55 && segD(pathPts, c.x, c.z) > 12) { const k = 1 + (rnd() * 3 | 0); for (let q = 0; q < k; q++) { const h = 12 + rnd() * 32; spire(c.x + (rnd() - .5) * 7, c.y, c.z + (rnd() - .5) * 7, 1.6 + h * .1, h, p.bi === AIR ? rockV : rockS); if (p.bi === SNOW && rnd() < .5) add(new THREE.ConeGeometry(1.2 + h * .04, h * .25, 6).translate(c.x, c.y + h * .85, c.z), snowCap); } reserved.push([c.x, c.z, 5]); }
+    for (const c of cols) { if (n > 280 || c.kind === 'path' || c.kind === 'void' || c.kind === 'sanctum' || (MT && Math.hypot(c.x - MT.x, c.z - MT.z) < MT.r * .7)) continue; const p = P[c.pi], v = rnd();
+      if (c.kind === 'ridge' && v < .18 && segD(pathPts, c.x, c.z) > 12) { const k = 1 + (rnd() * 3 | 0); for (let q = 0; q < k; q++) { const h = 7 + rnd() * 17; spire(c.x + (rnd() - .5) * 7, c.y, c.z + (rnd() - .5) * 7, 1.6 + h * .1, h, p.bi === AIR ? rockV : rockS); if (p.bi === SNOW && rnd() < .5) add(new THREE.ConeGeometry(1.2 + h * .04, h * .25, 6).translate(c.x, c.y + h * .85, c.z), snowCap); } reserved.push([c.x, c.z, 5]); }
       else if ((c.kind === 'rock' && c.sl < 6 && v < .1) || (c.kind === 'low' && v < .05)) { const k = 1 + (rnd() * 3 | 0), m = p.bi === AIR && rnd() < .55 ? BI[AIR].glow : p.bi === SNOW ? iceM : p.bi === AIR ? rockV : rockS; for (let q = 0; q < k; q++) { const h = 6 + rnd() * 20; spire(c.x + (rnd() - .5) * 6, c.y, c.z + (rnd() - .5) * 6, 1.2 + h * .1, h, m); } reserved.push([c.x, c.z, 5]); } } }
   // doorways cut into the foot of the cliffs, lit from inside: the archive's old rooms, still somebody's
   { const frameM = new THREE.MeshStandardMaterial({ map: basaltTex, color: 0x7a6452, roughness: .9 }); let made = 0;
@@ -5954,10 +6232,29 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   // ---- each pocket's life (Oct 24 rebuild): falls pouring off the wall tops into the pools, steam boiling off the lava, lightning in the storm,
   // an ice peak with its falls in the snow, great trees rooted round the jungle pools, amber crystal grottos, and every pocket lit and hazed in its own colour
   const fallInto = (p, a, col, lq) => { const tp = rayHit(p, a, atTop); if (!tp) return; const inx = -Math.cos(a), inz = -Math.sin(a), bot = p.liq ? p.lv : p.fy, h = tp.y + .5 - bot; if (h < 8) return;
-    const fx = tp.x + inx * 5.5, fz = tp.z + inz * 5.5, ry = Math.atan2(inx, inz), tx = fallTex.clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1.2, h / 30);
-    for (const [ww, op, off] of [[9, .9, 0], [13, .35, .6]]) { const me = new THREE.Mesh(new THREE.PlaneGeometry(ww, h).rotateY(ry).translate(fx + inx * off, bot + h / 2, fz + inz * off), new THREE.MeshBasicMaterial({ color: col, map: tx, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); me.raycast = () => {}; g.add(me); } falls.push(tx);
-    { const L2 = 9; add(new THREE.BoxGeometry(3.4, .3, L2).translate(0, 0, -L2 / 2 + 1).rotateY(ry).translate(tp.x, tp.y + .35, tp.z), LQ[lq]); for (const sd of [-1, 1]) add(new THREE.BoxGeometry(.9, .9, L2).translate(sd * 2.1, 0, -L2 / 2 + 1).rotateY(ry).translate(tp.x, tp.y + .3, tp.z), darkM); }   // a stream across the wall top to the lip
-    umist(g, fx + inx * 3, fz + inz * 3, lq === 'lava' ? { n: 16, seed: 4000 + falls.length, r0: 0, r1: 6, y0: bot, y1: bot + 14, rise: .12, size: 30, alpha: .12, col: [1.6, .5, .15] } : { n: 22, seed: 4000 + falls.length, r0: 0, r1: 7, y0: bot, y1: bot + 10, rise: .15, spin: .5, size: 24, alpha: .2, col: [.9, .97, 1], normal: true });
+    const ry = Math.atan2(inx, inz), tx = fallTex.clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1.2, h / 30);
+    let run=8;
+    while(run<p.r*1.6 && ground(tp.x+inx*run,tp.z+inz*run).y>bot+.6)run+=2;
+    const ribbon=cascadeGeometry(7.2,(t,side)=>{
+      const dist=run*t, x=tp.x+inx*dist+inz*side, z=tp.z+inz*dist-inx*side;
+      const y=Math.max(ground(x,z).y+.38,bot+h*(1-t*t));
+      return [x,y,z];
+    });
+    const cascade=new THREE.Mesh(ribbon,new THREE.MeshBasicMaterial({color:col,map:tx,alphaMap:fallMask,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}));
+    cascade.raycast=()=>{};g.add(cascade);falls.push(tx);
+    { const L2 = 9; add(new THREE.BoxGeometry(3.4, .3, L2).translate(0, 0, -L2 / 2 + 1).rotateY(ry).translate(tp.x, tp.y + .35, tp.z), LQ[lq]); for (const sd of [-1, 1]) add(new THREE.BoxGeometry(.9, .9, L2).translate(sd * 2.1, 0, -L2 / 2 + 1).rotateY(ry).translate(tp.x, tp.y + .3, tp.z), stoneBr);
+      for(const side of [-1,1])for(let i=0;i<3;i++)add(tr(new THREE.BoxGeometry(1.35,.58,2.9),tp.x+inz*side*2.25+inx*(.4-3*i),tp.y+.92,tp.z-inx*side*2.25+inz*(.4-3*i),ry),flagM);
+    }   // a stream across the wall top to the lip
+    const fx=tp.x+inx*run, fz=tp.z+inz*run;
+    if(lq==='water'){
+      K.mark('cascade-bank',tp.x,tp.y+1,tp.z); K.mark('cascade-pool',fx,bot+1,fz);
+      for(let i=0;i<3;i++){
+        const wash=new THREE.TorusGeometry(2.4+i*1.65,.12-i*.02,5,36,Math.PI*(1.15+i*.13))
+          .rotateZ(-.4+i*.52).rotateX(-Math.PI/2).scale(1,1,.68).rotateY(ry).translate(fx+inx*i*.7,bot+.16,fz+inz*i*.7);
+        add(wash,iceM);
+      }
+    }
+    umist(g, fx, fz, lq === 'lava' ? { n: 16, seed: 4000 + falls.length, r0: 0, r1: 6, y0: bot, y1: bot + 14, rise: .12, size: 30, alpha: .12, col: [1.6, .5, .15] } : { n: 20, seed: 4000 + falls.length, r0: 0, r1: 4.5, y0: bot, y1: bot + 5, rise: .17, spin: .5, size: 12, alpha: .1, col: [.9, .97, 1], normal: true });
     light(fx + inx * 6, bot + 10, fz + inz * 6, col, 1.8, 120, lq === 'lava' ? .3 : .05); reserved.push([fx, fz, 8]); return [fx, fz]; };
   P.forEach((p, i) => { if (p.void) return; const b = BI[p.bi];
     if (p.liq === 'water' || p.liq === 'spore') { const k = p === MT ? 0 : 1 + (rnd() < .45 ? 1 : 0); for (let q = 0; q < k; q++) fallInto(p, rnd() * 6.283, p.liq === 'spore' ? 0x8affe0 : 0x9ae8ff, p.liq); }
@@ -5970,7 +6267,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   // falls between the tiers of the water and jungle caverns, where one pool spills into the next one down
   for (const m of MB) { const A = P[m.a], Bq = P[m.b]; if (!(A.liq === 'water' || A.liq === 'spore') || A.liq !== Bq.liq || Math.abs(A.lv - Bq.lv) < 3) continue; const hi = A.lv > Bq.lv ? A : Bq, lo = hi === A ? Bq : A, dx = lo.x - hi.x, dz = lo.z - hi.z, l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l, h = hi.lv - lo.lv + 1.5;
     const tx = fallTex.clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1.6, Math.max(.4, h / 30)); const col = A.liq === 'spore' ? 0x9affe6 : 0xaeeaff;
-    for (const [ww, op, off] of [[16, .9, 0], [22, .3, .8]]) { const me = new THREE.Mesh(new THREE.PlaneGeometry(ww, h).rotateY(Math.atan2(ux, uz)).translate(m.x + ux * off, lo.lv + h / 2, m.z + uz * off), new THREE.MeshBasicMaterial({ color: col, map: tx, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); me.raycast = () => {}; g.add(me); } falls.push(tx);
+    for (const [ww, op, off] of [[15, .72, 0]]) { const me = new THREE.Mesh(new THREE.PlaneGeometry(ww, h).rotateY(Math.atan2(ux, uz)).translate(m.x + ux * off, lo.lv + h / 2, m.z + uz * off), new THREE.MeshBasicMaterial({ color: col, map: tx, alphaMap:fallMask, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); me.raycast = () => {}; g.add(me); } falls.push(tx);
     umist(g, m.x + ux * 4, m.z + uz * 4, { n: 24, seed: 4700 + m.a, r0: 0, r1: 8, y0: lo.lv, y1: lo.lv + 10, rise: .15, spin: .5, size: 26, alpha: .2, col: [.9, .97, 1], normal: true }); reserved.push([m.x, m.z, 10]); }
   // lightning in the storm: bolts from above the wall tops down to the floor, each flashing on its own
   { const boltM = new THREE.MeshBasicMaterial({ color: 0xe0ccff, transparent: true, opacity: .95, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), haloM = new THREE.MeshBasicMaterial({ color: 0x8a50ff, transparent: true, opacity: .3, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), bolts = [];
@@ -6032,6 +6329,30 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const placeIn = (biome, r, minW = .35) => { for (let q = 0; q < 400; q++) { const c = open[(rnd() * open.length) | 0]; if (!c || c.w[biome] < minW || c.sl > (r > 12 ? 2.5 : 5) || !free(c.x, c.z, r)) continue; used.push([c.x, c.z, r]); return c; } return null; };
   const anyPlace = r => { for (let q = 0; q < 400; q++) { const c = open[(rnd() * open.length) | 0]; if (c && c.sl < (r > 12 ? 2.5 : 5) && free(c.x, c.z, r)) { used.push([c.x, c.z, r]); return c; } } return null; };
   for (const p of path) used.push([p.x, p.z, 9]); used.push([S0[0], S0[1], 100]); reserved.forEach(r => used.push(r));
+  {
+    const calcite=new THREE.MeshStandardMaterial({color:0x9c846a,map:rockTex,roughness:.81});
+    const glass=new THREE.MeshStandardMaterial({color:0x253942,roughness:.19,metalness:.26});
+    const rime=new THREE.MeshStandardMaterial({color:0xa3cfd6,roughness:.38});
+    for(const [a,b,material,id] of [[FIRE,WATER,calcite,'steam'],[FIRE,EARTH,glass,'glass'],[WATER,SNOW,rime,'rime']]){
+      const sites=cols.filter(c=>c.w[a]>.12 && c.w[b]>.12 && c.kind==='rock' && c.sl<8)
+        .sort((p,q)=>Math.abs(p.w[a]-.5)-Math.abs(q.w[a]-.5));
+      let count=0;
+      for(const c of sites){
+        if(count===3)break;
+        if(!free(c.x,c.z,9))continue;
+        used.push([c.x,c.z,10]);
+        for(let n=0;n<11;n++){
+          const angle=n*2.39996, r=2+Math.sqrt(n)*1.35, x=c.x+Math.cos(angle)*r,z=c.z+Math.sin(angle)*r;
+          const base=ground(x,z).y, h=1.1+(1+Math.sin(n*4.5))*.85;
+          add(new THREE.DodecahedronGeometry(1.5,1).scale(2.3,h*.48,1.2).rotateY(angle).translate(x,base+.15,z),material);
+        }
+        if(id==='steam')umist(g,c.x,c.z,{n:19,seed:7140+count,r0:.4,r1:4,y0:c.y+.9,y1:c.y+15,rise:.13,spin:.24,size:14,alpha:.12,col:[.86,.89,.87],normal:true});
+        if(count===0)K.mark('contact-'+id,c.x,c.y+4,c.z);
+        count++;
+      }
+    }
+  }
+
   yield;
   // ---- the libraries (Oct 24 pass): proper cases now - a back, posts, a cornice and a plinth, five shelves of books, a gap here and there where a volume has fallen out and
   // the next one leans into it. Groves of them in an arc round a reader's desk with a book lying open and glowing on it, a ladder against the cases, books dropped on the floor,
@@ -6041,10 +6362,14 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   const shelfAt = (x, z, y, ry, style, len = 18) => { const sunk = style === WATER ? -7 : 0, lift = style === AIR ? 7 : 0, yy = y + sunk + lift, m = style === FIRE ? charM : shelfW, P2 = (ge, mt) => add(ge.rotateY(ry).translate(x, yy, z), mt);
     P2(new THREE.BoxGeometry(len, 25, 1).translate(0, 12.5, -1.8), m); for (const sd of [-1, 1]) { P2(new THREE.BoxGeometry(1.4, 26, 4.6).translate(sd * (len / 2 + .2), 13, 0), m); if (m === shelfW) P2(new THREE.BoxGeometry(.4, 24, .3).translate(sd * (len / 2 + .2), 13, 2.35), trimM); }
     P2(new THREE.BoxGeometry(len + 2.6, 1.6, 5.6).translate(0, 26.4, 0), m); P2(new THREE.BoxGeometry(len + 1, .6, 5.8).translate(0, 27.5, 0), m); P2(new THREE.BoxGeometry(len + 2.4, 1.6, 5.2).translate(0, .8, 0), m);
+    // A visitor approaching the outside of the reading circle sees the paneled backs.
+    for(const by of [1.4,12.5,24.1])P2(new THREE.BoxGeometry(len,.68,.45).translate(0,by,-2.38),m);
+    for(const bx of [-len*.43,0,len*.43])P2(new THREE.BoxGeometry(.71,22.4,.45).translate(bx,12.6,-2.38),m);
+    if(style===WATER)K.mark('water-bookcase',x,yy+17,z);
     if (m === shelfW) P2(new THREE.BoxGeometry(len + 2.7, .3, .3).translate(0, 25.6, 2.85), trimM);
     for (let k = 0; k < 5; k++) { const sy = 1.6 + k * 4.9; P2(new THREE.BoxGeometry(len, .5, 4.2).translate(0, sy, 0), m); if (m !== shelfW || (style === FIRE && rnd() < .6)) continue;
       const gap = rnd() < .45 ? (rnd() - .5) * len * .6 : null, w1 = gap === null ? len - 1.2 : len / 2 + gap - 1.8, w2 = gap === null ? 0 : len / 2 - gap - 1.8;
-      const row = (w, cx) => { if (w < 1) return; const ge = new THREE.PlaneGeometry(w, 4.1), uv = ge.attributes.uv, u0 = rnd(); for (let i = 0; i < uv.count; i++) uv.setX(i, u0 + uv.getX(i) * w / 16); P2(ge.translate(cx, sy + 2.35, .9), books); };
+      const row=(w,cx)=>{ if(w>=1)volumes(P2,w,cx,sy,rnd(),finish); };
       row(w1, -len / 2 + .6 + w1 / 2); row(w2, len / 2 - .6 - w2 / 2); if (gap !== null) P2(new THREE.BoxGeometry(.9, 3.7, 3).rotateZ(.45).translate(gap + .9, sy + 2.1, .2), spineM[(rnd() * 6) | 0]); }
     if (style === SNOW) { P2(new THREE.BoxGeometry(len + 3, 1.4, 6).translate(0, 28.2, 0), snowM); for (let q = 0; q < 5; q++) P2(new THREE.ConeGeometry(.5, 2.6 + rnd() * 2.4, 5).rotateX(Math.PI).translate((q - 2) * len / 5, 24.6, 2.8), iceM); }
     if (style === EARTH) { P2(new THREE.BoxGeometry(len + 2, .8, 5.8).translate(0, 28, 0), mossM); for (let q = 0; q < 4; q++) P2(new THREE.CylinderGeometry(.2, .2, 8 + rnd() * 10, 4).translate((rnd() - .5) * len, 22, 2.8), mossM); }
@@ -6100,7 +6425,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
   yield;
   // ---- each biome's own things, scattered by its weight so they spill over its edges a little
   const crystal = BI[EARTH].glow, rootM = new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: .95 }), stoneE = new THREE.MeshStandardMaterial({ color: 0x6a5a44, roughness: 1, flatShading: true }), obsid = new THREE.MeshStandardMaterial({ color: 0x0c0a0e, roughness: .15, metalness: .4 }), iron = new THREE.MeshStandardMaterial({ color: 0x2c2a2c, roughness: .5, metalness: .7 });
-  const paper2 = new THREE.MeshStandardMaterial({ color: 0xf4f0e4, roughness: .8, side: THREE.DoubleSide, flatShading: true, emissive: 0x4a4436, emissiveIntensity: .4 }), brass = new THREE.MeshStandardMaterial({ color: 0xc8a050, roughness: .35, metalness: .8 });
+  const brass = new THREE.MeshStandardMaterial({ color: 0xc8a050, roughness: .35, metalness: .8 });
   // air: floating islands of rock with a case of books on each, banks of soft cloud, ribbons of wind, a flock of folded paper, a brass orrery turning over the ground
   { const grass = new THREE.MeshStandardMaterial({ color: 0x6a7a98, roughness: 1, flatShading: true, map: basaltTex }), isles = [];
     // floating islands (Oct 24 pass): a ragged root of rock with smaller crags hanging off it, boulders round the rim, crystals glowing on the underside and roots trailing,
@@ -6134,16 +6459,34 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
       tw.add(ufunnel({ n: 50, seed: 5320 + q, r0: 6, r1: 22, y0: 1, y1: 9, spin: .9, rise: 0, size: 14, alpha: .1, col: [.55, .5, .66] }));   // dust dragged round its foot
       const ph = rnd() * 9, x0 = c.x, z0 = c.z; anim.push(t => { if (!UNDER.on) return; tw.position.x = x0 + Math.sin(t * .11 + ph) * 12; tw.position.z = z0 + Math.cos(t * .08 + ph) * 12; });
       reserved.push([c.x, c.z, 20]); K.mark('whirl' + q, c.x, c.y + 10, c.z); }
-    { const c = placeIn(AIR, 30, .5); if (c) { const fl2 = new THREE.Group(); fl2.position.set(c.x, c.y + 24, c.z); for (let q = 0; q < 50; q++) { const m = new THREE.Mesh(new THREE.ConeGeometry(2, 5, 3).rotateX(Math.PI / 2).scale(1.6, .25, 1), paper2), an = q / 50 * Math.PI * 2, rr = 10 + rnd() * 26; m.position.set(Math.cos(an) * rr, (rnd() - .5) * 14, Math.sin(an) * rr); m.rotation.y = -an; m.raycast = () => {}; fl2.add(m); } g.add(fl2); spin.push([fl2, .35, 'y']); K.mark('air-flock', c.x, c.y + 10, c.z); } }
+    {
+      const clearing=placeIn(AIR,30,.5);
+      const home=clearing || P.filter(p=>p.bi===AIR && inA(p.x,p.z,37)).sort((a,b)=>b.r-a.r)[0];
+      if(home){
+        const ridge=Math.max(...Array.from({length:16},(_,i)=>{
+          const a=i*Math.PI/8;return ground(home.x+35*Math.cos(a),home.z+35*Math.sin(a)).y;
+        }));
+        const hy=Math.max(ridge+9,(clearing?clearing.y:home.fy)+24);
+        const flock=paperCranes(clearing?rnd:mulberry32(4613),finish.manuscript,U.uTime);
+        flock.position.set(home.x,hy,home.z);g.add(flock);spin.push([flock,.35,'y']);
+        K.mark('air-flock',home.x,hy,home.z);
+      }
+    }
     { const c = placeIn(AIR, 40, .4); if (c) { C(4, 6, 8, 12, brass, c.x, c.y + 4, c.z); const o = new THREE.Group(); o.position.set(c.x, c.y + 24, c.z); o.add(new THREE.Mesh(new THREE.SphereGeometry(4, 16, 12), K.glow(0xfff0c0, 2.4)));
       [[12, .5, 0xc8d8ff], [20, .4, 0xffa070], [28, .3, 0x80c0ff], [36, .25, 0xa0ff90]].forEach(([r, k, col], i) => { const ring = new THREE.Group(); ring.rotation.x = (i - 1.5) * .2; const tor = new THREE.Mesh(new THREE.TorusGeometry(r, .35, 6, 64).rotateX(Math.PI / 2), brass), pl = new THREE.Mesh(new THREE.SphereGeometry(2 + i * .5, 14, 10), K.glow(col, 2)); pl.position.set(r, 0, 0); ring.add(tor, pl); o.add(ring); spin.push([ring, k, 'y']); });
       o.traverse(m => { m.raycast = () => {}; }); g.add(o); light(c.x, c.y + 26, c.z, 0xfff0c0, 2, 140, .05); K.mark('air-orrery', c.x, c.y + 10, c.z); } } }
   // earth: crystals in clusters and a few great ones, roots arching out of the rock, glowing mushrooms, a ring of standing stones, a half-made golem on its slab
   { for (let q = 0; q < 22; q++) { const c = placeIn(EARTH, 6, .3); if (!c) continue; const big = q < 4; for (let k = 0; k < (big ? 3 : 5); k++) { const hh = big ? 22 + rnd() * 16 : 5 + rnd() * 12, an = rnd() * 6.28; add(new THREE.CylinderGeometry(.01, big ? 3 + rnd() * 2 : 1.2 + rnd() * 1.4, hh, 6).rotateZ((rnd() - .5) * .7).rotateY(an).translate(c.x + Math.cos(an) * 2, c.y + hh / 2, c.z + Math.sin(an) * 2), crystal); } if (q % 4 === 0) light(c.x, c.y + 12, c.z, BI[EARTH].lit, 1.6, 120, .05); }
     for (let q = 0; q < 8; q++) { const c = placeIn(EARTH, 14, .35); if (!c) continue; const an = rnd() * 6.28, sp = 24 + rnd() * 18, ht = 12 + rnd() * 12, pts = []; for (let k = 0; k <= 12; k++) { const t = k / 12; pts.push(new THREE.Vector3(c.x + Math.cos(an) * (t - .5) * sp, c.y + Math.sin(Math.PI * t) * ht - 1, c.z + Math.sin(an) * (t - .5) * sp + Math.sin(t * 6) * 1.5)); } add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 1.8 + rnd() * 1.2, 7), rootM); }
-    const capG = K.glow(0x5affc0, 2), stem = new THREE.MeshStandardMaterial({ color: 0xd8d0b8, roughness: .8 }), capBig = new THREE.MeshStandardMaterial({ color: 0x3a5a8a, emissive: 0x2a8a9a, emissiveIntensity: .9, roughness: .6 }), gill = K.glow(0x7affd0, 1.8);
-    for (let q = 0; q < 10; q++) { const c = placeIn(EARTH, 12, .4); if (!c) continue; const hh = 16 + rnd() * 16, r = 7 + rnd() * 7, lean = (rnd() - .5) * .25; add(new THREE.CylinderGeometry(1.4, 2.4, hh, 8).rotateZ(lean).translate(c.x, c.y + hh / 2, c.z), stem);
-      const tx = c.x - Math.sin(lean) * hh / 2; add(new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, .55, 1).translate(tx, c.y + hh - 1, c.z), capBig); add(new THREE.CylinderGeometry(r * .96, r * .4, 1, 18).translate(tx, c.y + hh - 1.4, c.z), gill); if (q % 3 === 0) light(tx, c.y + hh - 4, c.z, 0x5affd0, 1.4, 90, .05); } for (let q = 0; q < 12; q++) { const c = placeIn(EARTH, 6, .3); if (!c) continue; for (let k = 0; k < 5; k++) { const x = c.x + (rnd() - .5) * 8, z = c.z + (rnd() - .5) * 8, hh = 2 + rnd() * 6, r = 1 + rnd() * 2.4; C(.3, .45, hh, 6, stem, x, c.y + hh / 2, z); add(new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(x, c.y + hh - .2, z), capG); } }
+    const capG=finish.cap, stem=finish.stem;
+    for(let q=0;q<10;q++){
+      const c=placeIn(EARTH,12,.4);if(!c)continue;
+      const hh=16+rnd()*16,r=7+rnd()*7,lean=(rnd()-.5)*.25,tx=c.x-Math.sin(lean)*hh/2;
+      giantMushroom(K,c.x,c.y,c.z,hh,r,lean,finish);
+      K.mark('giant-cap',tx,c.y+hh-1,c.z);
+      if(q%3===0)light(tx,c.y+hh-4,c.z,0x5affd0,1.4,90,.05);
+    }
+    for (let q = 0; q < 12; q++) { const c = placeIn(EARTH, 6, .3); if (!c) continue; for (let k = 0; k < 5; k++) { const x = c.x + (rnd() - .5) * 8, z = c.z + (rnd() - .5) * 8, hh = 2 + rnd() * 6, r = 1 + rnd() * 2.4; C(.3, .45, hh, 6, stem, x, c.y + hh / 2, z); add(new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(x, c.y + hh - .2, z), capG); } }
     { const c = placeIn(EARTH, 32, .45); if (c) { const R2 = 22; for (let q = 0; q < 9; q++) { const an = q / 9 * Math.PI * 2, hh = 10 + rnd() * 8; if (q === 4) { add(new THREE.BoxGeometry(4, 3, 3).rotateZ(1.3).translate(c.x + Math.cos(an) * R2, c.y + 1.5, c.z + Math.sin(an) * R2), stoneE); continue; } add(new THREE.BoxGeometry(4, hh, 3).rotateY(-an).translate(c.x + Math.cos(an) * R2, c.y + hh / 2, c.z + Math.sin(an) * R2), stoneE); }
       T(R2 * .7, .5, crystal, c.x, c.y + 1.2, c.z, 0, Math.PI / 2, Math.PI * 1.6, 48); light(c.x, c.y + 12, c.z, BI[EARTH].lit, 2.2, 140, .1); K.mark('earth-stones', c.x, c.y + 8, c.z); } }
     { const c = placeIn(EARTH, 34, .4); if (c) { const x = c.x, z = c.z, y = c.y, rn = K.glow(0x9aff60, 2.6); B(44, 6, 18, darkM, x, y + 3, z); B(16, 7, 12, stoneE, x, y + 9.5, z); B(7, 6, 7, stoneE, x - 13, y + 9, z); B(12, 4, 4, stoneE, x + 14, y + 8, z - 4); B(12, 4, 4, stoneE, x + 14, y + 8, z + 4); B(12, 4, 4.4, stoneE, x, y + 8, z - 10); B(4, .4, 4, rn, x, y + 13.2, z); B(12, 4, 4.4, stoneE, x + 4, y + 2, z + 15, .5);
@@ -6199,7 +6542,7 @@ UNDER_BUILD['Archive of Unfinished Spells'] = function* (g, area, R) {
     const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const pts = new THREE.Points(ge, new THREE.PointsMaterial({ color: col, size, transparent: true, opacity: .85, depthWrite: false, blending: vy > 0 ? THREE.AdditiveBlending : THREE.NormalBlending }));
     pts.frustumCulled = false; pts.raycast = () => {}; g.add(pts); let last = 0;
     anim.push(t => { if (!UNDER.on) return; const dt = Math.min(.1, t - last); last = t; for (let i = 0; i < n; i++) { let y = pos[i * 3 + 1] + vy * dt; if (vy < 0 && y < base2[i]) y = base2[i] + 60; if (vy > 0 && y > base2[i] + 60) y = base2[i]; pos[i * 3 + 1] = y; pos[i * 3] += Math.sin(t + i) * dt * 1.5; } ge.attributes.position.needsUpdate = true; }); };
-  motes(SNOW, 900, 0xffffff, 1.3, -6); motes(FIRE, 400, 0xff8a30, 1.1, 8); motes(AIR, 250, 0xdfefff, .9, 2); motes(LICH, 200, 0xb070ff, 1, 3);
+  motes(SNOW, 340, 0xffffff, 1.3, -6); motes(FIRE, 175, 0xff8a30, 1.1, 8); motes(AIR, 100, 0xdfefff, .9, 2); motes(LICH, 85, 0xb070ff, 1, 3);
   // where each biome is thickest, for finding them again
   BI.forEach((b, i) => { const sel = cols.filter(c => c.w[i] > .7 && c.kind !== 'ridge'); if (sel.length) { const c = sel[(sel.length / 2) | 0]; K.mark(b.name, c.x, c.y + 6, c.z); } });
   K.mark('door', path[0].x, path[0].y + 6, path[0].z);
@@ -6229,10 +6572,11 @@ UNDER_BUILD['Crystal Pavilion Hedgemaze'] = (g, area, R) => {
   const K = underKit(g, area, R), { rnd, inA, B, C, S, T, add, tr } = K, u = 20, WH = 16;
   const stone = new THREE.MeshStandardMaterial({ map: noiseTex('qstone', '#a8b4b8', ['rgba(0,0,0,A)', 'rgba(255,255,255,A)'], .12), color: 0xd8e4e6, roughness: .55 });
   const crystal = new THREE.MeshStandardMaterial({ color: 0x7ff6ff, emissive: 0x20c8e0, emissiveIntensity: 1.6, roughness: .15, transparent: true, opacity: .82 }), teal = K.glow(0x60f0ff, 2.6), gold = K.glow(0xffd070, 2.4), violet = K.glow(0xb070ff, 2.8), white = K.glow(0xe8fbff, 2.2);
-  const floorM = new THREE.MeshStandardMaterial({ map: utex('qgrid', () => ctex(256, 256, (c, w, h) => { c.fillStyle = '#0e2226'; c.fillRect(0, 0, w, h); c.strokeStyle = 'rgba(96,240,255,.55)'; c.lineWidth = 2; for (let i = 0; i <= 8; i++) { c.beginPath(); c.moveTo(i * w / 8, 0); c.lineTo(i * w / 8, h); c.stroke(); c.beginPath(); c.moveTo(0, i * h / 8); c.lineTo(w, i * h / 8); c.stroke(); } c.strokeStyle = 'rgba(96,240,255,.18)'; c.lineWidth = 1; for (let i = 0; i < 32; i++) { c.beginPath(); c.moveTo(i * w / 32, 0); c.lineTo(i * w / 32, h); c.stroke(); c.beginPath(); c.moveTo(0, i * h / 32); c.lineTo(w, i * h / 32); c.stroke(); } })), color: 0xffffff, emissive: 0x0c3a40, emissiveIntensity: .8, roughness: .4 });
+  const tile = utex('survey-stone', () => ctex(512,512,surveyPavement));
+  const floorM = new THREE.MeshStandardMaterial({map:tile,bumpMap:tile,bumpScale:.34,roughness:.66});
   const runeM = new THREE.MeshStandardMaterial({ map: utex('qrunes', () => ctex(512, 64, (c, w, h) => { c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.fillStyle = '#7ff6ff'; c.font = 'bold 40px Georgia, serif'; const r = mulberry32(3), sy = ['∑', 'π', 'φ', '∞', '√', '∫', 'Δ', '∂', 'λ', '7', '3', '1', '8', 'ℵ', '≡', 'θ']; for (let x = 8; x < w; x += 32) c.fillText(sy[(r() * sy.length) | 0], x, 46); })), color: 0x000000, emissive: 0x60f0ff, emissiveIntensity: 2.2, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   runeM.emissiveMap = runeM.map;
-  const glassW = new THREE.MeshStandardMaterial({ color: 0xbff4ff, emissive: 0x2a8a9a, emissiveIntensity: .55, roughness: .05, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide }), frameW = new THREE.MeshStandardMaterial({ color: 0xf2f8fa, roughness: .4 });
+  const glassW = new THREE.MeshStandardMaterial({ color: 0xbff4ff, emissive: 0x2a8a9a, emissiveIntensity: .55, roughness: .05, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide }), frameW = new THREE.MeshStandardMaterial({ color: 0x648689, roughness: .52 });
   const hexW = new THREE.MeshStandardMaterial({ map: utex('qhex', () => ctex(256, 256, (c, w, h) => { const r = 18, cols = ['#5ad8e6', '#7a8af0', '#9a6ae8', '#4ab8d8', '#b48af0']; c.fillStyle = '#1a1a3a'; c.fillRect(0, 0, w, h); for (let y = -r, row = 0; y < h + r; y += r * 1.5, row++) for (let x = -r, n = 0; x < w + r; x += r * 1.732, n++) { const ox = (row % 2) * r * .866; c.fillStyle = cols[(n * 3 + row * 2) % cols.length]; c.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6; c.lineTo(x + ox + Math.cos(a) * r * .9, y + Math.sin(a) * r * .9); } c.fill(); } })), color: 0xffffff, emissive: 0x4a3a8a, emissiveIntensity: .55, roughness: .45 });
   const obsW = new THREE.MeshStandardMaterial({ map: utex('qobs', () => ctex(256, 256, (c, w, h) => { const r = mulberry32(11); c.fillStyle = '#16121e'; c.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { c.fillStyle = 'rgba(120,90,160,' + r() * .12 + ')'; c.fillRect(r() * w, r() * h, 2 + r() * 20, 1 + r() * 4); }
     c.strokeStyle = '#ffc860'; for (let v = 0; v < 3; v++) { let x = r() * w, y = 0; c.lineWidth = .7 + r() * .9; c.beginPath(); c.moveTo(x, y); while (y < h) { x += (r() - .5) * 26; y += 6 + r() * 14; c.lineTo(x, y); } c.stroke(); } })), color: 0x8a8098, emissive: 0xffffff, emissiveIntensity: .0, roughness: .3, metalness: .05, envMapIntensity: .4 });
@@ -6264,7 +6608,7 @@ UNDER_BUILD['Crystal Pavilion Hedgemaze'] = (g, area, R) => {
       if (q !== 1 && rnd() < .22) for (const sd of [-1, 1]) add(tr(new THREE.PlaneGeometry(u - 4, 2.4), wx + (a ? sd * 1.25 : 0), WH * .62, wz + (b ? sd * 1.25 : 0), a ? (sd > 0 ? Math.PI / 2 : -Math.PI / 2) : (sd > 0 ? 0 : Math.PI)), runeM); }
     if (links === 1 && !inHeart(i, j) && !inCh(i, j)) deadEnds.push([x, z, i, j]); }
   for (let i = 0; i <= NI; i++) for (let j = 0; j <= NJ; j++) { const x = K.x0 + i * u, z = K.z0 + j * u; if (!inA(x, z, 2) || (i - hi - .5) ** 2 + (j - hj - .5) ** 2 < 6 || chambers.some(([ci, cj]) => i > ci && i < ci + 2 && j > cj && j < cj + 2)) continue; const q = quarter(x, z);
-    B(3.6, WH + 3, 3.6, q === 1 ? frameW : q === 2 ? hexW : q === 3 ? obsW : stone, x, (WH + 3) / 2 + 1, z); add(new THREE.OctahedronGeometry(1.6).translate(x, WH + 5, z), q === 2 ? violet : q === 3 ? gold : teal); }
+    B(3.6, WH + 3, 3.6, q === 1 ? frameW : q === 2 ? hexW : q === 3 ? obsW : stone, x, (WH + 3) / 2 + 1, z); if ((i+2*j)%4===0) add(new THREE.OctahedronGeometry(1.35).translate(x, WH + 4.85, z), q === 2 ? violet : q === 3 ? gold : teal); }
   const spin = [];
   // fractal trees of light in some dead ends
   const tree = (x, z, y, len, ang, tilt, d) => { const ex = x + Math.sin(tilt) * Math.cos(ang) * len, ez = z + Math.sin(tilt) * Math.sin(ang) * len, ey = y + Math.cos(tilt) * len, dx = ex - x, dy = ey - y, dz = ez - z;
@@ -6286,13 +6630,41 @@ UNDER_BUILD['Crystal Pavilion Hedgemaze'] = (g, area, R) => {
   const solids = [() => new THREE.TetrahedronGeometry(6), () => new THREE.OctahedronGeometry(6), () => new THREE.DodecahedronGeometry(5.6), () => new THREE.IcosahedronGeometry(6), () => new THREE.TorusKnotGeometry(4, 1, 64, 8)];
   for (let q = 0; q < 20; q++) { const k = [...seen][(rnd() * seen.size) | 0], i = Math.floor(k / 1000), j = k % 1000, [x, z] = at(i, j); if (inHeart(i, j) || inCh(i, j)) continue; const m = new THREE.Mesh(solids[q % solids.length](), q % 3 ? crystal : gold); m.position.set(x, WH + 14 + rnd() * 14, z); m.userData.s = [rnd() - .5, rnd() - .5, rnd() - .5]; g.add(m); spin.push(m); }
   // the chambers, each with a piece of Quandrix's work
-  const kinds = ['cubes', 'stair', 'bloom', 'pylons', 'grove', 'paper', 'cubes'];
+  const kinds = ['stair', 'rotunda', 'bloom', 'pylons', 'grove', 'paper', 'cubes'];
   chambers.forEach(([ci, cj], n) => { const [x0, z0] = at(ci, cj), x = x0 + u / 2, z = z0 + u / 2, kind = kinds[n % kinds.length];
-    add(new THREE.BoxGeometry(u * 2 - 3, .3, u * 2 - 3).translate(x, 1.3, z), new THREE.MeshStandardMaterial({ color: 0x1a3a40, roughness: .25, metalness: .4 })); T(u * .85, .4, teal, x, 1.6, z, 0, Math.PI / 2, Math.PI * 2, 4);
+    add(new THREE.BoxGeometry(u * 2 - 3, .3, u * 2 - 3).translate(x, 1.3, z), floorM); T(u * .85, .4, teal, x, 1.6, z, 0, Math.PI / 2, Math.PI * 2, 4);
     K.mark('ch' + n + '-' + kind, x, 8, z);
     if (kind === 'cubes') { for (let q = 0; q < 9; q++) { const s = 7 + rnd() * 3, px = x + (rnd() - .5) * 18, pz = z + (rnd() - .5) * 18, py = s / 2 + 1.5 + (q % 3) * s * .8; add(new THREE.BoxGeometry(s, s, s).translate(px, py, pz), glassW); add(new THREE.BoxGeometry(s + .4, .5, .5).translate(px, py + s / 2, pz + s / 2), frameW); add(new THREE.BoxGeometry(.5, .5, s + .4).translate(px + s / 2, py + s / 2, pz), frameW); add(new THREE.BoxGeometry(1.4, 2.4, 1.4).translate(px, py, pz), white); } K.light(x, 16, z, 0xbff4ff, 1.4, 90, .05); }
-    if (kind === 'stair') { for (let s2 = 0; s2 < 4; s2++) { const a = s2 * Math.PI / 2, cx = x + Math.cos(a) * 9, cz = z + Math.sin(a) * 9; for (let k = 0; k < 8; k++) B(2.6, 1, 6, frameW, cx - Math.sin(a) * (k - 4) * 2.4, 2 + s2 * 4 + k * .9, cz + Math.cos(a) * (k - 4) * 2.4, -a); }   // four flights climbing round and round, arriving where they began
-      B(10, 2, 10, frameW, x, 2 + 4 * 4, z); B(3, 6, 3, stone, x, 4, z); add(new THREE.BoxGeometry(6, 9, .6).translate(x, 24, z), new THREE.MeshStandardMaterial({ color: 0x0a1a20 })); K.light(x, 22, z, 0x7ff6ff, 1.2, 80, .05); }
+    if (kind === 'rotunda') {
+      const brass=new THREE.MeshStandardMaterial({color:0xa58d55,roughness:.5,metalness:.35});
+      T(16.6,.24,brass,x,1.86,z,0,Math.PI/2,Math.PI*2,64);
+      for(let i=0;i<32;i++){
+        const a=i*Math.PI/16;
+        B(.25,.18,i%4===0?2.2:1,brass,x+Math.sin(a)*17.2,1.73,z+Math.cos(a)*17.2,a);
+      }
+      const turn=new THREE.Group();turn.name='Rotating passage'; turn.position.set(x,1.56,z);g.add(turn);
+      const mount=(geometry,material,px,py,pz)=>{
+        const m=new THREE.Mesh(geometry,material);m.position.set(px,py,pz);m.raycast=()=>{};turn.add(m);
+      };
+      mount(new THREE.CylinderGeometry(15.85,15.95,.42,48),stone,0,.21,0);
+      // An offset doorway in a rotating partition aligns with four different approaches.
+      for(const [cx,w] of [[-9.9,10.8],[8.9,12.8]]){
+        mount(new THREE.BoxGeometry(w,11.2,2.2),stone,cx,6,0);
+        mount(new THREE.BoxGeometry(w+.2,.54,2.6),brass,cx,11.84,0);
+        mount(new THREE.BoxGeometry(w,.55,2.33),frameW,cx,2.4,0);
+      }
+      mount(new THREE.TorusGeometry(3.52,1.03,8,24,Math.PI),stone,-1,9,0);
+      for(const px of [-4.52,2.52])mount(new THREE.BoxGeometry(1.35,8.6,2.35),frameW,px,4.72,0);
+      anim.push(t=>{
+        if(!UNDER.on)return;
+        const phase=t/7, k=clamp((phase%1-.4)/.6,0,1);
+        turn.rotation.y=(Math.floor(phase)+k*k*(3-2*k))*Math.PI/2;
+      });
+    }
+    if (kind === 'stair') {
+      const dx=x<area.x?1:-1;
+      surveyStairs(K,x,z,0,-dx,stone,teal);
+    }
     if (kind === 'bloom') { for (let ring = 0; ring < 5; ring++) { const n2 = 6 + ring * 6, r2 = ring * 3.4; for (let k = 0; k < n2; k++) { const a = k / n2 * 6.283 + ring * .3; add(new THREE.CylinderGeometry(1.9, 1.9, .6, 6).rotateX(-.25 * ring).translate(x + Math.cos(a) * r2, 8 - ring * 1.3, z + Math.sin(a) * r2), ring % 2 ? violet : K.glow(0x60d0f0, 2.2)); } }   // hex petals, rising to a lit heart
       S(2, gold, x, 10, z, 1, 1, 1, 10); K.light(x, 14, z, 0xb070ff, 1.4, 90, .05); }
     if (kind === 'pylons') { const tops = []; for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283, px = x + Math.cos(a) * 14, pz = z + Math.sin(a) * 14, h = 18 + (k % 3) * 5; add(new THREE.CylinderGeometry(.8, 1.6, h, 4).translate(px, h / 2 + 1.5, pz), crystal); add(new THREE.OctahedronGeometry(1.8).translate(px, h + 3, pz), white); tops.push(new THREE.Vector3(px, h + 3, pz)); }
@@ -6316,7 +6688,7 @@ UNDER_BUILD['Crystal Pavilion Hedgemaze'] = (g, area, R) => {
   const cells = [...seen]; for (let q = 0; q < 6; q++) { const k = cells[((q + .5) / 6 * cells.length) | 0], [x, z] = at(Math.floor(k / 1000), k % 1000); K.light(x, 22, z, 0x60f0ff, 1.6, 130, .03); }
   // ---- the maze alive (Oct 24 pass): walls that rise out of the floor and sink away again, so the way through keeps changing; formulas drifting
   // over the passages like thoughts; and at the heart beams of light from every pillar up to the floating maze, with rings orbiting the nest
-  { const links = [...open].map(s2 => s2.split(':').map(Number)).filter(([k1, k2]) => { const i = Math.floor(k1 / 1000), j = k1 % 1000, a = Math.floor(k2 / 1000), b = k2 % 1000; return !inHeart(i, j) && !inHeart(a, b) && !inCh(i, j) && !inCh(a, b); });
+  { const links = [...open].map(s2 => s2.split(':').map(Number)).filter(([k1, k2]) => { const i = Math.floor(k1 / 1000), j = k1 % 1000, a = Math.floor(k2 / 1000), b = k2 % 1000; return k1 < k2 && !inHeart(i, j) && !inHeart(a, b) && !inCh(i, j) && !inCh(a, b); });
     const seam = K.glow(0x60f0ff, 3);
     for (let n = 0; n < 10 && links.length; n++) { const [k1, k2] = links[Math.floor((n + .5) / 10 * links.length)], [x1, z1] = at(Math.floor(k1 / 1000), k1 % 1000), [x2, z2] = at(Math.floor(k2 / 1000), k2 % 1000);
       const wx = (x1 + x2) / 2, wz = (z1 + z2) / 2, alongZ = Math.abs(x2 - x1) > 1, q = quarter(wx, wz), mat = q === 1 ? glassW : q === 2 ? hexW : q === 3 ? obsW : stone, cap = q === 2 ? violet : q === 3 ? gold : q === 1 ? frameW : crystal;
@@ -7708,7 +8080,7 @@ setTimeout(async () => {
   const local = await terrainCache.get();
   let packed = null;
   if (!local) {
-    try { const {loadPackedTerrain} = await import('./terrain-pack.js?v=2'); packed = await loadPackedTerrain(terrainCache.key,NX,NZ,DX,DZ); }
+    try { const {loadPackedTerrain} = await import('./terrain-pack.js?v=3'); packed = await loadPackedTerrain(terrainCache.key,NX,NZ,DX,DZ); }
     catch { /* The procedural sculpt also works without packaged terrain. */ }
   }
   const cache = local || packed; if (cache) loading.textContent = 'Raising the campus…';

@@ -1,13 +1,13 @@
 // Lossless prebakes use the same fingerprint as the local terrain cache.
 // A new sculpt, an unavailable file, or a slow connection uses the procedural path.
 const packs = {
-  "w1388357448-184586-480": [
-    "campus-480-3fa06bdbec86.bin.gz",
-    4264049
+  "w842810943-185677-480": [
+    "campus-480-4a8251300d6f.bin.gz",
+    4273029
   ],
-  "w1388357448-184586-880": [
-    "campus-880-46351726de05.bin.gz",
-    13672138
+  "w842810943-185677-880": [
+    "campus-880-ec74182b21d8.bin.gz",
+    13706473
   ]
 };
 export async function loadPackedTerrain(key, nx, nz, dx, dz) {
