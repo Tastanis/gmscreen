@@ -13,6 +13,8 @@ import {createSheetLive} from '../../../../character_sheet/parts/sheet-live.js';
 import {noteResourceLevel} from './resource-levels.js';
 // The hero's passives (the sheet's features) on the ability bar too (Brandon, November 10, 2026).
 import {PASSIVE_TRAY_CATEGORY, heroPassives} from './hero-passives.js';
+// The actions every creature has (Charge, Knockback, Catch Breath...), added after the hero's own (universal-actions.js).
+import {heroUniversalActions, universalActionsData} from './universal-actions.js';
 // A test dummy's panel goes by its own id (test-dummy.mjs): what it spends and takes stays on the dummy token.
 import {isDummyId} from './test-dummy.mjs';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
@@ -650,13 +652,22 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       renderActiveSheet();
       return;
     }
+    // Another hero's sheet is not kept under this hero's name: until this one's arrives there is none, so nothing
+    // can draw the old one meanwhile, and the next regular read puts this one up even if this load fails.
+    if (isNewCharacter) activeSheet = null;
     // Selection summaries also refresh the already selected token. Keep its
     // usable card and disclosure state while the same sheet is revalidated.
     if (isNewCharacter || !activeSheet) setLoading(token.name || characterId);
 
     try {
       const sheet = await fetchCharacterSummary(routes, characterId);
-      if (requestId !== activeRequestId || activeCharacterId !== characterId || readEpoch !== sheetReadEpoch) {
+      if (requestId !== activeRequestId || activeCharacterId !== characterId) {
+        return;
+      }
+      // Still this hero, but a save finished while this was being read (it may be older than the save): read again
+      // now. Left alone, the panel stayed on "Loading…" with no ability tray until the next regular read.
+      if (readEpoch !== sheetReadEpoch) {
+        refreshActiveSheet({ force: true });
         return;
       }
       if (!isNewCharacter && pendingResourceSave === characterId) return;
@@ -669,9 +680,16 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       }
     } catch (error) {
       console.warn('[VTT] Failed to load character summary', error);
-      if (requestId === activeRequestId) {
-        setError();
+      if (requestId !== activeRequestId) return;
+      // The hero already shown, read again only to stay current (any selection update does it): one failed read
+      // leaves what is shown, tray and all. It used to put up "Unable to load" and take the ability tray away, and
+      // the regular read never brought them back while the sheet itself had not changed (the tray "disappeared ...
+      // even when clicked on a character", Brandon, November 25, 2026: the host was refusing requests that night).
+      if (!isNewCharacter && activeSheet) {
+        renderActiveSheet();
+        return;
       }
+      setError();
     }
   }
 
@@ -714,8 +732,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       if (!result || result.success === false) {
         throw new Error(result?.error || 'Failed to sync hero token');
       }
-      activeSheet.hero.heroTokens = normalizeHeroTokens(result.heroTokens);
-      renderActiveSheet();
+      if (activeSheet?.hero) {   // none while another hero's sheet is on its way (the click was on the last one's)
+        activeSheet.hero.heroTokens = normalizeHeroTokens(result.heroTokens);
+        renderActiveSheet();
+      }
       const heroChannel = getHeroTokenSyncChannel();
       if (heroChannel) {
         heroChannel.postMessage({ type: 'hero-token-sync', heroTokens: result.heroTokens });
@@ -1025,6 +1045,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   window.setInterval(() => refreshActiveSheet(), CHARACTER_SHEET_SYNC_INTERVAL_MS);
+  // The universal actions arrive a moment after the page: an open tray is drawn again with them.
+  document.addEventListener('vtt:universal-actions-loaded', () => { if (activeSheet) renderCurrentAbilityTray(); });
 
   document.addEventListener('vtt:token-selection-summary', (event) => {
     const detail = event?.detail ?? {};
@@ -1642,7 +1664,9 @@ function renderAbilityList(category, actions, opts = {}) {
     <div class="vtt-character-ability-list" role="menu" aria-label="${escapeAttribute(category.heading)}">
       <div class="vtt-character-ability-list__heading">${escapeHtml(category.heading)}</div>
       ${actions.length
-        ? actions.map((action, index) => renderAbilityItem(action, category.key, index, { activeToken })).join('')
+        ? actions.map((action, index) => (action?._universal && !actions[index - 1]?._universal
+          ? '<div class="vtt-character-ability-list__heading vtt-character-ability-list__heading--universal">Universal</div>'
+          : '') + renderAbilityItem(action, category.key, index, { activeToken })).join('')
         : `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`}
     </div>
   `;
@@ -2852,9 +2876,15 @@ function getAbilityActions(sheet, categoryKey, opts = {}) {
   const freeStrikes = Array.isArray(actions.freeStrikes) ? actions.freeStrikes : [];
   const activeToken = opts.activeToken || null;
   let merged = baseList;
+  // The universal actions come last in their tab, under their own heading (renderAbilityList). A hero whose sheet
+  // already has an ability of the same name (a class's own Knockback, say) keeps the sheet's and is not given a second.
+  const own = new Set([...list, ...freeStrikes].map((action) => String(action?.name || '').trim().toLowerCase()).filter(Boolean));
+  const universal = heroUniversalActions(universalActionsData(), categoryKey, sheet).filter((action) => !own.has(action.name.trim().toLowerCase()));
   if (categoryKey === 'mains') {
     // Free strikes share the Main Action tab in the panel.
-    merged = [...baseList, ...freeStrikes];
+    merged = [...baseList, ...freeStrikes, ...universal];
+  } else if (categoryKey === 'maneuvers') {
+    merged = [...baseList, ...universal];
   } else if (categoryKey === 'triggers') {
     // Opportunity attack: when the active token has the built-in opp-attack
     // trigger ready, the melee free strike appears at the top of the

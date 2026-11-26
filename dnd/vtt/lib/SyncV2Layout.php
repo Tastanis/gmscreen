@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/SyncV2CompiledParts.php';
+
 /**
  * Where a Sync V2 world is kept inside the database file.
  *
@@ -31,6 +33,8 @@ final class SyncV2Layout
     private const STORED_APART = ['__storedApart' => true];
     /** After a carry-over that could not be made, it is not tried again for this long. */
     private const RETRY_AFTER_MS = 600000;
+    /** How many dated safety copies of the database are left beside it (writeDatedCopy). */
+    private const DATED_COPIES_KEPT = 3;
     private const FROZEN_MESSAGE = 'This world is kept in the split layout now; its old row cannot be changed. Reload the page.';
 
     private PDO $pdo;
@@ -41,12 +45,22 @@ final class SyncV2Layout
     private ?array $partsKnown = null;
     /** [sceneId][part] => true for every part row in the table; null when not known. */
     private ?array $partRows = null;
+    /** The large design parts, ready-unpacked where this PHP can hold them (SyncV2CompiledParts). */
+    private SyncV2CompiledParts $compiled;
 
     public function __construct(PDO $pdo, string $worldId, string $databasePath)
     {
         $this->pdo = $pdo;
         $this->worldId = $worldId;
         $this->databasePath = $databasePath;
+        // With no path (the read-back check in SyncV2Store) every part is unpacked from its text.
+        $this->compiled = new SyncV2CompiledParts($databasePath, $worldId);
+    }
+
+    /** A stored part's text as its array: from the compiled copy when there is one, else unpacked here. */
+    private function unpackPart(string $sceneId, string $part, string $json): array
+    {
+        return $this->compiled->unpack($sceneId, $part, $json, fn (string $text): array => $this->decode($text));
     }
 
     /** Run once vtt_world_state exists. */
@@ -160,7 +174,7 @@ final class SyncV2Layout
                         // Never carry on without a design: movement rules read a missing design as "no walls".
                         throw new RuntimeException("A stored part of a scene's design is missing ({$sceneId}, {$name}).");
                     }
-                    $decoded = $this->decode($json);
+                    $decoded = $this->unpackPart((string) $sceneId, (string) $name, $json);
                     $state['sceneConfig'][$sceneId]['environment'][$name] = $decoded;
                     $read[(string) $sceneId][(string) $name] = $decoded;
                 }
@@ -418,6 +432,16 @@ final class SyncV2Layout
             @unlink($partial);
             throw $error;
         }
+        // A carry-over that keeps failing after its copy was written is tried again every ten minutes, and every
+        // try writes another whole copy of the database. The newest three copies are kept, so that cannot fill
+        // the disk; in ordinary use there is one copy and nothing is removed.
+        $copies = glob($directory . DIRECTORY_SEPARATOR . $stem . '.before-split-*.sqlite') ?: [];
+        usort($copies, static fn (string $a, string $b): int => (filemtime($a) <=> filemtime($b)) ?: strcmp($a, $b));
+        foreach (array_slice($copies, 0, max(0, count($copies) - self::DATED_COPIES_KEPT)) as $old) {
+            if ($old !== $final) {
+                @unlink($old);
+            }
+        }
         return basename($final);
     }
 
@@ -475,7 +499,7 @@ final class SyncV2Layout
                     );
                     $json = $this->encode($entry);
                     $upsert->execute(['world_id' => $this->worldId, 'scene_id' => $scene, 'part' => $part, 'state_json' => $json]);
-                    $kept[$scene][$part] = $this->decode($json);
+                    $kept[$scene][$part] = $this->unpackPart($scene, $part, $json);
                 }
             }
         }
@@ -489,6 +513,7 @@ final class SyncV2Layout
                 }
                 $delete ??= $this->pdo->prepare('DELETE FROM vtt_state_parts WHERE world_id = :world_id AND scene_id = :scene_id AND part = :part');
                 $delete->execute(['world_id' => $this->worldId, 'scene_id' => (string) $scene, 'part' => (string) $part]);
+                $this->compiled->drop((string) $scene, (string) $part);
             }
         }
         $statement = $this->pdo->prepare(

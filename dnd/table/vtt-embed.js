@@ -187,6 +187,8 @@
     if (showBtn) { const here = !!st.playerSceneId && st.playerSceneId === openSceneId(), t = here ? 'Players see this' : 'Show players';
       if (showBtn.textContent !== t) showBtn.textContent = t; showBtn.classList.toggle('on', here); showBtn.hidden = !openSceneId(); showBtn.title = here ? 'The players see this scene' : 'Show this scene to the players'; }
     fight.hidden = !st.combat; if (st.combat) fight.textContent = `Round ${st.round} · ${st.turn || ''}`;
+    // The heroes' turns show green, the Director's red (vtt-embed.css .te-fight.heroes).
+    fight.classList.toggle('heroes', st.combat && st.turnSide === 'ally');
     const startBtn = fightBar.querySelector('[data-c="start"]');
     if (startBtn) { const t = st.combat ? 'End combat' : 'Start combat'; if (startBtn.textContent !== t) startBtn.textContent = t; startBtn.classList.toggle('on', st.combat); }
     const roundBtn = fightBar.querySelector('[data-c="round"]'); if (roundBtn) roundBtn.hidden = !st.combat;
@@ -237,7 +239,7 @@
     } catch (_) { /* board not ready */ }
     return {
       scene: ($('#active-scene-name')?.textContent || '').trim(), level: $('[data-map-level-nav]')?.hidden === false ? levelName() : '',
-      combat, round: combat ? Number($('[data-round-value]')?.textContent) || 1 : 0, turn: ($('[data-turn-indicator]')?.textContent || '').trim(),
+      combat, round: combat ? Number($('[data-round-value]')?.textContent) || 1 : 0, turn: ($('[data-turn-indicator]')?.textContent || '').trim(), turnSide: $('[data-turn-indicator]')?.dataset.turnSide || '',
       waiting: [...doc.querySelectorAll('[data-combat-tracker-waiting] [data-combatant-id], [data-combat-tracker-waiting] > *')].length,
       malice: pips, trackerShown: !!$('.vtt-board__tracker.te-show'), heroes, gm,
       chatOpen: !!$('#chat-panel:not(.chat-panel--closed)'),

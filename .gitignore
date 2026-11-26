@@ -43,6 +43,7 @@ pnpm-lock.yaml
 /dnd/vtt/storage/sync-v2.sqlite-wal
 /dnd/vtt/storage/*.sqlite*
 /dnd/vtt/storage/*.lock
+/dnd/vtt/storage/compiled-parts/
 
 # Schedule data
 /dnd/schedule/data/schedules.json

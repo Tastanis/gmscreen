@@ -936,6 +936,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
   let renderedPlacements = [];
+  // What vision was hiding when the tokens were last drawn (outOfSightSignature, below).
+  let renderedSightSignature = '';
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
@@ -3539,6 +3541,17 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }, 400);
   });
+  // The same for anything else that covers or uncovers the board's right side (a drawer on the Table): both the End
+  // Turn box and the player's Start Turn button follow it. Only a change on the right moves them, so a box the user
+  // dragged somewhere stays there while a left panel opens.
+  let turnButtonsCoveredRight = null;
+  document.addEventListener('vtt:free-area', (event) => {
+    const right = Number(event?.detail?.right) || 0;
+    if (right === turnButtonsCoveredRight) return;
+    turnButtonsCoveredRight = right;
+    if (activeTurnDialog?.overlay) positionTurnPromptOverlay(activeTurnDialog.overlay);
+    if (activePlayerTurnStartOverlay?.element) positionPlayerTurnStartOverlay(activePlayerTurnStartOverlay.element);
+  });
   // When ability automation mutates a character sheet (e.g. resourceGain
   // adjusts the resource bar), invalidate the local sheet cache and ask the
   // panel to re-fetch so the change shows up live.
@@ -4030,7 +4043,7 @@ export function mountBoardInteractions(store, routes = {}) {
           // built-in opportunity-attack sentinel (which has its own UX).
           if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
             const tokenName = tokenLabel(getPlacementFromStore(entry.tokenId)) || 'Token';
-            window.dashboardChat.sendMessage({
+            sendBoardChat({
               message: `${tokenName}: "${entry.abilityName}" is READY${triggerCauseText(eventType, payload)}. Use it from ${tokenName}'s abilities to resolve it.${entry.condition ? ` (${entry.condition})` : ''}`,
               type: 'text',
             }).catch(() => {});
@@ -4119,7 +4132,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (result && details.length > 1) result = { ...result, detail: details.join('; ') };
     if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
       const detail = result?.detail ? `: ${result.detail}` : '.';
-      window.dashboardChat.sendMessage({
+      sendBoardChat({
         message: `${tokenLabel(sourcePlacement) || 'Token'} - "${entry.abilityName}" trigger auto-resolved${detail}`,
         type: 'text',
       }).catch(() => {});
@@ -4573,7 +4586,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function sayInChat(message) {
-    try { window.dashboardChat?.sendMessage?.({ message, type: 'text' })?.catch?.(() => {}); } catch (error) { /* chat not open */ }
+    try { sendBoardChat({ message, type: 'text' })?.catch?.(() => {}); } catch (error) { /* chat not open */ }
   }
 
   async function offerMaintainPersistentAbility(used = {}) {
@@ -5978,7 +5991,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetText = affected.length
       ? affected.map((p) => tokenLabel(p)).filter(Boolean).join(', ')
       : 'no targets';
-    window.dashboardChat.sendMessage({
+    sendBoardChat({
       message: `${automation.abilityName || 'Aura'} aura (${tokenLabel(owner)}): ${targetText} - ${detail}.`,
       type: 'text',
     }).catch(() => {});
@@ -6216,7 +6229,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function scheduleZoneEndPrompts() {
-    if (isGmUser()) queueMicrotask(() => { try { maybePromptZoneEnds(); } catch (error) { console.warn('[VTT] zone end popup', error); } });
+    queueMicrotask(() => { try { maybePromptZoneEnds(); } catch (error) { console.warn('[VTT] zone end popup', error); } });
   }
 
   function escapeZoneText(value) {
@@ -6270,7 +6283,7 @@ export function mountBoardInteractions(store, routes = {}) {
     removed.forEach(zone => persistentZoneRuntime.delete(zone.id));
     if (window.dashboardChat?.sendMessage) {
       const reasonText = reason ? ` (${reason})` : '';
-      window.dashboardChat.sendMessage({
+      sendBoardChat({
         message: `Persistent zone ended: ${removed.map(zone => zone.abilityName).join(', ')}${reasonText}.`,
         type: 'text',
       }).catch(() => {});
@@ -6312,7 +6325,7 @@ export function mountBoardInteractions(store, routes = {}) {
     persistBoardStateSnapshot({}, ops);
     scheduleZoneEndPrompts();
     if (removedCount && window.dashboardChat?.sendMessage) {
-      window.dashboardChat.sendMessage({
+      sendBoardChat({
         message: `${removedCount} persistent zone${removedCount === 1 ? '' : 's'} cleared${reason ? ` (${reason})` : ''}.`,
         type: 'text',
       }).catch(() => {});
@@ -6708,7 +6721,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (effect.kind === 'note' || effect.kind === 'other') {
         const text = String(effect.text || '').trim();
         if (text && window.dashboardChat?.sendMessage) {
-          window.dashboardChat.sendMessage({
+          sendBoardChat({
             message: `${abilityName} (${reason}): ${text}`,
             type: 'text',
           }).catch(() => {});
@@ -6794,7 +6807,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetText = affected.length
       ? affected.map((p) => tokenLabel(p)).filter(Boolean).join(', ')
       : 'no targets';
-    window.dashboardChat.sendMessage({
+    sendBoardChat({
       message: `${zone.abilityName} ticks (${zone.ownerName}'s turn): ${targetText} — ${detail}.`,
       type: 'text',
     }).catch(() => {});
@@ -7166,7 +7179,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
     if (window.dashboardChat?.sendMessage) {
-      window.dashboardChat.sendMessage({
+      sendBoardChat({
         message: `${type === 'judgment' ? 'Judgment' : 'Mark'} ended${target ? ` on ${tokenLabel(target)}` : ''}${reason ? ` (${reason})` : ''}.`,
         type: 'text',
       }).catch(() => {});
@@ -7188,7 +7201,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
     if (window.dashboardChat?.sendMessage) {
-      window.dashboardChat.sendMessage({
+      sendBoardChat({
         message: `All marks cleared${reason ? ` (${reason})` : ''}.`,
         type: 'text',
       }).catch(() => {});
@@ -7385,9 +7398,19 @@ export function mountBoardInteractions(store, routes = {}) {
       ?.catch?.((error) => console.warn('[VTT] maintained area could not be ended', error));
   }
 
-  // ---------- a zone's time is up (Brandon, October 2026: ask the Director first) ----------
-  // Zones with askBeforeEnd: false go at once. The others are marked `endDue` on their owner's token; the
-  // Director's page asks "Remove / Keep" (one popup for all that ran out together). Keep leaves the zone as it was.
+  // ---------- a zone's time is up (Brandon, October 2026: ask first) ----------
+  // Zones with askBeforeEnd: false go at once. The others are marked `endDue` on their owner's token, and one page
+  // asks "Remove / Keep" (one popup for all that ran out together). Keep leaves the zone as it was.
+  // Who is asked (Brandon, November 25, 2026: Indigo's fire ends at the start of her turn, "but the popup always shows
+  // up for the GM. It should be hers if she cast it. It's only mine if I was taking her turn"): this runs on the page
+  // of whoever is running the turn. When that is the Director, the Director. Otherwise the hero's own player. If that
+  // player has not answered after a while (not at the table), the Director is asked after all.
+  const ZONE_END_DIRECTOR_AFTER_MS = 25000;
+  function zoneEndAsker(casterId) {
+    const running = normalizeProfileId(getCurrentUserId());
+    if (isGmUser()) return running;
+    return getLinkedProfileUserIdForPlacement(casterId) || running;
+  }
   async function endPersistentZonesByTime(zones, reason) {
     const list = (Array.isArray(zones) ? zones : []).filter((zone) => zone?.id && !zone.endDue);
     if (!list.length) return true;
@@ -7403,9 +7426,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (ask.length) {
       const at = Date.now();
       byCaster(ask).forEach((ids, casterId) => {
+        const askUserId = zoneEndAsker(casterId);
         updatePlacementById(casterId, (target) => {
           const records = Array.isArray(target.persistentZones) ? target.persistentZones : [];
-          target.persistentZones = records.map((record) => (record && ids.includes(record.id) ? { ...record, endDue: { reason, at } } : record));
+          target.persistentZones = records.map((record) => (record && ids.includes(record.id) ? { ...record, endDue: { reason, at, ...(askUserId ? { askUserId } : {}) } } : record));
         });
       });
       scheduleZoneEndPrompts();
@@ -7416,9 +7440,25 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const promptedZoneEnds = new Set();
   let zoneEndPromptOpen = false;
+  let zoneEndRecheck = null;
   function maybePromptZoneEnds() {
-    if (!isGmUser() || zoneEndPromptOpen) return;
-    const due = getActivePersistentZones().filter((zone) => zone?.endDue && !promptedZoneEnds.has(`${zone.id}|${zone.endDue.at}`));
+    if (zoneEndPromptOpen) return;
+    const me = normalizeProfileId(getCurrentUserId()), gm = isGmUser(), now = Date.now();
+    let wait = Infinity;
+    const due = getActivePersistentZones().filter((zone) => {
+      if (!zone?.endDue || promptedZoneEnds.has(`${zone.id}|${zone.endDue.at}`)) return false;
+      const asked = normalizeProfileId(zone.endDue.askUserId);
+      if (!asked) return gm;                 // marked by a page from before this: the Director, as it was
+      if (asked === me) return true;
+      if (!gm) return false;
+      const left = (Number(zone.endDue.at) || 0) + ZONE_END_DIRECTOR_AFTER_MS - now;
+      if (left <= 0) return true;            // its player has not answered: the Director after all
+      wait = Math.min(wait, left);
+      return false;
+    });
+    if (Number.isFinite(wait) && !zoneEndRecheck && typeof window !== 'undefined') {
+      zoneEndRecheck = window.setTimeout(() => { zoneEndRecheck = null; try { maybePromptZoneEnds(); } catch (error) { console.warn('[VTT] zone end popup', error); } }, wait + 250);
+    }
     if (!due.length) return;
     due.forEach((zone) => promptedZoneEnds.add(`${zone.id}|${zone.endDue.at}`));
     zoneEndPromptOpen = true;
@@ -9054,7 +9094,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const droppedOn = window.vtt3d?.active ? window.vtt3d.clientToMap(event.clientX, event.clientY) : null;
-    const levelId = (droppedOn?.surfaceId && typeof droppedOn.levelId === 'string' ? droppedOn.levelId : null) || getActiveTokenPlacementLevelId(state);
+    // The token belongs to what it was dropped on: a floor's own level, or the ground. Dropped on the ground it used
+    // to take the level the Director's Height control was on; with that on an upper floor the creature stood on the
+    // ground filed under the upper floor, and every player below that floor had it cut from view until the Director
+    // moved it (a move files it under what it lands on). Brandon, November 25, 2026: "a monster token that none of
+    // the players could see for a really long time. Eventually when I moved it, it became visible again".
+    const levelId = (typeof droppedOn?.levelId === 'string' && droppedOn.levelId ? droppedOn.levelId : null) || getActiveTokenPlacementLevelId(state);
     if (levelId) {
       placement.levelId = levelId;
     }
@@ -9575,6 +9620,26 @@ export function mountBoardInteractions(store, routes = {}) {
   // The same point with the height of what is drawn under the pointer ({x, y, height}), for what a click puts down.
   function getLocalMapPointAt(event) {
     return getLocalMapPoint(event);
+  }
+
+  // A ping on a token (Alt + click on it; the 3D board hands it here, its tokens are not inside the map surface):
+  // the middle of the squares it stands on, at the height it stands at. Alt + right click is the Director's "everyone
+  // look here", as on the ground. True when a ping was made.
+  function pingToken(id, event) {
+    const point = pingPointForToken(id);
+    return point ? mapPings.handleMapPing(event, { focus: event?.button === 2 && isGmUser(), point }) : false;
+  }
+  function pingPointForToken(id) {
+    const placement = id ? normalizePlacementForRender(getPlacementFromStore(id)) : null;
+    if (!placement) return null;
+    const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+    const offsets = viewState.gridOffsets ?? {};
+    const height = window.terrainPrototype?.groundFor?.(getPlacementFromStore(id));
+    return {
+      x: (Number(offsets.left) || 0) + (placement.column + placement.width / 2) * gridSize,
+      y: (Number(offsets.top) || 0) + (placement.row + placement.height / 2) * gridSize,
+      height: Number.isFinite(height) ? height : 0,
+    };
   }
 
   function getLocalMapPoint(event, {standingOn = null} = {}) {
@@ -11088,6 +11153,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     renderedPlacements = [];
     const gmViewing = isGmUser();
+    try { renderedSightSignature = outOfSightSignature(); } catch (error) { renderedSightSignature = ''; }
 
     const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
     const offsets = view?.gridOffsets ?? {};
@@ -11268,6 +11334,7 @@ export function mountBoardInteractions(store, routes = {}) {
       clearTokenMapLevelVisibilityMask(token);
       applyTokenLevelPresentation(token, presentation);
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden) || isOffPlayerToken(normalized) || hasInvisibleCondition(placement));
+      paintDeadMark(token, normalized.dead === true);
 
       if (normalized.imageUrl) {
         let img = token.querySelector('img.vtt-token__image');
@@ -12535,7 +12602,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // "...who starts its turn in blood": the zone is tested now, each turn, where the bearer is.
       const verdict = riderZoneVerdict(rider, zoneTagsForPlacement(combatantId, { adjacent: Boolean(rider.zone?.adjacent) }));
       if (verdict.skip) {
-        window.dashboardChat?.sendMessage?.({
+        sendBoardChat({
           message: `${tokenLabel(placement)} is not ${verdict.where}: ${condition.sourceAbility || condition.label || condition.name} does nothing at the ${boundary}.`,
           type: 'text',
         })?.catch?.(() => {});
@@ -13462,10 +13529,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const boardRect = document.querySelector('.vtt-board__canvas-wrapper')?.getBoundingClientRect?.();
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
     const top = boardRect && Number.isFinite(boardRect.top) ? boardRect.top + margin : margin;
-    const right =
-      boardRect && Number.isFinite(boardRect.right) && viewportWidth
-        ? Math.max(margin, viewportWidth - boardRect.right + margin)
-        : margin;
+    // What covers the board's right side moves the buttons out with it: the chat, and on the Table a drawer opened on
+    // the right (board-free-area.js --vtt-free-right). Brandon, November 25, 2026: "when a tab on the right is out, the
+    // end turn buttons and start turn buttons should move out with the tab so that you can see them".
+    const covered = Number.parseFloat(window.getComputedStyle?.(document.documentElement)?.getPropertyValue('--vtt-free-right')) || 0;
+    const right = Math.max(
+      margin,
+      boardRect && Number.isFinite(boardRect.right) && viewportWidth ? viewportWidth - boardRect.right + margin : margin,
+      covered + margin
+    );
 
     overlay.style.top = `${Math.max(margin, top)}px`;
     overlay.style.right = `${right}px`;
@@ -14154,6 +14226,22 @@ export function mountBoardInteractions(store, routes = {}) {
     return team;
   }
 
+  // Every chat line the board writes itself goes through here: what an ability, a zone, a trigger, a push or the start
+  // of a turn did. It is worked out on the page of whoever started the turn or dealt the damage, and chat showed that
+  // player's name over it as if they had said it. The board is named as the speaker instead (chat_handler.php keeps
+  // whose page sent it). Always a promise: false when the chat is not there.
+  const BOARD_CHAT_SPEAKER = 'Table';
+  function sendBoardChat(options = {}) {
+    const chat = typeof window !== 'undefined' ? window.dashboardChat : null;
+    if (!chat || typeof chat.sendMessage !== 'function') return Promise.resolve(false);
+    try {
+      return Promise.resolve(chat.sendMessage({ ...options, speaker: options.speaker ?? BOARD_CHAT_SPEAKER }));
+    } catch (error) {
+      console.warn('[VTT] A board line could not be sent to chat', error);
+      return Promise.resolve(false);
+    }
+  }
+
   function announceToChat(message) {
     if (!message || typeof window === 'undefined') {
       return;
@@ -14163,7 +14251,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!chat || typeof chat.sendMessage !== 'function') {
         return;
       }
-      const result = chat.sendMessage({ message });
+      const result = sendBoardChat({ message });
       if (result && typeof result.catch === 'function') {
         result.catch((error) => {
           console.warn('[VTT] Failed to send chat message', error);
@@ -15009,6 +15097,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
       if (turnIndicator) {
         const indicatorLabel = getTurnIndicatorLabel();
+        // Whose side it is, for the colour: the heroes' turns are green, the Director's red (Brandon, November 25, 2026).
+        const side = indicatorLabel
+          ? (indicatorLabel === TURN_INDICATOR_GM_TEXT || indicatorLabel === TURN_INDICATOR_ENEMY_PICK_TEXT ? 'enemy' : 'ally')
+          : '';
+        if (side) turnIndicator.dataset.turnSide = side; else delete turnIndicator.dataset.turnSide;
         if (indicatorLabel) {
           turnIndicator.textContent = indicatorLabel;
           turnIndicator.hidden = false;
@@ -15138,10 +15231,24 @@ export function mountBoardInteractions(store, routes = {}) {
   // Cover / line of effect from one token to another, by the walls of the map (cover-check.mjs). Kept for a moment:
   // the roll window asks every second.
   const coverMemo = new Map();
+  // An answer is kept for exactly what it was worked out from: where each of the two stands (square, floor, what holds
+  // it up, how it moves, its size) and which walls and ground were in force. The walls are named by the model itself as
+  // well as its revision: a scene just opened can have the same revision number as the one before it, and an answer
+  // worked out against the old walls then stood for the new scene until one of the two tokens changed square.
+  const coverModelIds = new WeakMap();
+  let coverModelCount = 0;
+  const coverModelStamp = (model) => {
+    if (!model || typeof model !== 'object') return 0;
+    if (!coverModelIds.has(model)) coverModelIds.set(model, ++coverModelCount);
+    return coverModelIds.get(model);
+  };
+  const coverStanding = (token) => [token.id, token.column, token.row, token.flightHeight ?? null, token.levelId ?? null,
+    token._supportSurfaceId ?? null, token._floorTraversal ? 1 : 0, token.movementMode ?? null, token.width ?? 1, token.height ?? 1];
   function coverBetween(actor, target) {
     if (!actor || !target) return { fraction: 1, covered: false, noLineOfEffect: false };
     const walls = window.wallPrototype?.model;
-    const key = JSON.stringify([actor.id, actor.column, actor.row, actor.flightHeight ?? null, target.id, target.column, target.row, target.flightHeight ?? null, window.wallPrototype?.revision ?? 0, window.terrainPrototype?.revision ?? 0]);
+    const key = JSON.stringify([coverStanding(actor), coverStanding(target), getActiveSceneId(), coverModelStamp(walls),
+      window.wallPrototype?.revision ?? 0, window.terrainPrototype?.revision ?? 0, window.terrainPrototype?.fieldVersion ?? 0, window.terrainPrototype?.flightRevision ?? 0]);
     const kept = coverMemo.get(key);
     if (kept) return kept;
     let result = { fraction: 1, covered: false, noLineOfEffect: false };
@@ -16023,6 +16130,18 @@ export function mountBoardInteractions(store, routes = {}) {
     return canPlayerMovePlacement(placement);
   }
 
+  // A push by hand (Ctrl held: a forced move). A player cannot move a creature that is not theirs, but may push one
+  // (Brandon, November 25, 2026: "they can't move a token, but if they hold for a push, it allows that type of
+  // movement"). Never a token hidden from them. The server has the same rule (SyncV2Store playerMayPushPlacement).
+  function canCurrentUserPushPlacement(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return false;
+    }
+    return isGmUser() || !normalizePlacementForRender(placement)?.hidden;
+  }
+  const mayMoveAs = (placement, movementKind) => canCurrentUserMovePlacement(placement)
+    || (movementKind === 'forced' && canCurrentUserPushPlacement(placement));
+
   function normalizeProfileId(value) {
     if (typeof value !== 'string') {
       return null;
@@ -16738,7 +16857,7 @@ export function mountBoardInteractions(store, routes = {}) {
         ? `each minion gains ${applied.join(', ')} while the captain has Stamina.`
         : (byHand.length ? 'nothing the app applies by itself.' : 'the minions have no "With Captain" line, so nothing changes.');
       const manual = byHand.length ? ` Apply by hand: ${byHand.join('; ')}.` : '';
-      window.dashboardChat?.sendMessage?.({
+      sendBoardChat({
         message: `${captainName} is now captain of the ${squadName} squad: ${gains}${manual}`,
         type: 'text',
       })?.catch?.(() => {});
@@ -16910,7 +17029,7 @@ export function mountBoardInteractions(store, routes = {}) {
         hitName,
       });
       // The pop-up is seen only by whoever dealt the damage; the chat line tells the table.
-      window.dashboardChat?.sendMessage?.({
+      sendBoardChat({
         message: `${hitName}'s squad takes ${amount}: ${hit.kills} minion${hit.kills === 1 ? ' drops' : 's drop'} (${hit.standing} of ${squad.initialMemberCount} left, squad Stamina ${hit.current}/${squad.maxPool}).`,
         type: 'text',
       })?.catch?.(() => {});
@@ -17061,7 +17180,7 @@ export function mountBoardInteractions(store, routes = {}) {
     redrawAfterRuleChange();
     const label = tokenLabel(placement) || 'The creature';
     showConditionBanner(rule.banner || `${label} rises again!`, { tone: 'danger' });
-    window.dashboardChat?.sendMessage?.({ message: `${label} - ${key}: back to ${setStamina} Stamina${names.length ? `, ${names.join(', ')}` : ''}.`, type: 'text' })?.catch?.(() => {});
+    sendBoardChat({ message: `${label} - ${key}: back to ${setStamina} Stamina${names.length ? `, ${names.join(', ')}` : ''}.`, type: 'text' })?.catch?.(() => {});
     return true;
   }
 
@@ -19694,6 +19813,30 @@ export function mountBoardInteractions(store, routes = {}) {
     return !isGmUser() && hasInvisibleCondition(placement) && !canCurrentUserMovePlacement(placement);
   }
 
+  // Which creatures vision is hiding just now, as one string ('' with vision off).
+  function outOfSightSignature() {
+    const test = typeof window !== 'undefined' ? window.vttSightTest : null;
+    if (!test?.on || !Array.isArray(test.viewerIds) || !test.viewerIds.length) return '';
+    return getPlacementsForActiveScene().filter((placement) => isOutOfSightForViewer(placement)).map((placement) => placement.id).sort().join(',');
+  }
+  // What the tokens were last drawn with. Who is out of sight was only worked out when the tokens were drawn again,
+  // and nothing drew them again when the walls or the ground they were worked out from changed afterwards (a scene's
+  // walls arrive a frame after its tokens; a door opens; a floor is edited): a creature in plain view could stay
+  // hidden until something else on the board changed. With vision on, it is looked at again every few seconds, and
+  // every half minute worked out afresh; the tokens are drawn again only when the answer is different.
+  let sightChecks = 0;
+  if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+    window.setInterval(() => {
+      if (!window.vttSightTest?.on || document.hidden || !tokenLayer || !viewState.mapLoaded) return;
+      if (++sightChecks % 10 === 0) coverMemo.clear();
+      let now = '';
+      try { now = outOfSightSignature(); } catch (error) { return; }
+      if (now === renderedSightSignature) return;
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      notifyCoordinateView();
+    }, 3000);
+  }
+
   function isOffPlayerToken(placement) {
     const profile = getCharacterSheetProfileIdForPlacement(placement);
     return Boolean(profile) && !ACTIVE_PLAYER_USER_IDS.includes(profile);
@@ -20658,7 +20801,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (payload.text) chatLines.push(payload.text);
     if (window.dashboardChat?.sendMessage) {
       try {
-        await window.dashboardChat.sendMessage({ message: chatLines.join('\n'), type: 'text' });
+        await sendBoardChat({ message: chatLines.join('\n'), type: 'text' });
       } catch (_) {
         // Chat write failures are non-fatal — the damage already applied.
       }
@@ -21571,6 +21714,23 @@ export function mountBoardInteractions(store, routes = {}) {
   function clearPickedAutomationTargetsSoon(delay = 1800) {
     window.clearTimeout(pickedAutomationTargetsTimer);
     pickedAutomationTargetsTimer = window.setTimeout(() => setPickedAutomationTargets([]), delay);
+  }
+
+  // A body (placement.dead, set by the Director in token settings): a skull over the token. The red ring at its base
+  // is drawn on the board itself (board3d/layers/token-footprints.mjs).
+  const DEAD_MARK_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path class="vtt-token__dead-skull" d="M32 5C17.6 5 7 15.4 7 29c0 8.2 3.9 14.4 9.5 18.3V54a4 4 0 0 0 4 4h3.3v-6.5h4.4V58h7.6v-6.5h4.4V58h3.3a4 4 0 0 0 4-4v-6.7C53.1 43.4 57 37.2 57 29 57 15.4 46.4 5 32 5z"/><path class="vtt-token__dead-holes" d="M21.5 22.5a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4zm21 0a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4zM32 36.5l-4.6 8.2h9.2z"/></svg>';
+  function paintDeadMark(token, dead) {
+    token.classList.toggle('vtt-token--dead', dead);
+    let mark = token.querySelector(':scope > .vtt-token__dead-mark');
+    if (dead) {
+      if (!mark) {
+        mark = document.createElement('span');
+        mark.className = 'vtt-token__dead-mark';
+        mark.title = 'Dead or unconscious';
+        mark.innerHTML = DEAD_MARK_SVG;
+        token.appendChild(mark);
+      }
+    } else mark?.remove();
   }
 
   // A picked target: a red ring and its number over it (renderTokens paints it again after a redraw).
@@ -23204,6 +23364,14 @@ export function mountBoardInteractions(store, routes = {}) {
         <div class="vtt-token-settings__section">
           <div class="vtt-token-settings__row">
             <label class="vtt-token-settings__toggle">
+              <input type="checkbox" data-token-settings-toggle="dead" />
+              <span>Dead or unconscious (a body)</span>
+            </label>
+          </div>
+        </div>
+        <div class="vtt-token-settings__section">
+          <div class="vtt-token-settings__row">
+            <label class="vtt-token-settings__toggle">
               <input type="checkbox" data-token-settings-toggle="hidden" />
               <span>Hidden from Players</span>
             </label>
@@ -23422,6 +23590,7 @@ export function mountBoardInteractions(store, routes = {}) {
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
       hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
+      deadToggle: element.querySelector('[data-token-settings-toggle="dead"]'),
       visibleToPlayersRow: element.querySelector('[data-token-settings-visible-row]'),
       visibleToPlayersToggle: element.querySelector('[data-token-settings-toggle="visibleToPlayers"]'),
       sizeSelect: element.querySelector('[data-token-settings-size-select]'),
@@ -23682,6 +23851,22 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         restoreHitPointsInputValue();
         hitPointsEditSession = null;
+      });
+    }
+
+    // The Director marks a body: everyone sees a skull on the token and a red ring at its base, so nobody keeps
+    // attacking it (Brandon, November 25, 2026). Only a mark; nothing else about the token changes.
+    if (menu.deadToggle) {
+      menu.deadToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const dead = menu.deadToggle.checked;
+        updatePlacementById(activeTokenSettingsId, (target) => {
+          target.dead = dead;
+        });
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        refreshTokenSettings();
       });
     }
 
@@ -24461,6 +24646,9 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.hpField.classList.toggle('is-disabled', !canShowHitPointValues || !showHp);
     }
 
+    if (tokenSettingsMenu.deadToggle) {
+      tokenSettingsMenu.deadToggle.checked = placement.dead === true;
+    }
     if (tokenSettingsMenu.triggeredToggle) {
       tokenSettingsMenu.triggeredToggle.checked = Boolean(placement.showTriggeredAction);
     }
@@ -28256,7 +28444,7 @@ function createTemplateTool() {
     const placements = getPlacementsForActiveScene().filter(p => (isGmUser() || (!isAutomationPlacementHidden(p) && !isInvisibleToViewer(p))) && !isOutOfSightForViewer(p)).map(p => {
       const effective = tokenMovementRuntime?.getEffectivePlacement?.(sceneId, p.id) ?? p;
       // An off player's token is drawn as a hidden one (the GM sees it faded); so is an invisible one, for the GM.
-      return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) || (isGmUser() && hasInvisibleCondition(p)) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
+      return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) || (isGmUser() && hasInvisibleCondition(p)) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), canPush: canCurrentUserPushPlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
     });
     return {
       sceneId, placements, selectedIds: [...selectedTokenIds], user: { ...state.user }, isGM: isGmUser(),
@@ -28323,11 +28511,11 @@ function createTemplateTool() {
     return {placementId:coordinatePreview.id,...destination,waypoints:points.slice(1,-1)};
   }
 
-  function previewCoordinateMovement({ placementId, column, row, surfaceElevation, levelId=null, surfaceId=null, rampId=null } = {}) {
+  function previewCoordinateMovement({ placementId, column, row, surfaceElevation, levelId=null, surfaceId=null, rampId=null, movementKind=null } = {}) {
     if (coordinateMovePending || pendingAutomationTarget || pendingAutomationArea || pendingAutomationMove
       || !Number.isFinite(column) || !Number.isFinite(row)) { endCoordinateMovementPreview(); return false; }
     const original = coordinatePlacement(placementId), sceneId = getActiveSceneId();
-    if (!original || !canCurrentUserMovePlacement(original) || keyboardMovementQueue.busy()) { endCoordinateMovementPreview(); return false; }
+    if (!original || !mayMoveAs(original, movementKind) || keyboardMovementQueue.busy()) { endCoordinateMovementPreview(); return false; }
     if (coordinatePreview && (coordinatePreview.id !== placementId || coordinatePreview.sceneId !== sceneId)) endCoordinateMovementPreview();
     if (!coordinatePreview) {
       const start = measurementPointFromToken(original);
@@ -28380,7 +28568,7 @@ function createTemplateTool() {
     if (!Number.isFinite(column) || !Number.isFinite(row) || !Array.isArray(waypoints) || waypoints.length > 128
       || waypoints.some(p => !Number.isFinite(p?.column) || !Number.isFinite(p?.row))) throw new TypeError('Movement requires finite canonical coordinates.');
     const sceneId = getActiveSceneId(), original = coordinatePlacement(placementId);
-    if (!sceneId || !original || !canCurrentUserMovePlacement(original)) return { accepted: false, reason: 'not-permitted' };
+    if (!sceneId || !original || !mayMoveAs(original, movementKind)) return { accepted: false, reason: 'not-permitted' };
     if (keyboardMovementQueue.busy()) {
       holdForOpenQuestion();
       return { accepted: false, reason: 'movement-pending' };
@@ -28407,7 +28595,7 @@ function createTemplateTool() {
         :start&&end?window.terrainPrototype?.stairRoute?.(start,end,original,movementKind):null;
       if(corners?.length)waypoints=corners.map(p=>({column:p.column+original.column-start.column,row:p.row+original.row-start.row}));
     }
-    const members = selectedTokenIds.has(placementId) ? [...selectedTokenIds].map(coordinatePlacement).filter(p => p && canCurrentUserMovePlacement(p)) : [original];
+    const members = selectedTokenIds.has(placementId) ? [...selectedTokenIds].map(coordinatePlacement).filter(p => p && mayMoveAs(p, movementKind)) : [original];
     const originalPositions = new Map(members.map(p => [p.id, JSON.parse(JSON.stringify(p))]));
     const deltaColumn = destination.column - original.column, deltaRow = destination.row - original.row;
     const moves = members.map(p => ({ placementId: p.id, ...clampPlacementToBounds(p.column + deltaColumn, p.row + deltaRow, p.width || 1, p.height || 1) }));
@@ -28462,6 +28650,7 @@ function createTemplateTool() {
     },
     select: selectCoordinatePlacement,
     previewMovement: previewCoordinateMovement,
+    pingToken,
     captureMovementPreview: captureCoordinateMovementPreview,
     endMovementPreview: endCoordinateMovementPreview,
     move: moveFromCoordinates,

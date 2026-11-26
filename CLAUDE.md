@@ -21,6 +21,112 @@ The campaign vault entry point is `Guides/Dungeon-Alchemist-Map-Import.md` under
 `C:/Users/tasta/Desktop/Claude Work/Claude DND/Obsidian DND/Claude dnd`.
 Keep technical instructions in the gmscreen guide; vault instructions link to it.
 
+## Host load: repeated reads (November 24, 2026 incident)
+
+The site is on shared hosting with a limit of 65 processes. During play the account hit that limit
+again and again and the host answered 522. Anything a page asks for on a timer must follow these rules:
+
+- **A read only reads.** A GET (or `chat_fetch`, `chat_test_state`, inventory `load`) never rewrites a
+  data file. Clean-up of expired entries happens on the next real change (see `ping-api.php`).
+- **A read lets go of the session.** PHP keeps the session file locked until the request ends, so one
+  slow request queues every other request from that player. Repeated reads call `session_write_close()`
+  as soon as they know who is asking: `vttSyncV2AuthContext()` for every `api/v2` GET, and the same
+  line in `chat_handler.php`, `character_sheet/handler.php`, `inventory_handler.php` and the two campus
+  map APIs. Requests that change something keep the session to their end; do not release it for those
+  unless the change is guarded by its own file lock (the campus map APIs are).
+- **A board change takes that person's turn, not the session** (Build 652). Every non-GET under `api/v2` lets go
+  of the session too, then waits on `storage/turn-<sha1 of the user>.lock` (`vttSyncV2TakeChangeTurn`): one person's
+  changes are still made one at a time, and their reads no longer queue behind a slow command. Session first, then
+  the turn; never the other way round.
+- **A change is one locked read, alter, write.** `withPingLock(true, ...)`, `withOverlayLock(...)`.
+- **One read out at a time per feed, with back-off.** Campus map: `sharedFeed` in `map3d/index.php`.
+  Table: `pollRead` in `table-apps.js`. Board: `recovery-polling.js`. A bare `setInterval(fetch)` is not
+  allowed for a new feed. Build 652 closed the old ones that still were: vision (`sight-test.mjs`), the sheet's
+  hero tokens (`character_sheet/app.js`), the Projects page's revision (`campaign.js`), and the heroes' Stamina,
+  now read one sheet after another instead of all at once (`token-library.js` `readStaminaInTurn`).
+- **"Seen here" is written once a second at most** (`SyncV2Store::touchPresence`). Who is here is still
+  anyone seen in the last five seconds; do not raise `PRESENCE_REFRESH_MS` without re-checking that.
+
+What the host's access log showed for that evening (read November 25): about 1,200 requests a minute at the peak
+from six browsers, thirteen separate "has anything changed?" timers and no runaway loop. One request in flight is
+two processes (Apache and PHP), so about 32 fit. The pile-ups were one browser's timers stacking up behind a
+request of its own that held the session: up to 94 open from one browser, nearly all from feeds with no guard.
+The slow holders were board commands (half over 0.75 s, the slowest 25 s) and chat requests.
+Still open: the number of requests itself (every embedded page runs its own chat panel; the board's hero panel
+asks `action=live` every 1.6 s) and deploying during play (the 9:02 pm deploy). The 241 MB of `sync-v2.sqlite`
+(snapshots 114 MB, ledger 90 MB) stops growing with Build 653; the file only shrinks with a VACUUM.
+
+Tests: `dnd/vtt/api/v2/tests/hosting-load.test.php`, `dnd/strixhaven/map3d/tests/shared-feeds.test.mjs` and
+`dnd/vtt/assets/js/ui/__tests__/one-read-at-a-time.test.mjs`.
+
+## What a board command costs, and what is cleaned up (Build 653)
+
+From the host's log and a copy of the live database (November 25, 2026): a board command took about half a second
+with nothing in its way, whatever its kind (a 460-byte ping as long as a token change). The cost is fixed: every
+command reads the whole world, 5.8 MB of JSON then, and writes the 1.8 MB light row back.
+
+- **Design parts come ready-unpacked** (`lib/SyncV2CompiledParts.php`, used by `SyncV2Layout::unpackPart`). Each
+  large part (ground, walls) is also kept as a PHP file in `storage/compiled-parts/`, named for its text, and
+  loaded from opcache instead of being unpacked. It returns exactly what `json_decode` returned; where opcache is
+  off, or does not keep files between requests, it switches itself off and the text is unpacked as before. One file
+  is written or compiled per request, at its end. The folder may be deleted at any time.
+  Before a release that touches it, run `php dnd/vtt/tools/check-compiled-parts.php <copy of sync-v2.sqlite>`.
+- **Every answered command writes down where its time went**: `storage/command-times.log` (kind and milliseconds
+  for `store`, `publish` and `total`, and how many large parts came ready-unpacked; the newest quarter megabyte,
+  `includes/capped-log.php`) and a `Server-Timing` header. Read it after a session before choosing the next step.
+  Checked on a copy of the live database (November 25): all 19 parts identical; unpacking them took 58 ms on a
+  desktop against 15 ms for the light row, so on the host the parts are perhaps a quarter of a command's 490 ms.
+- **Still to do if commands must be faster**, in the order the log should decide: the call to Pusher that a command
+  waits for before it answers (answer first, publish after); and the light row (`vtt_state_main`), which holds
+  every scene's tokens and is unpacked, packed, written and unpacked again by every command (keeping each scene's
+  tokens in a row of their own changes the layout, so it needs a carry-over like the split had).
+- **The command ledger is trimmed** (`SyncV2Store::pruneOperations`): the newest `operation_retention` rows (5,000)
+  are kept, older ones go 300 at a time when a snapshot is taken. Never fewer than `event_retention`. The numbering
+  of the rows is used and no row is opened: do not replace it with a count or a scan, which would read the table.
+- **Also capped**: session backups of monsters, templates and dashboard characters (two, as their comments always
+  said); the schedule's three logs (`schedule/log-line.php`, a quarter megabyte); dated `before-split` database
+  copies (three).
+- **Left alone on purpose**: uploaded pictures and maps, the builder's saved characters (they are the user's own),
+  `vtt_snapshots` (20, never read by the site, about 6 MB each), and the two small tables that record collision
+  damage and zone entries (a few rows a session; deleting them would let an old claim be made twice).
+
+Tests: `api/v2/tests/compiled-parts.test.php`, `operation-ledger.test.php`, `growing-files.test.php`, and the
+timings line in `hosting-load.test.php`.
+
+## Table fixes after the November 24, 2026 session (Build 651)
+
+Brandon's list of sixteen. Where each one lives, for whoever touches it next:
+
+- **Pings show in the dark.** A ping's beam is drawn in the board's signal pass (`scene-view.mjs` `signalScene`),
+  after vision has blacked out what the heroes cannot see. Anything else that must show through vision goes there.
+  Alt + click on a token pings the token's own square (`bridge.pingToken`; 3D tokens are not inside the map surface).
+- **A body.** `placement.dead` (Director only, token settings "Dead or unconscious"): a skull on the token
+  (`paintDeadMark`) and a red ring at its base (`layers/token-footprints.mjs`, `TOKEN_LOOKS.body`).
+- **Universal actions.** One file, `dnd/character_sheet/ability-automation/universal-actions.json`, added to every
+  hero's tray and (those marked for monsters) every monster's by `assets/js/ui/universal-actions.js`. Nothing is
+  written into sheets or stat blocks. Anything that spends a Recovery is `"for": ["heroes"]`.
+- **Chat.** Every line the board writes goes through `sendBoardChat` and is shown under "Table"
+  (`speaker` in `chat_handler.php`); `user` still records whose page sent it. Do not call
+  `window.dashboardChat.sendMessage` from `board-interactions.js`.
+- **Measure tool (hold M).** Right click drops a corner; Z + wheel drops a corner and raises the end a square a
+  notch (`drag-ruler.js` `addMeasureToolNode`, `nudgeMeasureHeight`). Z + wheel also lifts a held token.
+- **Turn buttons** follow `--vtt-free-right` (`board-free-area.js` fires `vtt:free-area`). **Turn indicator**:
+  `data-turn-side` on `[data-turn-indicator]`, green for the heroes.
+- **A creature in plain view stayed hidden.** Three causes closed: a dropped token takes the floor it was dropped on;
+  the players' Height cut goes by where a creature on foot stands (`standingLevel`); the sight check's kept answers
+  name the wall model, and with vision on it is looked at again every 3 seconds.
+- **An area's time is up.** Asked of whoever runs the turn's hero: `endDue.askUserId` (`zoneEndAsker`), the
+  Director after 25 seconds unanswered.
+- **Pushing.** A player may force-move (Ctrl) a creature that is not theirs and nothing else
+  (`mayMoveAs`, `SyncV2Store::playerMayPushPlacement`). The ruler says the squares really moved and the damage.
+- **Move counter**: a page label beside the held token (`placeRouteLabel`), not a sprite under it.
+- **Ability tray**: a failed re-read of the hero already shown leaves the tray up.
+- **Weakness**: the larger of the same type counts and both stay listed. That was already so; `"stacks": true`
+  on an effect is the only thing that adds.
+
+Tests: `assets/js/ui/__tests__/table-fixes-2026-11-25.test.mjs`, `api/v2/tests/table-fixes-2026-11-25.test.php`,
+`character_sheet/ability-automation/__tests__/universal-actions.test.mjs`.
+
 ## Version System
 
 ### Overview

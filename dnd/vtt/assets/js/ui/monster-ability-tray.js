@@ -67,10 +67,23 @@
         return preview;
     }
 
+    // The stat block's own abilities, then the actions every creature has that a monster can use (Knockback, Grab,
+    // Charge, Defend...; none that spends a Recovery): universal-actions.js. One the stat block already has by name
+    // is not added a second time.
     function abilitiesFor(monster, categoryKey) {
-        if (!monster || !monster.abilities || typeof monster.abilities !== 'object') return [];
-        var list = monster.abilities[categoryKey];
-        return Array.isArray(list) ? list : [];
+        if (!monster || typeof monster !== 'object') return [];
+        var list = monster.abilities && typeof monster.abilities === 'object' ? monster.abilities[categoryKey] : null;
+        var own = Array.isArray(list) ? list : [];
+        var universal = [];
+        try {
+            universal = window.VTTUniversalActions ? window.VTTUniversalActions.forMonster(categoryKey, monster) : [];
+        } catch (error) {
+            universal = [];
+        }
+        if (!universal.length) return own;
+        var names = {};
+        own.forEach(function (ability) { names[String((ability && ability.name) || '').trim().toLowerCase()] = true; });
+        return own.concat(universal.filter(function (ability) { return !names[String(ability.name || '').trim().toLowerCase()]; }));
     }
 
     function hasAutomation(ability) {
@@ -98,10 +111,13 @@
             : [];
         var rowsHtml = category.abilities.map(function (ability, index) {
             var automated = hasAutomation(ability);
+            var universalHeading = ability && ability.universal && !(category.abilities[index - 1] && category.abilities[index - 1].universal)
+                ? '<div class="vtt-character-ability-list__heading vtt-character-ability-list__heading--universal">Universal</div>'
+                : '';
             var meta = summarizeAbility(ability, categoryKey);
             var triggerId = getMonsterAbilityTriggerId(categoryKey, ability);
             var isReadyTrigger = triggerId && ready.indexOf(triggerId) !== -1;
-            return '<button type="button" role="menuitem" ' +
+            return universalHeading + '<button type="button" role="menuitem" ' +
                 'class="vtt-character-ability-item vtt-monster-ability-item' +
                     (automated ? ' vtt-character-ability-item--automated vtt-monster-ability-item--automated' : '') +
                     (isReadyTrigger ? ' vtt-character-ability-item--trigger-ready vtt-monster-ability-item--trigger-ready' : '') + '" ' +
@@ -504,6 +520,11 @@
         state.activeCategory = null;
         render();
     }
+
+    // The universal actions arrive a moment after the page: an open tray is drawn again with them.
+    document.addEventListener('vtt:universal-actions-loaded', function () {
+        if (state.monster) render();
+    });
 
     // Re-render when this monster's trigger-ready state changes so the ready
     // highlight appears/clears without reselecting the token. Pull a fresh

@@ -29,6 +29,19 @@ export const TOKEN_LOOKS = Object.freeze({
   maxSquarePx: 110,
   unitBoost: 1.25,        // bars a quarter bigger than on the flat board (Brandon, October 2026)
  }),
+ // Brandon, November 25, 2026: a way to mark a token "as unconscious or like dead. Maybe a big skull symbol or
+ // something on it and a red ring around its base ... so I can show where bodies are". The ring round a body's base
+ // (layers/token-footprints.mjs); radii are fractions of half the creature's width.
+ body: Object.freeze({
+  show: true,
+  ringColor: '#e11d2f',
+  ringOpacity: 0.92,
+  ringInner: 0.96,
+  ringOuter: 1.2,
+  ringEdgeColor: '#2a0508',   // a dark line either side, so the red reads on red or bright ground
+  ringEdgeOpacity: 0.7,
+  ringEdge: 0.035,
+ }),
 });
 
 const num = (value, fallback, lo, hi) => { const n = Number(value); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback; };
@@ -36,7 +49,7 @@ const color = (value, fallback) => typeof value === 'string' && /^#[0-9a-f]{3}([
 
 /** TOKEN_LOOKS with `overrides` (same shape, any part) merged in; bad values fall back to the defaults. */
 export function tokenLookSettings(overrides = globalThis.window?.vttTokenLooks) {
- const d = TOKEN_LOOKS, f = overrides?.footprint || {}, s = overrides?.tokenScreen || {};
+ const d = TOKEN_LOOKS, f = overrides?.footprint || {}, s = overrides?.tokenScreen || {}, b = overrides?.body || {};
  const minSquarePx = num(s.minSquarePx, d.tokenScreen.minSquarePx, 4, 400);
  return {
   footprint: {
@@ -54,6 +67,16 @@ export function tokenLookSettings(overrides = globalThis.window?.vttTokenLooks) 
    minSquarePx,
    maxSquarePx: num(s.maxSquarePx, d.tokenScreen.maxSquarePx, minSquarePx, 1000),
    unitBoost: num(s.unitBoost, d.tokenScreen.unitBoost, 0.25, 4),
+  },
+  body: {
+   show: typeof b.show === 'boolean' ? b.show : d.body.show,
+   ringColor: color(b.ringColor, d.body.ringColor),
+   ringOpacity: num(b.ringOpacity, d.body.ringOpacity, 0, 1),
+   ringInner: num(b.ringInner, d.body.ringInner, 0.1, 2),
+   ringOuter: num(b.ringOuter, d.body.ringOuter, 0.2, 2.5),
+   ringEdgeColor: color(b.ringEdgeColor, d.body.ringEdgeColor),
+   ringEdgeOpacity: num(b.ringEdgeOpacity, d.body.ringEdgeOpacity, 0, 1),
+   ringEdge: num(b.ringEdge, d.body.ringEdge, 0, 0.3),
   },
  };
 }

@@ -185,7 +185,8 @@ if (count($backup_files) > 50) {
 
 // Log the save action
 $log_entry = date('Y-m-d H:i:s') . " - User: $user, Character: $character, Week: $week, Day: $day, Block: $block, Length: " . strlen($value) . " chars\n";
-file_put_contents('data/save_log.txt', $log_entry, FILE_APPEND | LOCK_EX);
+require_once __DIR__ . '/log-line.php';
+scheduleLogLine('data/save_log.txt', $log_entry);
 
 // Return success
 echo json_encode(array(

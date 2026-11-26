@@ -29,6 +29,9 @@ require_once __DIR__ . '/SyncV2Layout.php';
 
 final class SyncV2Store
 {
+    /** How fresh a "seen here" mark must be for touchPresence to leave it as it is. Well inside the five seconds. */
+    private const PRESENCE_REFRESH_MS = 1000;
+
     private array $playerCharacterUserIds;
     /** id => words a token's name may carry to be that player's (PlayerRoster::aliases). */
     private array $playerAliases;
@@ -39,6 +42,10 @@ final class SyncV2Store
     private int $eventRetention;
     private int $snapshotInterval;
     private int $snapshotRetention;
+    /** How many of the newest accepted commands the ledger keeps (pruneOperations). */
+    private int $operationRetention;
+    /** The most ledger rows removed in one go: a first clean-up of years of rows is spread over many commands. */
+    private const OPERATION_PRUNE_BATCH = 300;
     private ?array $snapshotCache = null;
     private ?int $snapshotDataVersion = null;
     /** Where the world is kept in the file, and how it is read and written (SyncV2Layout). */
@@ -51,7 +58,8 @@ final class SyncV2Store
         string $worldId = 'default',
         int $eventRetention = 1000,
         int $snapshotInterval = 100,
-        int $snapshotRetention = 20
+        int $snapshotRetention = 20,
+        int $operationRetention = 5000
     ) {
         $this->playerCharacterUserIds = PlayerRoster::playerIds();
         $this->playerAliases = PlayerRoster::aliases();
@@ -84,6 +92,9 @@ final class SyncV2Store
         $this->eventRetention = max(1, $eventRetention);
         $this->snapshotInterval = max(1, $snapshotInterval);
         $this->snapshotRetention = max(2, min(200, $snapshotRetention));
+        // Never fewer than the events kept: an event still on file names its command, and that command's row must
+        // be there to answer a repeat of it (the events table refuses the same command twice).
+        $this->operationRetention = max($this->eventRetention, $operationRetention);
         $this->initializeSchema();
     }
 
@@ -115,6 +126,25 @@ final class SyncV2Store
         if ($actorId === '') {
             return;
         }
+        $now = $this->nowMilliseconds();
+        // Whoever was seen in the last five seconds is here (resolvePromptRecipient). A mark made within the last
+        // second already says so, and writing it again would take the database's one write lock, which every
+        // command and every other page's sync also needs. So a fresh mark is only read: a page asking twice a
+        // second, or two pages of the same player, write once a second between them. A mark is still never older
+        // than the time between a page's requests plus that one second.
+        $seen = $this->pdo->prepare(
+            'SELECT is_gm, last_seen FROM vtt_presence
+             WHERE world_id = :world_id AND user_id = :user_id'
+        );
+        $seen->execute(['world_id' => $this->worldId, 'user_id' => $actorId]);
+        $row = $seen->fetch();
+        $seen->closeCursor();
+        if (is_array($row) && (int) $row['is_gm'] === ($isGm ? 1 : 0)) {
+            $age = $now - (int) $row['last_seen'];
+            if ($age >= 0 && $age < self::PRESENCE_REFRESH_MS) {
+                return;
+            }
+        }
         $statement = $this->pdo->prepare(
             'INSERT INTO vtt_presence (world_id, user_id, is_gm, last_seen)
              VALUES (:world_id, :user_id, :is_gm, :last_seen)
@@ -126,7 +156,7 @@ final class SyncV2Store
             'world_id' => $this->worldId,
             'user_id' => $actorId,
             'is_gm' => $isGm ? 1 : 0,
-            'last_seen' => $this->nowMilliseconds(),
+            'last_seen' => $now,
         ]);
     }
 
@@ -2134,7 +2164,10 @@ final class SyncV2Store
             $current = $state['placements'][$normalized['sceneId']][$normalized['entityId']] ?? null;
             if (!is_array($current)) return $this->rollbackConflict('placement_missing', $snapshot);
             if (!$isGm) {
-                if (!$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot move this token.');
+                if (!$this->playerMayMovePlacement($current)
+                    && !$this->playerMayPushPlacement($current, $normalized['movementKind'], $normalized['forcedDestination'], $normalized['undoRevision'])) {
+                    throw new InvalidArgumentException('You cannot move this token.');
+                }
                 foreach (($state['sceneConfig'][$normalized['sceneId']]['mapLevels']['levels'] ?? []) as $level) {
                     if (($level['id'] ?? null) === $this->placementLevelId($current) && ($level['hidden'] ?? false) === true) {
                         throw new InvalidArgumentException('You cannot move a token on a hidden floor.');
@@ -2624,6 +2657,21 @@ final class SyncV2Store
     }
 
     /**
+     * A push by hand. A player cannot move a creature that is not theirs, but may force-move one (Brandon,
+     * November 25, 2026: "non GM users cannot push enemy tokens. Their abilities can do it but not the normal
+     * pushes. Let's say they can't move a token, but if they hold for a push, it allows that type of movement").
+     * Only a forced move with its destination stated, as every hand push sends; never the undo of a move, and
+     * never a token hidden from players.
+     */
+    public function playerMayPushPlacement(array $placement, $movementKind, $forcedDestination, $undoRevision = null): bool
+    {
+        return !$this->placementIsHidden($placement)
+            && $movementKind === 'forced'
+            && is_array($forcedDestination)
+            && $undoRevision === null;
+    }
+
+    /**
      * Return ordered events after a revision, or a canonical snapshot when
      * the caller's gap predates retention or exceeds the response limit.
      */
@@ -2713,6 +2761,7 @@ final class SyncV2Store
             'eventRetention' => $this->eventRetention,
             'snapshotInterval' => $this->snapshotInterval,
             'snapshotRetention' => $this->snapshotRetention,
+            'operationRetention' => $this->operationRetention,
             'storage' => $this->storage->status(),
         ];
     }
@@ -4021,6 +4070,7 @@ final class SyncV2Store
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
             'metadata', 'authorId', 'authorRole', 'authorIsGm',
+            'dead',   // the Director's mark on a body
         ];
         foreach (array_keys($patch) as $field) {
             if (in_array((string) $field, $gmOnly, true)) {
@@ -4164,6 +4214,38 @@ final class SyncV2Store
         $prune->bindValue(':sub_world_id', $this->worldId, PDO::PARAM_STR);
         $prune->bindValue(':snapshot_limit', $this->snapshotRetention, PDO::PARAM_INT);
         $prune->execute();
+        $this->pruneOperations();
+    }
+
+    /**
+     * The ledger of accepted commands (vtt_operations) is what lets a command that arrives twice be answered once:
+     * a page that did not hear its answer sends the same command again and is given the first answer. A page only
+     * does that while it is open, so only the newest rows are ever asked for. Until Build 653 nothing removed the
+     * older ones: on November 25, 2026 the live file held every command since July, 12,447 rows and 90 MB.
+     *
+     * The newest `operationRetention` rows of the file are kept. A repeat of a command older than that is treated
+     * as a new command, and the revision checks every command already passes decide it.
+     *
+     * Rows are numbered in the order they were written, so "older than the newest N" is worked out from the two
+     * ends of the numbering and never opens a row (a row's JSON sits in the same pages as its number: counting or
+     * scanning them would read the whole table). It runs when a snapshot is taken, inside that command's
+     * transaction, and removes at most OPERATION_PRUNE_BATCH rows. The file does not shrink: the freed pages are
+     * used again by the rows that follow.
+     */
+    private function pruneOperations(): void
+    {
+        $newest = $this->pdo->query('SELECT MAX(rowid) FROM vtt_operations')->fetchColumn();
+        $oldest = $this->pdo->query('SELECT MIN(rowid) FROM vtt_operations')->fetchColumn();
+        if ($newest === null || $newest === false || $oldest === null || $oldest === false) {
+            return;
+        }
+        $last = min((int) $newest - $this->operationRetention, (int) $oldest + self::OPERATION_PRUNE_BATCH - 1);
+        if ($last < (int) $oldest) {
+            return;
+        }
+        $statement = $this->pdo->prepare('DELETE FROM vtt_operations WHERE rowid <= :last');
+        $statement->bindValue(':last', $last, PDO::PARAM_INT);
+        $statement->execute();
     }
 
     private function pruneEvents(int $currentRevision): void

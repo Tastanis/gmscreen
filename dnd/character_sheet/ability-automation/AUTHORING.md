@@ -13,6 +13,18 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 
 ---
 
+## Universal actions
+
+The main actions and maneuvers every creature has (Charge, Defend, Heal, Aid Attack, Catch Breath, Escape Grab, Grab,
+Hide, Knockback, Make or Assist a Test, Search for Hidden Creatures, Stand Up, Use Consumable) are one file,
+`universal-actions.json` in this folder. The map adds them to every hero's ability tray after the hero's own, and the
+ones marked `"for": [..., "monsters"]` to every monster's. They are not written into any sheet or stat block: edit the
+file and everyone has the change at the next build. Each entry is `id`, `name`, `type` (`Main`, `Maneuver`; `Move` is
+kept for reference and not listed), `for`, `keywords`, `range`, `target`, an optional `roll` (the characteristics it
+may use and the three tier texts), `effect`, and an optional `automation` written exactly as on any other ability.
+Anything that spends a Recovery is for heroes only. A hero or monster that already has an ability of the same name
+keeps its own and is not given the universal one.
+
 ## Values, targets, rolls and maintained casts
 
 A recipe uses these fields on ordinary v3 cards. The ten Elementalist examples can be copied individually into a test ability’s automation editor. [Example recipes](../../ai-reference/vtt-json/elementalist-shared-hooks.json)

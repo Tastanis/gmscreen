@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_common.php';
 require_once __DIR__ . '/../../lib/SyncV2PusherTransport.php';
 
+$commandStartedAt = hrtime(true);
 try {
     if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
         vttSyncV2Respond(405, [
@@ -88,7 +89,7 @@ try {
         if ($placement === null) {
             vttSyncV2Respond(404, ['success' => false, 'error' => 'Placement not found.']);
         }
-        if (!vttSyncV2CanMovePlacement($auth, $sceneId, $placementId, $placement)) {
+        if (!vttSyncV2CanMovePlacement($auth, $sceneId, $placementId, $placement, is_array($command['payload'] ?? null) ? $command['payload'] : [])) {
             vttSyncV2Respond(403, ['success' => false, 'error' => 'You cannot move this token.']);
         }
         $result = vttSyncV2Store()->acceptTokenMove($command, (string) ($auth['user'] ?? ''), (bool) ($auth['isGM'] ?? false));
@@ -121,6 +122,7 @@ try {
         ]);
     }
 
+    $commandStoredAt = hrtime(true);
     $event = $result['event'] ?? null;
     if (is_array($event) && empty($result['idempotent'])) {
         $socketId = isset($command['socketId']) && is_string($command['socketId'])
@@ -144,11 +146,14 @@ try {
         }
     }
 
+    $commandPublishedAt = hrtime(true);
+
     $responseEvent = $event;
     if (is_array($event) && is_array($auth ?? null)) {
         $responseEvent = vttSyncV2ProjectEventForUser($event, $auth);
     }
 
+    vttSyncV2NoteCommandTime($type, $commandStartedAt, $commandStoredAt, $commandPublishedAt);
     vttSyncV2Respond(200, [
         'success' => true,
         'mode' => (

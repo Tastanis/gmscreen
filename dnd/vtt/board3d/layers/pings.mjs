@@ -23,7 +23,10 @@ const beamMaterial=(colour,strength,seed)=>new THREE.ShaderMaterial({
   '  gl_FragColor = vec4(uColour * (uAlpha * uStrength * soft * ray * v), 1.); }'].join('\n')});
 const ease=(a,b,t)=>{const k=Math.max(0,Math.min(1,(t-a)/(b-a)));return k*k*(3-2*k);};
 
-export function createPingsLayer({overlayHost,helpers,scene}){
+// The beam is drawn in the board's signal pass (scene-view.mjs signalScene), after vision has darkened what the
+// heroes cannot see: a ping shows in the dark, so players see where it is even when they cannot see what is there.
+export function createPingsLayer({overlayHost,helpers,scene:boardScene,signalScene}){
+ const scene=signalScene||boardScene;
  const live=new Set(),beams=new Set();let count=0,time=0;
  function beam(x,y,height,type){
   if(!scene)return;const colour=COLOURS[type]??COLOURS.ping,group=new THREE.Group();group.position.set(x,height,y);
@@ -47,7 +50,7 @@ export function createPingsLayer({overlayHost,helpers,scene}){
    for(const entry of [...beams]){const e=now-entry.started;if(e>BEAM_MS){drop(entry);continue;}
     const alpha=1-ease(BEAM_MS-BEAM_FADE_MS,BEAM_MS,e),reveal=1.2-1.4*ease(0,BEAM_DOWN_MS,e);
     for(const mesh of entry.parts){mesh.material.uniforms.uAlpha.value=alpha;mesh.material.uniforms.uReveal.value=reveal;mesh.material.uniforms.uTime.value=time;}}},
-  summary:()=>({live:live.size,pulses:count,beams:beams.size}),
+  summary:()=>({live:live.size,pulses:count,beams:beams.size,pass:scene?.name||''}),
   dispose(){for(const el of live)el.remove();live.clear();for(const entry of [...beams])drop(entry);if(window.vtt3dLayers?.pings===api)delete window.vtt3dLayers.pings;}};
  (window.vtt3dLayers??={}).pings=api;return api;
 }

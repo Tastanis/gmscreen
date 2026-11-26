@@ -393,6 +393,12 @@ function ciFail($message)
 
 $action = isset($_POST['action']) ? (string) $_POST['action'] : (isset($_GET['action']) ? (string) $_GET['action'] : '');
 
+// Reading the inventory (the open tab repeats it) only reads the session, so it lets go of it here and the same
+// player's other requests are not queued behind it. Every change keeps the session to its end, as before.
+if ($action === 'load' && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 // Lock a stable sibling file: the JSON destination is atomically replaced.
 // Hold through the whole request so independent edits read the latest inventory.
 $ciDirectory = dirname(CI_DATA_FILE);

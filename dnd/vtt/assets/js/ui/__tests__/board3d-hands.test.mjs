@@ -19,7 +19,9 @@ const board = readFileSync(new URL('../board-interactions.js', import.meta.url),
 test('hold Z and drag: up and down a square at a time, never below what is under it, saved on letting go', () => {
   assert.match(board3d, /if\(\(e\.key==='z'\|\|e\.key==='Z'\)&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey&&!typing\(e\.target\)\)\{zHeld=true;/, 'Z is held, but not while typing, and not Ctrl+Z');
   assert.match(board3d, /if\(zHeld&&p&&p\.canMove!==false&&!context\.busy\)\{cancelDrag\(\);if\(!context\.selectedIds\?\.includes\(id\)\)bridge\.select\(id\);board\.focus\(\{preventScroll:true\}\);startLift\(p,e\);return;\}/, 'a token this user may move, players included; first, even over a held token');
-  assert.match(board3d, /steps=Math\.round\(\(lift\.y-e\.clientY\)\/perSquare\);\s*lift\.z=steps\?Math\.max\(Math\.ceil\(lift\.floor-\.01\),Math\.round\(lift\.start\)\+steps\):lift\.start;/, 'up the screen is up; it stops at the floor below');
+  // November 25, 2026: the wheel with Z held adds whole squares to what the hand's movement gives.
+  assert.match(board3d, /steps=Math\.round\(\(lift\.y-\(lift\.lastY\?\?lift\.y\)\)\/perSquare\)\+\(lift\.wheel\|\|0\);\s*lift\.z=steps\?Math\.max\(Math\.ceil\(lift\.floor-\.01\),Math\.round\(lift\.start\)\+steps\):lift\.start;/, 'up the screen is up; it stops at the floor below');
+  assert.match(board3d, /if\(lift\)\{lift\.wheel=\(lift\.wheel\|\|0\)\+notches;moveLift\(null\);if\(lift\.from\)lift\.locked=lift\.z;showLift\(\);return true;\}/, 'Z held and the wheel: a square a notch, and that height is its waypoint');
   assert.match(board3d, /liftLabel\.textContent=\(up\?`\$\{up\} \$\{up===1\?'square':'squares'\} up`:'On the ground'\)/);
   assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;\s*if\(save&&z!==\(done\.saved\?\?done\.start\)\)\{try\{await bridge\.setHeight\?\.\(done\.id,z,\{landed:z<=done\.floor\+\.01\}\);\}/, 'nothing is sent when the height did not change; brought down to what is under it, it stands again');
   assert.match(board3d, /if\(lift&&e\.key==='Escape'\)\{e\.preventDefault\(\);e\.stopImmediatePropagation\(\);const from=lift\.from;endLift\(false\);if\(from\)cancelDrag\(\);return;\}/, 'Escape takes it back');
@@ -31,7 +33,7 @@ test('hold Z and drag: up and down a square at a time, never below what is under
 
 test('Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves (Build 521)', () => {
   assert.match(board3d, /zHeld=true;if\(!lift&&\(drag\|\|clickMoveTokenId\)\)liftHeld\(\);/, 'dragged or click-held');
-  assert.match(board3d, /if\(e\.key==='z'\|\|e\.key==='Z'\)\{zHeld=false;if\(lift\?\.from\)endLift\(true,true\);\}/, 'Z let go: sideways again');
+  assert.match(board3d, /if\(e\.key==='z'\|\|e\.key==='Z'\)\{zHeld=false;endMeasureHeightNudge\(\);if\(lift\?\.from\)endLift\(true,true\);\}/, 'Z let go: sideways again');
   // Brandon: lift it, right-click for a waypoint, let go of Z, and it is locked at that height and moves on from there.
   assert.match(board3d, /onRightClick:\(\)=>\{if\(lift\?\.from\)\{lockLift\(\);return true;\}/, 'a right-click while it goes up and down is a waypoint at that height');
   assert.match(board3d, /async function lockLift\(\)\{const done=lift;if\(!done\?\.from\)return false;done\.locked=done\.z;[\s\S]{0,120}await bridge\.setHeight\?\.\(done\.id,done\.z,\{landed:done\.z<=done\.floor\+\.01\}\);/, 'kept at once');
@@ -101,7 +103,9 @@ test('a held token is always put down by the next click (Build 520)', () => {
   assert.match(board3d, /if\(result\?\.accepted===false&&!\['unchanged','said'\]\.includes\(result\.reason\)\)\{const words=REFUSED\[result\.reason\]\|\|/);
   assert.match(board3d, /window\.UIKit\?\.toast\?\.\(words,'warning'\);/);
   // Nor does a click while the last move is still being saved.
-  assert.match(board3d, /async function commit\(hit,p,e,intent=null\)\{if\(!p\|\|p\.canMove===false\|\|context\.busy\)\{cancelDrag\(\);return;\}/);
+  // November 25, 2026: a creature that is not the player's own is still not moved, but may be pushed (Ctrl held).
+  assert.match(board3d, /const mayMove=\(p,e\)=>p\.canMove!==false\|\|\(movementKind\(e\)==='forced'&&p\.canPush!==false\);/);
+  assert.match(board3d, /async function commit\(hit,p,e,intent=null\)\{if\(!p\|\|!mayMove\(p,e\)\|\|context\.busy\)\{cancelDrag\(\);return;\}/);
 });
 
 test('opening another scene unloads the old one first (Build 523)', () => {

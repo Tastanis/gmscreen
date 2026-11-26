@@ -543,6 +543,13 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
+// A GET here only reads a sheet, and who is asking was read from the session above. It lets go of the session,
+// so the same player's other requests are not queued behind the reads every open page repeats. A POST keeps the
+// session to its end, as before, so one player's saves are still taken one at a time.
+if ($requestMethod === 'GET' && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 if (!in_array($action, array('operation-status', 'summary', 'load', 'live', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories', 'party-vitals'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }

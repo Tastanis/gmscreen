@@ -208,6 +208,11 @@ export function normalizePlacementEntry(entry) {
     normalized.tempStamina = tempStamina;
   }
 
+  // A body: the Director marked this token dead or unconscious (a skull on it, a red ring at its base).
+  if (entry.dead === true) {
+    normalized.dead = true;
+  }
+
   if (monsterId) {
     normalized.monsterId = monsterId;
   }

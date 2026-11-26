@@ -46,6 +46,7 @@ function deathRuleHarness(placement, { squad = false } = {}) {
     showConditionBanner: (text) => banners.push(text),
     tokenLabel: (p) => p?.name || '',
     window: {},
+    sendBoardChat: () => Promise.resolve(false),   // the board's own chat lines (no chat here)
     redrawAfterRuleChange: () => {},
   };
   const code = `${section('  function monsterPassivesOfKind(', '  // Uses that reset when combat ends')}; return { applyDeathRule, monsterPassivesOfKind };`;

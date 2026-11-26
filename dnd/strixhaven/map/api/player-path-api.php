@@ -27,6 +27,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'] ?? 'unknown';
 $isGM = ($user === 'GM');
 $sessionId = session_id();
+// Nothing below writes the session, so it is let go here: this player's other requests are not queued behind
+// a route read or a save waiting its turn at the overlay lock.
+session_write_close();
 $dataFile = __DIR__ . '/../data/player-path-overlay.json';
 $lockFile = __DIR__ . '/../data/player-path-overlay.lock';
 
@@ -232,7 +235,6 @@ function normalizeDifficulty($difficulty) {
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    session_write_close();
     $action = $_GET['action'] ?? 'get_state';
     if ($action !== 'get_state') {
         sendError(400, 'Invalid action');

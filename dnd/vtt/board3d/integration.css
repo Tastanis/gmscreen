@@ -25,6 +25,20 @@
    grabbed. The base's ring shows selection, so the box is not outlined; conditions sit above the head, under the bar. */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini { height: var(--vtt3d-height, var(--vtt3d-size, 36px)) !important; border-radius: 8px !important; filter: none !important; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-selected { outline: none !important; }
+/* The ruler's total, beside the token it is for (integration.mjs placeRouteLabel), over the tokens so a held token never covers it. */
+#vtt-board3d-overlay-host .vtt3d-route-total { position: absolute; z-index: 100005; transform: translateY(-50%); padding: 3px 9px; border-radius: 7px; background: rgba(17, 24, 39, .93); border: 1px solid rgba(255, 255, 255, .28); color: #fff; font: 800 15px/1.3 Inter, system-ui, sans-serif; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .55); }
+#vtt-board3d-overlay-host .vtt3d-route-total[data-side='left'] { transform: translate(-100%, -50%); }
+/* The compass (layers/compass.mjs): very small, bottom right of the board, above the distance readout shown while a
+   token is held; it moves in with whatever covers the board's right side. */
+.vtt3d-compass { position: absolute; right: calc(12px + var(--vtt3d-compass-in, 0px)); bottom: 88px; width: 44px; height: 44px; pointer-events: none; opacity: .92; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .55)); transition: right .2s ease; }
+.vtt3d-compass svg { display: block; width: 100%; height: 100%; }
+.vtt3d-compass__face { fill: rgba(22, 18, 13, .78); stroke: #c8a95e; stroke-width: 1.5; }
+.vtt3d-compass__north { fill: #e0483a; }
+.vtt3d-compass__south { fill: #d8d2c4; }
+.vtt3d-compass__n { fill: #fff; font: 700 9px/1 system-ui, 'Segoe UI', sans-serif; paint-order: stroke; stroke: #7a1a12; stroke-width: 2px; }
+.vtt3d-compass__pin { fill: #16120d; stroke: #c8a95e; stroke-width: 1; }
+/* A body's skull (board.css .vtt-token__dead-mark) over a model: as wide as the token's square, in the middle of the model. */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini > .vtt-token__dead-mark { width: calc(var(--vtt3d-size, 36px) * .84); }
 /* The turn tracker's hover (and the active combatant) shows on a mini too: a ring round the model, as board.css
    .vtt-token.is-hover-highlight rings a flat token (its box-shadow is cleared on a mini above). */
 /* A picked target shows on a mini too (board.css .vtt-token--picked-target; the mini's own ring is cleared above). */

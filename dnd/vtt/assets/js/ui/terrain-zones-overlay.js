@@ -6,6 +6,7 @@ import {saveShared} from './environment-sync.mjs';
 import {MOVEMENT_RULES} from './movement-rules.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {fallSquares} from './ruler-label-layout.mjs';
+import {resolveForcedDrag} from './forced-drag.js';
 
 let visible = true, preferenceKey = '', saving = false;
 let cache = {key: '', zones: [], index: new Map(), hiddenFromPlayers: false};
@@ -113,6 +114,30 @@ function forcedStops(points, {actor = undefined} = {}) {
   const start = points[points.length - 2], end = points[points.length - 1];
   const from = start.column === mover.column && start.row === mover.row ? mover : at(start);
   try { return Boolean(walls.forcedBlockedMove(from, at(end))); } catch { return false; }
+}
+/**
+ * What a hand push to the end of `points` will do, worked out as the drop itself is (resolveForcedDrag, a straight
+ * push from where the creature stands): the squares it really moves, and the damage if it is stopped by a wall
+ * (2 + the squares left over) or a creature (the squares left over). Null when it cannot be worked out. The ruler
+ * shows it (Brandon, November 25, 2026: a creature against a wall pushed 1 moves 0 and takes 3; the ruler said
+ * "Forced movement 1 · Stops at a wall" and no more).
+ */
+function forcedOutcome(points, {actor = undefined} = {}) {
+  const c = context(), walls = window.wallPrototype;
+  const mover = actor === undefined ? moverFor(c) : actor;
+  if (!mover || !(points?.length > 1)) return null;
+  const end = points[points.length - 1];
+  const list = c?.state.boardState.placements?.[c.state.boardState.activeSceneId];
+  const others = Array.isArray(list) ? list : Object.values(list || {});
+  try {
+    const drag = resolveForcedDrag(mover, {column: end.column, row: end.row}, others, {
+      wallBlocked: (from, to) => walls?.forcedBlockedMove?.(from, to) || false,
+      height: (token) => window.terrainPrototype?.groundFor(token) ?? 0,
+      moverHeight: (from, at) => walls?.moverHeight?.(from, at, 'forced') ?? window.terrainPrototype?.groundFor(at) ?? 0,
+    });
+    const moved = Math.round(Math.max(Math.abs(drag.destination.column - mover.column), Math.abs(drag.destination.row - mover.row)));
+    return {moved, damage: Number(drag.damage) || 0, wall: Boolean(drag.wall), collided: (drag.collidedIds || []).length};
+  } catch { return null; }
 }
 /**
  * How far a forced move drops at its end, in whole squares: from the height the creature
@@ -315,6 +340,7 @@ window.terrainZones = {
   routeCost,
   forcedFall,
   forcedStops,
+  forcedOutcome,
   paysForClimb,
   cellInfoFor,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },

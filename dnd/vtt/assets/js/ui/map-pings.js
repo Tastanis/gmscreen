@@ -17,13 +17,15 @@ export function createMapPings({
   // 3D board: pulses are drawn by board3d/layers/pings.mjs at the point clicked, and a focus turns the camera.
   const board3d = () => (windowRef?.vtt3d?.active && windowRef.vtt3dLayers?.pings) || null;
 
-  function handleMapPing(event, { focus = false } = {}) {
+  // `point` ({x, y, height} in map pixels) names the spot outright: a ping on a token is on the token's own square,
+  // not on the ground seen behind its picture.
+  function handleMapPing(event, { focus = false, point = null } = {}) {
     const viewState = getViewState() ?? {};
     if (!viewState.mapLoaded || !board3d()) {
       return false;
     }
 
-    const pointer = getLocalMapPoint(event);
+    const pointer = point && Number.isFinite(point.x) && Number.isFinite(point.y) ? point : getLocalMapPoint(event);
     const mapWidth = Number.isFinite(viewState.mapPixelSize?.width) ? viewState.mapPixelSize.width : 0;
     const mapHeight = Number.isFinite(viewState.mapPixelSize?.height) ? viewState.mapPixelSize.height : 0;
     if (!pointer || mapWidth <= 0 || mapHeight <= 0) {

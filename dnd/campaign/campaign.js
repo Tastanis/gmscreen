@@ -312,12 +312,15 @@
     const next = currentPending();
     if (JSON.stringify(next) !== JSON.stringify(state.pending)) { state.pending = next; render(); }
   }
+  // One revision check out at a time: the next is not sent while the last is unanswered.
+  let polling = false;
   async function poll() {
-    if (document.hidden || loading) return;
+    if (document.hidden || loading || polling) return;
+    polling = true;
     try {
       const j = await api({ action: 'revision' });
       if (rev !== null && j.rev !== rev) load();
-    } catch (_) { /* next time */ }
+    } catch (_) { /* next time */ } finally { polling = false; }
   }
   let soon = null;
   const reloadSoon = () => { clearTimeout(soon); soon = setTimeout(load, 250); };

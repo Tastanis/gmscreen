@@ -120,6 +120,9 @@ class TemplateBackupHelper {
         $backupFile = $this->backupDir . "/templates_session_{$slotNumber}_{$timestamp}.json";
         
         if (file_put_contents($backupFile, $content, LOCK_EX) !== false) {
+            // Two are kept. The file's name carries the time, so "overwriting the oldest slot" wrote a new file
+            // and the oldest was never removed: one more file every ten minutes the page was open.
+            $this->keepNewestSessionBackups(2);
             return [
                 'success' => true,
                 'backup_file' => basename($backupFile),
@@ -176,6 +179,19 @@ class TemplateBackupHelper {
         ];
     }
     
+    /**
+     * Remove every session backup but the newest $keep.
+     */
+    private function keepNewestSessionBackups($keep) {
+        $backups = $this->getBackupsByType('session');
+        usort($backups, function($a, $b) {
+            return $b['modified'] <=> $a['modified'] ?: strcmp($b['filename'], $a['filename']);
+        });
+        foreach (array_slice($backups, max(1, (int) $keep)) as $old) {
+            @unlink($old['path']);
+        }
+    }
+
     /**
      * Get backups by type
      */

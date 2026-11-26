@@ -21,3 +21,7 @@
     Order deny,allow
     Deny from all
 </Files>
+<Files command-times.log>
+    Order deny,allow
+    Deny from all
+</Files>

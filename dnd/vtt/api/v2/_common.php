@@ -14,6 +14,37 @@ function vttSyncV2Respond(int $status, array $payload): void
     exit;
 }
 
+/**
+ * Where a command's time went, for whoever looks next: a Server-Timing header on the answer (the browser's network
+ * panel shows it) and one line in `storage/command-times.log`, which keeps its newest quarter megabyte.
+ * The line holds the time, the command's kind and milliseconds; nothing about who or what.
+ *   store    reading the world, deciding, saving
+ *   publish  telling the live-update service (the command waits for that call before it answers)
+ *   parts    large design parts that came ready-unpacked / that had to be unpacked from their text
+ * November 24, 2026 could not be explained from the host's log alone: it shows 490 ms for a command and not where.
+ */
+function vttSyncV2NoteCommandTime(string $type, float $startedAt, float $storeDoneAt, float $publishDoneAt): void
+{
+    try {
+        $now = hrtime(true);
+        $store = max(0, ($storeDoneAt - $startedAt) / 1e6);
+        $publish = max(0, ($publishDoneAt - $storeDoneAt) / 1e6);
+        $total = max(0, ($now - $startedAt) / 1e6);
+        [$ready, $fromText] = class_exists('SyncV2CompiledParts', false) ? SyncV2CompiledParts::tally() : [0, 0];
+        if (!headers_sent()) {
+            header(sprintf('Server-Timing: store;dur=%.1f, publish;dur=%.1f, total;dur=%.1f', $store, $publish, $total));
+        }
+        $kind = preg_replace('/[^A-Za-z0-9._-]/', '', $type);
+        require_once __DIR__ . '/../../../includes/capped-log.php';
+        cappedLogLine(
+            vttSyncV2StorageFolder() . '/command-times.log',
+            sprintf("%s %s total=%d store=%d publish=%d parts=%d/%d\n", gmdate('Y-m-d\\TH:i:s\\Z'), $kind === '' ? '-' : substr($kind, 0, 48), round($total), round($store), round($publish), $ready, $fromText)
+        );
+    } catch (Throwable $error) {
+        // Measuring must never be what stops a command from being answered.
+    }
+}
+
 function vttSyncV2ReadJson(): array
 {
     $raw = file_get_contents('php://input');
@@ -37,9 +68,77 @@ function vttSyncV2RequireShadowGm(): array
     );
 }
 
+/**
+ * Who is asking, read from the session. Nothing in the VTT writes the session, so every request here lets go of
+ * the session file as soon as it knows who is asking. PHP otherwise holds that file until the request ends, and
+ * every other request from the same browser (the sheet, the chat, the next sync) waits in a queue behind it, each
+ * one a process held open on the host.
+ *
+ * A GET only reads (sync, snapshot, vision, status) and simply goes ahead.
+ *
+ * A request that changes something first takes that person's turn (vttSyncV2TakeChangeTurn): their changes are
+ * still taken one at a time, in the order they arrive, as the session used to make them. What no longer happens
+ * is their reads waiting behind a change. On November 24, 2026 half of the board's commands took over 0.75 s and
+ * the slowest 8.8 s; every poll from that browser stood in line for all of it, two processes each.
+ */
+function vttSyncV2AuthContext(): array
+{
+    static $released = null;
+    if ($released !== null) {
+        return $released;
+    }
+    $auth = getVttUserContext();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        // The session first, then the turn: a change waiting for its turn must not hold the session meanwhile.
+        session_write_close();
+        $released = $auth;
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'GET'
+            && ($auth['isLoggedIn'] ?? false)
+        ) {
+            vttSyncV2TakeChangeTurn((string) ($auth['user'] ?? ''));
+        }
+    }
+    return $auth;
+}
+
+/** Where the board keeps its database; the turn files sit beside it. */
+function vttSyncV2StorageFolder(): string
+{
+    $configuredPath = getenv('VTT_SYNC_V2_DATABASE');
+    return is_string($configuredPath) && trim($configuredPath) !== ''
+        ? dirname(trim($configuredPath))
+        : (__DIR__ . '/../../storage');
+}
+
+/**
+ * One change at a time for each person: an exclusive lock on a small file named for them, held until this request
+ * ends (PHP lets go of it when the script finishes, however it finishes). A second change from the same person
+ * waits here, as it used to wait for the session. Returns false when the file could not be opened or locked: the
+ * change then goes ahead, and the store's own revision checks and database lock still guard it.
+ */
+function vttSyncV2TakeChangeTurn(string $user): bool
+{
+    static $turns = [];
+    $key = sha1(strtolower(trim($user)));
+    if (isset($turns[$key])) {
+        return true;
+    }
+    $handle = @fopen(vttSyncV2StorageFolder() . '/turn-' . $key . '.lock', 'c');
+    if ($handle === false) {
+        return false;
+    }
+    if (!flock($handle, LOCK_EX)) {
+        fclose($handle);
+        return false;
+    }
+    $turns[$key] = $handle;   // kept open, so the lock lasts to the end of the request
+    return true;
+}
+
 function vttSyncV2RequireGm(string $message = 'GM access required.'): array
 {
-    $auth = getVttUserContext();
+    $auth = vttSyncV2AuthContext();
     if (!($auth['isLoggedIn'] ?? false)) {
         vttSyncV2Respond(401, [
             'success' => false,
@@ -57,7 +156,7 @@ function vttSyncV2RequireGm(string $message = 'GM access required.'): array
 
 function vttSyncV2RequireAuthenticated(): array
 {
-    $auth = getVttUserContext();
+    $auth = vttSyncV2AuthContext();
     if (!($auth['isLoggedIn'] ?? false)) {
         vttSyncV2Respond(401, [
             'success' => false,
@@ -242,11 +341,13 @@ function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
     return $sceneConfig;
 }
 
+/** `$move` is the move's payload: a player's push by hand of a creature not theirs is allowed (playerMayPushPlacement). */
 function vttSyncV2CanMovePlacement(
     array $auth,
     string $sceneId,
     string $placementId,
-    array $placement
+    array $placement,
+    array $move = []
 ): bool {
     if (($auth['isGM'] ?? false) === true) {
         return true;
@@ -254,7 +355,8 @@ function vttSyncV2CanMovePlacement(
     if (vttSyncV2PlacementHidden($placement)) {
         return false;
     }
-    return vttSyncV2Store()->playerMayMovePlacement($placement);
+    return vttSyncV2Store()->playerMayMovePlacement($placement)
+        || vttSyncV2Store()->playerMayPushPlacement($placement, $move['movementKind'] ?? null, $move['forcedDestination'] ?? null, $move['undoRevision'] ?? null);
 }
 
 /** Shared player projection. Null means unavailable; never disclose a hidden ID. */
@@ -932,7 +1034,8 @@ function vttSyncV2Store(): SyncV2Store
         (string) ($config['world_id'] ?? 'default'),
         (int) ($config['event_retention'] ?? 1000),
         (int) ($config['snapshot_interval'] ?? 100),
-        (int) ($config['snapshot_retention'] ?? 20)
+        (int) ($config['snapshot_retention'] ?? 20),
+        (int) ($config['operation_retention'] ?? 5000)
     );
     return $store;
 }

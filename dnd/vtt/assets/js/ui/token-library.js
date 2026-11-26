@@ -152,23 +152,36 @@ export function renderTokenLibrary(routes, store, options = {}) {
     return [...names];
   };
 
+  // The heroes' Stamina is read one sheet after another. All of them used to be asked for in the same instant
+  // (nine requests at once from every open board, once a minute; the access log of November 24, 2026 shows the
+  // bursts), and the host counts every request that is open. A read that is never answered gives way after 15 s.
+  let staminaReads = Promise.resolve();
+  const readStaminaInTurn = (names) => {
+    const run = staminaReads.then(async () => {
+      for (const name of names) {
+        const request = fetchSheetStamina(endpoints, name);
+        if (!request) continue;
+        let giveUp = null;
+        try {
+          await Promise.race([request, new Promise((resolve) => { giveUp = setTimeout(resolve, 15000); })]);
+        } catch (error) { /* the next name */ } finally { clearTimeout(giveUp); }
+      }
+    });
+    staminaReads = run.catch(() => {});
+    return run;
+  };
+
+  let staminaRefreshing = false;
   const refreshStaminaCache = () => {
     const names = [...staminaPrefetchNames];
-    if (!names.length || !shouldPrefetchStamina()) {
+    if (!names.length || !shouldPrefetchStamina() || staminaRefreshing) {
       return;
     }
 
-    const requests = names
-      .map((name) => fetchSheetStamina(endpoints, name))
-      .filter(Boolean);
-
-    if (!requests.length) {
-      return;
-    }
-
-    Promise.allSettled(requests).then(() => {
+    staminaRefreshing = true;
+    readStaminaInTurn(names).then(() => {
       notifyStaminaCacheUpdated(names, 'refresh');
-    });
+    }).finally(() => { staminaRefreshing = false; });
   };
 
   const updateStaminaPrefetchNames = () => {
@@ -182,10 +195,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
     if (!staminaPrefetchInitialized) {
       staminaPrefetchInitialized = true;
-      const startupRequests = names
-        .map((name) => fetchSheetStamina(endpoints, name))
-        .filter(Boolean);
-      Promise.allSettled(startupRequests).then(() => {
+      readStaminaInTurn(names).then(() => {
         notifyStaminaCacheUpdated(names, 'startup');
       });
 
@@ -203,10 +213,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
       return;
     }
 
-    const newRequests = newNames
-      .map((name) => fetchSheetStamina(endpoints, name))
-      .filter(Boolean);
-    Promise.allSettled(newRequests).then(() => {
+    readStaminaInTurn(newNames).then(() => {
       notifyStaminaCacheUpdated(newNames, 'new');
     });
   };

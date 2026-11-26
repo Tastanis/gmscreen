@@ -39,7 +39,7 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/first-person.mjs` | The "1st person" button beside My token / Find token: the camera at a model's eyes, just in front of it, looking out (the selected token, else the player's own). Drag or arrow keys look around, the wheel widens or narrows the view, Escape or the button again puts the camera back. Viewer only; nothing is saved. Loaded by `templates/layout.php`. |
 | `dnd/vtt/board3d/route-planner.mjs` | Route planner for the movement ruler. A* over the VTT's own walker; time-sliced; legs run along rows, columns or 45° diagonals. |
 | `dnd/vtt/board3d/movement-route.mjs` | The ruler drawn in 3D: dots, leg and total labels, arrowhead, flashing difficult terrain. |
-| `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint, slope arrows. |
+| `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint, slope arrows, token footprints (and the red ring round a body), the compass. |
 | `dnd/vtt/board3d/area-volume.mjs` | The see-through boxes for templates, zones and ability areas. |
 | `dnd/vtt/board3d/wall-overlay.mjs` | Named line overlays: walls, stairs, rubble, the flash when a wall stops a move. |
 | `dnd/vtt/board3d/scene.json`, `assets/` | Gravity Orchard's 3D art and textures. |
@@ -89,6 +89,14 @@ The Table opens the board for both roles. Saved dashboard links redirect to the 
 - The planner takes at most one stair per move, never steps off a plate edge, and prefers slopes
   to drops.
 - While holding a token, right-click adds a waypoint.
+- While holding a token with Z held, the wheel raises or lowers it a square a notch, and that height is its
+  waypoint (November 25, 2026). Moving the hand up and down with Z held still works; that way a right click keeps it.
+- The Measure tool (hold M, or the Measure button): a right click drops a corner where the pointer is, as Shift does.
+  With Z held, the first notch of the wheel drops a corner and each notch raises the line's end a square, so a line
+  can go up and then across at that height. Without Z the wheel zooms the camera as always.
+- The ruler's total is a label on the page beside the held token (`placeRouteLabel` in `integration.mjs`), not a
+  sprite in the 3D picture: the held token's own picture used to cover it.
+- A player may pick up a creature that is not theirs only to push it (Ctrl held: a forced move).
 
 ## Slope arrows
 

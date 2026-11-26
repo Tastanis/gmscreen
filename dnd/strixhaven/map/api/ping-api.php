@@ -27,9 +27,15 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $method = $_SERVER['REQUEST_METHOD'];
 $user = $_SESSION['user'] ?? 'unknown';
 $sessionId = session_id();
+// Nothing below writes the session. Letting go of it here means this player's other requests (the board, the
+// sheet, the chat) are not held in a queue behind a ping read: every open map asks twice a second.
+session_write_close();
 
 // Ping storage file path
 $pingDataFile = __DIR__ . '/../data/pings.json';
+// Held shared by a read and exclusively by a whole add or clear (read, change, write), so two pings sent at
+// once are both kept and a read never sees a half-written file.
+$pingLockFile = __DIR__ . '/../data/pings.lock';
 
 // Ensure data directory exists
 $dataDir = dirname($pingDataFile);
@@ -90,6 +96,28 @@ function savePings($pingDataFile, $pings) {
     file_put_contents($pingDataFile, $json, LOCK_EX);
 }
 
+/**
+ * Runs $work while holding the ping lock: shared for a read, exclusive for a change. A change reads, alters and
+ * writes inside the one lock. If the lock file cannot be opened the work still runs, as it did before there
+ * was a lock.
+ */
+function withPingLock($exclusive, $work) {
+    global $pingLockFile;
+
+    $lockFp = @fopen($pingLockFile, 'c');
+    $locked = $lockFp ? flock($lockFp, $exclusive ? LOCK_EX : LOCK_SH) : false;
+    try {
+        return $work();
+    } finally {
+        if ($lockFp) {
+            if ($locked) {
+                flock($lockFp, LOCK_UN);
+            }
+            fclose($lockFp);
+        }
+    }
+}
+
 // Clean expired pings
 function cleanExpiredPings($pings) {
     $now = round(microtime(true) * 1000); // Current time in ms
@@ -124,12 +152,11 @@ function handleGetRequest() {
 
     switch ($action) {
         case 'get_pings':
-            // Load and clean pings
-            $pings = loadPings($pingDataFile);
-            $pings = cleanExpiredPings($pings);
-
-            // Save cleaned pings back (remove expired)
-            savePings($pingDataFile, $pings);
+            // A read only reads: it answers with the pings still alive and leaves the file alone. Expired
+            // pings are dropped from the file by the next ping added (or a clear).
+            $pings = withPingLock(false, function () use ($pingDataFile) {
+                return cleanExpiredPings(loadPings($pingDataFile));
+            });
 
             sendSuccess([
                 'pings' => $pings,
@@ -192,22 +219,24 @@ function handlePostRequest() {
                 $pingEntry['view'] = $view;
             }
 
-            // Load existing pings
-            $pings = loadPings($pingDataFile);
+            withPingLock(true, function () use ($pingDataFile, $pingEntry) {
+                // Load existing pings
+                $pings = loadPings($pingDataFile);
 
-            // Clean expired pings
-            $pings = cleanExpiredPings($pings);
+                // Clean expired pings
+                $pings = cleanExpiredPings($pings);
 
-            // Add new ping
-            $pings[] = $pingEntry;
+                // Add new ping
+                $pings[] = $pingEntry;
 
-            // Limit to max stored pings
-            if (count($pings) > MAX_STORED_PINGS) {
-                $pings = array_slice($pings, -MAX_STORED_PINGS);
-            }
+                // Limit to max stored pings
+                if (count($pings) > MAX_STORED_PINGS) {
+                    $pings = array_slice($pings, -MAX_STORED_PINGS);
+                }
 
-            // Save pings
-            savePings($pingDataFile, $pings);
+                // Save pings
+                savePings($pingDataFile, $pings);
+            });
 
             sendSuccess([
                 'ping' => $pingEntry,
@@ -217,7 +246,9 @@ function handlePostRequest() {
 
         case 'clear_pings':
             // Clear all pings (GM only feature if needed)
-            savePings($pingDataFile, []);
+            withPingLock(true, function () use ($pingDataFile) {
+                savePings($pingDataFile, []);
+            });
             sendSuccess(null, 'Pings cleared');
             break;
 

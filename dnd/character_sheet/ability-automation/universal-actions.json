@@ -1,0 +1,412 @@
+{
+  "format": "universal-actions/v1",
+  "about": "The main actions and maneuvers every creature can use (Draw Steel, Chapter 10: Combat). The map adds them to every hero's ability tray, and the ones marked for monsters to every monster's tray (dnd/vtt/assets/js/ui/universal-actions.js). They are not written into anybody's sheet or stat block: change this file and every hero and monster has the change.",
+  "fields": {
+    "type": "Main, Maneuver or Move: the tab it is listed in. A Move is kept here for reference and not listed (moving is done by dragging the token; Shift held is a shift).",
+    "for": "heroes, monsters or both. Anything that spends a Recovery is for heroes only: a monster has none.",
+    "show": "false keeps it out of the trays.",
+    "roll": "characteristics the power roll may use (the highest is used) and the three tier results, as printed.",
+    "automation": "ability-automation/v3, as on any ability (AUTHORING.md). With none, a click posts the card to chat."
+  },
+  "actions": [
+    {
+      "id": "universal-charge",
+      "name": "Charge",
+      "type": "Main",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "Move up to your speed in a straight line without jumping, then make a melee free strike against a target when you end your move. If you have an ability with the Charge keyword, you can use it against the target instead of the free strike.\nYou can't move through difficult terrain or shift when you charge. You can fly or burrow as part of the charge if you have that movement, but you can't climb or swim unless you do so at full speed."
+    },
+    {
+      "id": "universal-defend",
+      "name": "Defend",
+      "type": "Main",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "Ability rolls made against you have a double bane until the start of your next turn. You also have a double edge on tests to resist environmental effects or a creature's traits or abilities.\nYou gain no benefit from this action while another creature is taunted by you.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "effect",
+            "target": "self",
+            "effects": [
+              {
+                "kind": "buff",
+                "target": "self",
+                "label": "Defend (ends when your next turn starts)",
+                "modifier": "doubleBane",
+                "side": "against",
+                "appliesTo": "abilityRolls",
+                "duration": "endOfEncounter",
+                "consume": "duration"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-heal",
+      "name": "Heal",
+      "type": "Main",
+      "for": ["heroes"],
+      "keywords": [],
+      "range": "Melee 1",
+      "target": "One adjacent creature",
+      "effect": "You use medicine or inspiring words to keep an adjacent creature in the fight. The target can spend a Recovery to regain Stamina equal to their recovery value, or can make a saving throw against one effect on them that is ended by a saving throw.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "target",
+            "name": "patient",
+            "mode": "token",
+            "predicate": "creature",
+            "count": { "value": 1, "mode": "exact" },
+            "optional": false,
+            "promptTitle": "Heal",
+            "promptText": "Choose one adjacent creature.",
+            "distance": { "form": "melee", "value": 1 }
+          },
+          {
+            "type": "effect",
+            "target": "patient",
+            "effects": [
+              {
+                "kind": "ifPrompt",
+                "question": "Heal: does {target} spend a Recovery, or make a saving throw instead?",
+                "yesLabel": "Spend a Recovery",
+                "noLabel": "Saving throw",
+                "target": "patient",
+                "then": [ { "kind": "heal", "recoveries": 1 } ],
+                "else": [ { "kind": "note", "text": "Heal: the target makes a saving throw against one effect on them that a saving throw ends." } ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-aid-attack",
+      "name": "Aid Attack",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Melee 1",
+      "target": "One adjacent enemy",
+      "effect": "Choose an enemy adjacent to you. The next ability roll an ally makes against that enemy before the start of your next turn gains an edge.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "target",
+            "name": "foe",
+            "mode": "token",
+            "predicate": "enemy",
+            "count": { "value": 1, "mode": "exact" },
+            "optional": false,
+            "promptTitle": "Aid Attack",
+            "promptText": "Choose one adjacent enemy.",
+            "distance": { "form": "melee", "value": 1 }
+          },
+          {
+            "type": "effect",
+            "target": "foe",
+            "effects": [
+              {
+                "kind": "buff",
+                "label": "Aid Attack (an ally's next roll against this creature)",
+                "modifier": "edge",
+                "side": "against",
+                "appliesTo": "abilityRolls",
+                "duration": "endOfEncounter",
+                "consume": "nextRoll"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-catch-breath",
+      "name": "Catch Breath",
+      "type": "Maneuver",
+      "for": ["heroes"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "You spend a Recovery and regain Stamina equal to your recovery value. You can't use this maneuver while you are dying.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "effect",
+            "target": "self",
+            "effects": [ { "kind": "heal", "recoveries": 1, "target": "self" } ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-escape-grab",
+      "name": "Escape Grab",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "roll": {
+        "characteristics": ["Might", "Agility"],
+        "tiers": [
+          "No effect.",
+          "You can escape the grab, but if you do, a creature who has you grabbed can make a melee free strike against you before you are no longer grabbed.",
+          "You are no longer grabbed."
+        ]
+      },
+      "effect": "You take a bane on this maneuver if your size is smaller than the size of the creature, object, or effect that has you grabbed.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "powerRoll",
+            "attribute": ["Might", "Agility"],
+            "bonus": 0,
+            "target": "self",
+            "tiers": {
+              "tier1": { "effects": [ { "kind": "note", "text": "Escape Grab: no effect." } ] },
+              "tier2": {
+                "effects": [
+                  {
+                    "kind": "ifPrompt",
+                    "question": "Escape the grab? Whoever has you grabbed can make a melee free strike against you first.",
+                    "yesLabel": "Escape",
+                    "noLabel": "Stay grabbed",
+                    "target": "self",
+                    "then": [
+                      { "kind": "note", "text": "Escape Grab: whoever had the creature grabbed can make a melee free strike against it before it gets free." },
+                      { "kind": "endCondition", "condition": "grabbed", "pick": "all", "target": "self" }
+                    ],
+                    "else": []
+                  }
+                ]
+              },
+              "tier3": { "effects": [ { "kind": "endCondition", "condition": "grabbed", "pick": "all", "target": "self" } ] }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-grab",
+      "name": "Grab",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": ["Melee", "Weapon"],
+      "range": "Melee 1",
+      "target": "One creature",
+      "roll": {
+        "characteristics": ["Might"],
+        "tiers": [
+          "No effect.",
+          "You can grab the target, but if you do, the target can make a melee free strike against you before they are grabbed.",
+          "The target is grabbed by you."
+        ]
+      },
+      "effect": "You can usually target only creatures of your size or smaller. If your Might score is 2 or higher, you can target any creature with a size equal to or less than your Might score. Unless otherwise indicated, a creature can grab only one creature at a time.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "keywords": ["Melee", "Weapon"],
+        "cards": [
+          {
+            "type": "target",
+            "name": "target",
+            "mode": "token",
+            "predicate": "creature",
+            "count": { "value": 1, "mode": "exact" },
+            "optional": false,
+            "promptTitle": "Grab",
+            "promptText": "Choose one creature to grab.",
+            "distance": { "form": "melee", "value": 1 }
+          },
+          {
+            "type": "powerRoll",
+            "attribute": "Might",
+            "bonus": 0,
+            "target": "target",
+            "tiers": {
+              "tier1": { "effects": [ { "kind": "note", "text": "Grab: no effect." } ] },
+              "tier2": {
+                "effects": [
+                  {
+                    "kind": "ifPrompt",
+                    "question": "Grab {target}? They can make a melee free strike against you first.",
+                    "yesLabel": "Grab",
+                    "noLabel": "Let go",
+                    "target": "target",
+                    "then": [
+                      { "kind": "note", "text": "Grab: the target can make a melee free strike against the grabber before it is grabbed." },
+                      { "kind": "condition", "name": "grabbed", "duration": "endOfEncounter" }
+                    ],
+                    "else": []
+                  }
+                ]
+              },
+              "tier3": { "effects": [ { "kind": "condition", "name": "grabbed", "duration": "endOfEncounter" } ] }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-hide",
+      "name": "Hide",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "You attempt to hide from other creatures who aren't observing you while you have cover or concealment. See Hide and Sneak (Chapter 9: Tests)."
+    },
+    {
+      "id": "universal-knockback",
+      "name": "Knockback",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": ["Melee", "Weapon"],
+      "range": "Melee 1",
+      "target": "One creature",
+      "roll": {
+        "characteristics": ["Might"],
+        "tiers": ["Push 1", "Push 2", "Push 3"]
+      },
+      "effect": "You can usually target only creatures of your size or smaller. If your Might score is 2 or higher, you can target any creature with a size equal to or less than your Might score.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "keywords": ["Melee", "Weapon"],
+        "cards": [
+          {
+            "type": "target",
+            "name": "target",
+            "mode": "token",
+            "predicate": "creature",
+            "count": { "value": 1, "mode": "exact" },
+            "optional": false,
+            "promptTitle": "Knockback",
+            "promptText": "Choose one adjacent creature to push.",
+            "distance": { "form": "melee", "value": 1 }
+          },
+          {
+            "type": "powerRoll",
+            "attribute": "Might",
+            "bonus": 0,
+            "target": "target",
+            "tiers": {
+              "tier1": { "effects": [ { "kind": "forcedMovement", "verb": "push", "distance": 1 } ] },
+              "tier2": { "effects": [ { "kind": "forcedMovement", "verb": "push", "distance": 2 } ] },
+              "tier3": { "effects": [ { "kind": "forcedMovement", "verb": "push", "distance": 3 } ] }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-make-or-assist-a-test",
+      "name": "Make or Assist a Test",
+      "type": "Maneuver",
+      "for": ["heroes"],
+      "keywords": [],
+      "range": "",
+      "target": "",
+      "effect": "Many tests are maneuvers in combat: searching a chest, picking a lock, lifting a portcullis. Assisting a test is also a maneuver. A complex or time-consuming test might take a main action, or more time than combat allows; a test that takes no time (recalling lore) is usually a free maneuver. The Director has the final say."
+    },
+    {
+      "id": "universal-search-for-hidden-creatures",
+      "name": "Search for Hidden Creatures",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "You attempt to locate creatures hidden from you. See Hide and Sneak (Chapter 9: Tests)."
+    },
+    {
+      "id": "universal-stand-up",
+      "name": "Stand Up",
+      "type": "Maneuver",
+      "for": ["heroes", "monsters"],
+      "keywords": [],
+      "range": "Self or Melee 1",
+      "target": "Self or one willing adjacent prone creature",
+      "effect": "You stand up if you are prone, ending that condition. Alternatively, you make a willing adjacent prone creature stand up.",
+      "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+          {
+            "type": "target",
+            "name": "riser",
+            "mode": "token",
+            "predicate": "selfOrAlly",
+            "count": { "value": 1, "mode": "exact" },
+            "optional": false,
+            "promptTitle": "Stand Up",
+            "promptText": "Choose yourself, or a willing adjacent prone creature.",
+            "distance": { "form": "melee", "value": 1 }
+          },
+          {
+            "type": "effect",
+            "target": "riser",
+            "effects": [ { "kind": "endCondition", "condition": "prone", "pick": "all" } ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "universal-use-consumable",
+      "name": "Use Consumable",
+      "type": "Maneuver",
+      "for": ["heroes"],
+      "keywords": [],
+      "range": "Self or Melee 1",
+      "target": "Self or one willing adjacent creature",
+      "effect": "Unless its description says otherwise, you activate a consumable treasure such as a potion. You can administer one that benefits its user to yourself or to a willing adjacent creature."
+    },
+    {
+      "id": "universal-advance",
+      "name": "Advance",
+      "type": "Move",
+      "for": ["heroes", "monsters"],
+      "show": false,
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "You move a number of squares up to your speed. You can break up this movement with your maneuver and main action however you wish."
+    },
+    {
+      "id": "universal-disengage",
+      "name": "Disengage",
+      "type": "Move",
+      "for": ["heroes", "monsters"],
+      "show": false,
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "You shift 1 square. Certain class features, kits, and other rules let you shift more than 1 square when you disengage. You can break up the shift with your maneuver and main action however you wish."
+    },
+    {
+      "id": "universal-ride",
+      "name": "Ride",
+      "type": "Move",
+      "for": ["heroes", "monsters"],
+      "show": false,
+      "keywords": [],
+      "range": "Self",
+      "target": "Self",
+      "effect": "Only while mounted on another creature. Your mount moves up to its speed, taking you with it; or your mount uses the Disengage move action as a free triggered action. Once per round, and a mount can have this applied to it only once per round."
+    }
+  ]
+}

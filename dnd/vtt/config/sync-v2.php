@@ -14,6 +14,9 @@ return [
     'event_retention' => 1000,
     'snapshot_interval' => 100,
     'snapshot_retention' => 20,
+    // How many of the newest accepted commands the ledger keeps, for answering a repeated command once.
+    // Older rows are removed a few hundred at a time whenever a snapshot is taken.
+    'operation_retention' => 5000,
     'pusher_enabled' => getenv('VTT_SYNC_V2_PUSHER_ENABLED') === '1',
     'domains' => [
         'token_movement' => true,

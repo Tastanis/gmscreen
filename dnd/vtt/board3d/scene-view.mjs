@@ -786,6 +786,10 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  function paintOverlay(name){const mesh=overlays[name];const list=(mesh.userData.nodes||[]).filter(p=>typeof p?.x==='number'&&(activeLevel<0||belongsToLevel(p)<=activeLevel));mesh.count=Math.min(4096,list.length);obj.rotation.set(0,0,0);obj.scale.set(1,1,1);list.slice(0,4096).forEach((p,i)=>{obj.position.set(p.x,(p.z||0)+.11,p.y);obj.updateMatrix();mesh.setMatrixAt(i,obj.matrix);});mesh.instanceMatrix.needsUpdate=true;}
  function setOverlay(name,nodes){overlays[name].userData.nodes=nodes;paintOverlay(name);}
  const guideScene=new THREE.Scene();guideScene.name='movement-overlay-pass';
+ // Signals: what everyone must see wherever it is, drawn last and never darkened by vision (sight-test.mjs masks the
+ // board and its guides, not this). A ping's beam is here (Brandon, November 25, 2026: "I want the god ray pings on
+ // the vtt to show even in fog of war ... at least see where it is even if they can't see the thing").
+ const signalScene=new THREE.Scene();signalScene.name='vtt-signal-pass';
  const pathMat=new THREE.LineBasicMaterial({color:'#ffe6a3',transparent:true,opacity:.95,depthTest:true,depthWrite:false});const pathGhostMat=pathMat.clone();pathGhostMat.depthFunc=THREE.GreaterDepth;pathGhostMat.opacity=.95*.32;let pathLine=null,pathGhost=null;
  function setPath(nodes){if(pathLine){guideScene.remove(pathLine);if(pathGhost)guideScene.remove(pathGhost);pathLine.geometry.dispose();pathLine=null;pathGhost=null;}if((nodes?.length||0)<2)return;pathLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints(nodes.map(p=>new THREE.Vector3(p.x,(p.z||0)+.25,p.y))),pathMat);pathLine.renderOrder=5;guideScene.add(pathLine);pathGhost=new THREE.Line(pathLine.geometry,pathGhostMat);pathGhost.renderOrder=5;guideScene.add(pathGhost);}
  const movementRoute=createMovementRoute(guideScene,camera,canvas);
@@ -888,7 +892,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  const planeRay=new THREE.Raycaster(),planeNdc=new THREE.Vector2();
  function pointOnPlane(clientX,clientY,y){const rect=canvas.getBoundingClientRect();planeNdc.set((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1);planeRay.setFromCamera(planeNdc,camera);
   const o=planeRay.ray.origin,dir=planeRay.ray.direction;if(Math.abs(dir.y)<1e-6)return null;const t=(y-o.y)/dir.y;if(t<=0)return null;return {x:o.x+dir.x*t,y:o.z+dir.z*t};}
- return {renderer,scene,guideScene,camera,controls,pick,pickAll,zoomAt,pointOnPlane,viewport:()=>({width:viewSize.width,height:viewSize.height}),setField,groundHeightAt:heightAt,grabStart,grabMove,orbit:(dx,dy)=>controls.orbit(dx,dy),castRay:castSurfaces,
+ return {renderer,scene,guideScene,signalScene,camera,controls,pick,pickAll,zoomAt,pointOnPlane,viewport:()=>({width:viewSize.width,height:viewSize.height}),setField,groundHeightAt:heightAt,grabStart,grabMove,orbit:(dx,dy)=>controls.orbit(dx,dy),castRay:castSurfaces,
   setTokenBodiesVisible(value){tokenBodies.visible=tokenHeads.visible=!!value;},
   setTokens(tokens,id){tokenRecords=tokens;selectedId=id;updateTokenMatrices();},
   // Tokens whose mini floats with no base (minis.json noBase): no base or ring is drawn under them.
@@ -912,7 +916,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
    // The separate pass cannot be reordered by scene groups or water materials.
    renderer.info.autoReset=false;renderer.info.reset();renderer.render(scene,camera);
    const autoClear=renderer.autoClear;renderer.autoClear=false;
-   try{renderer.render(guideScene,camera);}finally{renderer.autoClear=autoClear;}
+   try{renderer.render(guideScene,camera);if(signalScene.children.length)renderer.render(signalScene,camera);}finally{renderer.autoClear=autoClear;}
   },resize,
   metrics(){return {drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,tokens:visibleTokens.length,movementRoute:movementRoute.summary(),propReport,materials:{photographic,loadedTextures:surfaceTextures.loaded,expectedTextures:12,errors:surfaceTextures.errors,projection:'world-space triplanar',terrainDisplacement:false}};},
   // Canvas size is read on resize, not per call: a read between style writes would force a layout each time.

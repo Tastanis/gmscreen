@@ -1078,6 +1078,15 @@ body.vtt-body .vtt-character-ability-tab[aria-expanded="true"] {
   font-style: italic;
 }
 
+/* "Universal": the actions every creature has, after the creature's own in the same tab (universal-actions.js). */
+.vtt-character-ability-list__heading--universal {
+  border-top: 1px solid var(--vtt-sheet-border);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
 .vtt-character-ability-item {
   position: relative;
   width: 100%;
