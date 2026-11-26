@@ -75,6 +75,15 @@ class CaptureTests(unittest.TestCase):
                 time.sleep(.05)
         self.output = self.root / 'captures'
 
+    def test_scene_terrain_and_texture_decoder_are_captured(self):
+        terrain = 'strixhaven/map3d/terrain/new-grid.bin.gz'
+        decoder = 'strixhaven/map3d/lib/three/examples/jsm/libs/basis/basis_transcoder.wasm'
+        self.write(terrain, b'terrain fixture')
+        self.write(decoder, b'decoder fixture')
+        manifest = self.connection.manifest()
+        for name in (terrain, decoder):
+            self.assertEqual(manifest['files']['dnd/' + name]['sha256'], capture.digest(self.dnd / name))
+
     def test_licence_files_are_documentation_not_unknown(self):
         self.write('board3d-lib/THREE-LICENSE', 'MIT')
         self.write('kit/LICENSE.txt', 'CC0')
