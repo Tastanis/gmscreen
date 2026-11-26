@@ -250,7 +250,27 @@ def reference_issues(capture_dir: Path, manifest: dict, historical_report: list 
             if path == 'dnd/strixhaven/gm/data/gm-notes.json' and raw == '':
                 historical.add((path, '', 'empty-retired-placeholder'))
                 continue
+            if path in ('dnd/character_sheet/data/sheet_changes.json', 'dnd/character_sheet/data/sheet_changes_previous.json'):
+                for line in raw.splitlines():
+                    if line.strip():
+                        inspect(json.dumps(json.loads(line), ensure_ascii=False), path, archive=True)
+                continue
             value = json.loads(raw)
+            if path == 'dnd/vtt/board3d/assets/textures/manifest.json':
+                # The upstream URL is provenance. The renderer reads the adjacent file.
+                for entry in value:
+                    local_name = path.rsplit('/', 1)[0] + '/' + entry['file']
+                    if manifest['files'].get(local_name, {}).get('sha256') == entry['sha256']:
+                        entry.pop('url', None)
+                    else:
+                        found.add((path, local_name, 'texture-checksum-mismatch'))
+            if path == 'dnd/vtt/board3d/scene.json':
+                # Prepared Orchard geometry retains the original package image ID.
+                # The renderer replaces these ramps and roofs with live scene geometry.
+                for rows in (value.get('ramps', []), value.get('walls', {}).get('ramps', []), value.get('walls', {}).get('roofs', [])):
+                    for shape in rows:
+                        if shape.get('imageId') == '/dnd/vtt/storage/uploads/bundled-image-1.jpg':
+                            inspect(shape.pop('imageId'), path, archive=True)
             inspect(json.dumps(value, ensure_ascii=False), path, path == 'dnd/vtt/storage/board-state.json')
         elif item['kind'] == 'sqlite':
             with closing(sqlite3.connect(local.as_uri() + '?mode=ro', uri=True)) as db:

@@ -93,6 +93,19 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(excluded.get('dnd/kit/LICENSE.txt'), 'excluded:documentation')
         self.assertFalse([issue for issue in manifest['issues'] if 'LICENSE' in issue['path']])
 
+    def test_restore_checks_local_texture_and_reads_sheet_history_as_json_lines(self):
+        folder = 'vtt/board3d/assets/textures/'
+        self.write(folder + 'stone.jpg', b'stone')
+        self.write(folder + 'manifest.json', json.dumps([{'file':'stone.jpg','url':'https://example.org/stone.jpg','sha256':hashlib.sha256(b'stone').hexdigest()}]))
+        self.write('character_sheet/data/sheet_changes.json', '{}\n{"old":"/dnd/retired.jpg"}\n')
+        snapshot = capture.capture(self.connection, self.output)
+        manifest = json.loads((snapshot / 'manifest.json').read_bytes())
+        history = []
+        self.assertEqual(capture.reference_issues(snapshot, manifest, history), [])
+        self.assertTrue(any(row['reference'] == '/dnd/retired.jpg' for row in history))
+        manifest['files']['dnd/' + folder + 'stone.jpg']['sha256'] = '0' * 64
+        self.assertTrue(any(row['reason'] == 'texture-checksum-mismatch' for row in capture.reference_issues(snapshot, manifest)))
+
     def test_session_and_retired_files_are_excluded(self):
         self.write('data/sess_example123', 'private session')
         self.write('strixhaven/map/js/coordinate-system.old', 'retired source')
